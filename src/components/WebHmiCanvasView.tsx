@@ -6,7 +6,7 @@ import { DynamicIndustrialSymbol } from './DynamicIndustrialSymbol';
 import LineGraph from './LineGraph';
 import Gauge from './Gauge';
 import { formatPublishPayload, getNormalizedOptions } from '../utils/mqttHelper';
-import { getDamanHatcheryProject } from '../utils/damanHatcheryPreset';
+import { getSampleProject } from '../utils/sampleProjectPreset';
 import { getSmartIconAnimationClass, SmartIcon } from '../utils/iconAnimator';
 import { isPanelTripped } from '../utils/tripHelper';
 import { AlarmHistorianWidget } from './AlarmHistorianWidget';
@@ -172,13 +172,13 @@ const LiveClockWidget: React.FC<{ panel: Panel }> = ({ panel }) => {
 
 const DEMO_PRESETS: DemoPreset[] = [
   {
-    id: 'daman_hatchery',
-    title: 'Daman Hatchery (9 Screens Complete)',
-    desc: 'Full 9-screen Hatchery HMI with Fan Timers, VFD, Alarms, Sensor Cal & Navigation Buttons',
-    icon: 'fa-egg',
+    id: 'water_air_sample',
+    title: 'Water & Air Monitoring (Sample Project)',
+    desc: 'Clean 2-screen HMI with Water Management & Air Quality (4 widgets each)',
+    icon: 'fa-droplet',
     bgClass: 'bg-sky-500/10 border border-sky-500/30',
     textClass: 'text-sky-400 font-black',
-    elementCount: 65
+    elementCount: 8
   },
   {
     id: 'smarthome',
@@ -2162,12 +2162,12 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     const connId = activeDashboard.connectionId || (appState.connections[0]?.connectionId || '');
     const ts = Date.now();
 
-    if (presetId === 'daman_hatchery') {
-      const { dashboards, panels } = getDamanHatcheryProject(connId);
+    if (presetId === 'water_air_sample' || presetId === 'daman_hatchery') {
+      const { dashboards, panels } = getSampleProject(connId);
       onUpdateAppState({
         ...appState,
-        dashboards: [...appState.dashboards.filter(d => !d.dashboardId.includes('daman')), ...dashboards],
-        panels: [...appState.panels.filter(p => !p.dashboardId.includes('daman')), ...panels]
+        dashboards: [...appState.dashboards.filter(d => !d.dashboardId.includes('water') && !d.dashboardId.includes('air') && !d.dashboardId.includes('daman')), ...dashboards],
+        panels: [...appState.panels.filter(p => !p.dashboardId.includes('water') && !p.dashboardId.includes('air') && !p.dashboardId.includes('daman')), ...panels]
       });
       if (onSelectDashboard) {
         onSelectDashboard(dashboards[0].dashboardId);

@@ -266,12 +266,12 @@ const Sidebar: React.FC<SidebarProps> = ({
                   onLoadHatcheryDemo();
                 }}
                 className="w-full flex items-center space-x-3 px-3.5 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95 text-left"
-                title="Instantly generate full 9-screen Daman Hatchery sample project"
+                title="Instantly generate Water & Air Monitoring sample project"
               >
-                <i className="fas fa-egg text-emerald-400 text-base shrink-0"></i>
+                <i className="fas fa-droplet text-emerald-400 text-base shrink-0"></i>
                 <div>
-                  <div className="font-bold text-white leading-snug">Load 9-Screen Hatchery Demo</div>
-                  <div className="text-[10px] text-emerald-400/80 font-normal">Full Sample IIoT HMI Project</div>
+                  <div className="font-bold text-white leading-snug">Load Sample Project</div>
+                  <div className="text-[10px] text-emerald-400/80 font-normal">Water & Air HMI Screens (4 Widgets each)</div>
                 </div>
               </button>
             </div>

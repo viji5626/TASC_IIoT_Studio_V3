@@ -47,10 +47,10 @@ export class EditionManager {
       return { allowed: false, reason: 'Client Runtime is read-only. Modifying screens is disabled.' };
     }
     if (this.IsCommunity()) {
-      if (appState.dashboards.length >= 1) {
+      if (appState.dashboards.length >= 2) {
         return {
           allowed: false,
-          reason: 'Community Edition Limit: Maximum 1 Screen (Dashboard) allowed per project. Upgrade to Engineering Studio for unlimited screens.'
+          reason: 'Community Edition Limit: Maximum 2 Screens allowed per project. Upgrade to Engineering Studio for unlimited screens.'
         };
       }
     }
@@ -190,10 +190,10 @@ export function sanitizeAppState(state: AppState): AppState {
   // If in community mode, prune to max 1 screen and 10 widgets
   const isCommunity = state.userRole === 'community' || state.productEdition === ProductEdition.COMMUNITY;
   if (isCommunity) {
-    if (dashboards.length > 1) {
-      const firstDash = dashboards.find(d => d.isHome) || dashboards[0];
-      dashboards = [firstDash];
-      panels = panels.filter(p => p.dashboardId === firstDash.dashboardId);
+    if (dashboards.length > 2) {
+      dashboards = dashboards.slice(0, 2);
+      const allowedIds = new Set(dashboards.map(d => d.dashboardId));
+      panels = panels.filter(p => allowedIds.has(p.dashboardId));
     }
     if (panels.length > 10) {
       panels = panels.slice(0, 10);

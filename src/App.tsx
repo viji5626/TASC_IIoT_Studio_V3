@@ -40,19 +40,19 @@ import WebHmiCanvasView from './components/WebHmiCanvasView';
 import { getJsonValue, formatBrokerWebSocketUrl, mqttWildcardMatch } from './utils/mqttHelper';
 import { applyThemeToDocument, getAppTheme } from './utils/theme';
 import { EditionManager, sanitizeAppState } from './utils/EditionManager';
-import { getDamanHatcheryProject } from './utils/damanHatcheryPreset';
+import { getSampleProject } from './utils/sampleProjectPreset';
 import { ConfirmModal } from './components/ConfirmModal';
 import { isPanelTripped } from './utils/tripHelper';
 import { recordAlarmTriggerEvent, recordAlarmAckEvent, recordAlarmResolvedEvent } from './utils/alarmHistorianEngine';
 import { AlarmHistorianModal } from './components/AlarmHistorianModal';
 
-const damanInitial = getDamanHatcheryProject('conn_demo');
+const sampleInitial = getSampleProject('conn_demo');
 
 const INITIAL_STATE: AppState = {
   connections: [
     {
       connectionId: 'conn_demo',
-      connectionName: 'DAMAN HATCHERY LOCAL BROKER',
+      connectionName: 'LOCAL DEMO BROKER',
       brokerAddress: 'broker.emqx.io',
       port: 8084,
       protocol: 'Websocket',
@@ -63,8 +63,8 @@ const INITIAL_STATE: AppState = {
       connected: false
     }
   ],
-  dashboards: damanInitial.dashboards,
-  panels: damanInitial.panels
+  dashboards: sampleInitial.dashboards,
+  panels: sampleInitial.panels
 };
 
 export function App() {
@@ -1610,24 +1610,17 @@ export function App() {
   }
 
   const handleLoadHatcheryDemo = () => {
-    if (window.confirm('Load 9-Screen Daman Hatchery Demo Project? This will add all 9 Hatchery HMI screens and sample telemetry sensors.')) {
+    if (window.confirm('Load Water & Air Monitoring Sample Project? This will load 2 clean HMI screens (Water & Air) with 4 widgets each.')) {
       const connId = activeConnectionId || 'conn_demo';
-      const { dashboards, panels } = getDamanHatcheryProject(connId);
+      const { dashboards, panels } = getSampleProject(connId);
       
-      const existingDashIds = new Set(appState.dashboards.map(d => d.dashboardId));
-      const newDashboards = dashboards.filter(d => !existingDashIds.has(d.dashboardId));
-      const existingPanelIds = new Set(appState.panels.map(p => p.panelId));
-      const newPanels = panels.filter(p => !existingPanelIds.has(p.panelId));
-
-      setAppState(prev => ({
+      setAppState(prev => sanitizeAppState({
         ...prev,
-        dashboards: [...prev.dashboards, ...newDashboards],
-        panels: [...prev.panels, ...newPanels]
+        dashboards: [...prev.dashboards.filter(d => !d.dashboardId.includes('water') && !d.dashboardId.includes('air') && !d.dashboardId.includes('daman')), ...dashboards],
+        panels: [...prev.panels.filter(p => !p.dashboardId.includes('water') && !p.dashboardId.includes('air') && !p.dashboardId.includes('daman')), ...panels]
       }));
 
-      if (newDashboards.length > 0) {
-        setActiveDashboardId(newDashboards[0].dashboardId);
-      } else if (dashboards.length > 0) {
+      if (dashboards.length > 0) {
         setActiveDashboardId(dashboards[0].dashboardId);
       }
     }
@@ -1705,11 +1698,13 @@ export function App() {
                   type="button"
                   onClick={handleRequestExitSession}
                   className="flex items-center space-x-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-lg text-[11px] font-bold hover:bg-emerald-500/30 transition-all cursor-pointer"
-                  title="Community Edition (Free) • 1 Screen / 10 Widgets Max — Click to exit / change mode"
+                  title={`Community Edition (Free) • ${appState.dashboards.length} Screens / 10 Widgets Max — Click to exit / change mode`}
                 >
                   <i className="fas fa-cube text-xs text-emerald-400"></i>
                   <span className="hidden lg:inline">COMMUNITY EDITION</span>
-                  <span className="text-[9px] bg-emerald-500 text-slate-950 px-1 rounded font-mono font-extrabold">FREE (1S/10W)</span>
+                  <span className={`text-[9px] px-1 rounded font-mono font-extrabold ${appState.panels.length > 10 ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-slate-950'}`}>
+                    FREE ({appState.panels.length}/10W)
+                  </span>
                 </button>
 
                 {!isFullscreen && (
