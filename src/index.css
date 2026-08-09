@@ -1,0 +1,327 @@
+@import "tailwindcss";
+
+:root {
+  --bg-color: #020617;
+  --bg-header: #0b1329;
+  --bg-sidebar: #0b1329;
+  --card-bg: rgba(15, 23, 42, 0.85);
+  --border-color: #1e293b;
+  --accent: #0ea5e9;
+  --accent-hover: #38bdf8;
+  --accent-glow: rgba(14, 165, 233, 0.3);
+  --accent-soft: rgba(14, 165, 233, 0.15);
+  --badge-bg: rgba(14, 165, 233, 0.2);
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-color);
+  color: #f1f5f9;
+  margin: 0;
+  overflow: hidden;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.3s ease;
+}
+
+.digital-font {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.theme-header {
+  background-color: var(--bg-header) !important;
+  border-color: var(--border-color) !important;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.theme-sidebar {
+  background-color: var(--bg-sidebar) !important;
+  border-color: var(--border-color) !important;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Bento card styling helper */
+.bento-card {
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 1rem;
+  backdrop-filter: blur(8px);
+  transition: all 0.2s ease-in-out;
+}
+
+.bento-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 10px 25px -5px var(--accent-glow);
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.05); }
+}
+
+/* Dedicated Smart Icon Animations */
+@keyframes sound-wave-pulse {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 2px currentColor); }
+  25% { transform: scale(1.18) rotate(-4deg); filter: drop-shadow(0 0 10px currentColor); }
+  50% { transform: scale(1.05) rotate(4deg); filter: drop-shadow(0 0 14px currentColor); }
+  75% { transform: scale(1.22) rotate(-2deg); filter: drop-shadow(0 0 18px currentColor); }
+}
+
+@keyframes strobe-beacon {
+  0%, 100% { opacity: 1; filter: drop-shadow(0 0 16px currentColor) brightness(1.5); transform: scale(1.1); }
+  50% { opacity: 0.25; filter: drop-shadow(0 0 0px currentColor) brightness(0.7); transform: scale(0.95); }
+}
+
+@keyframes water-drip-flow {
+  0% { transform: translateY(0) scale(1); opacity: 1; }
+  35% { transform: translateY(3px) scale(1.15, 0.85); opacity: 0.95; }
+  70% { transform: translateY(7px) scale(0.85, 1.2); opacity: 0.5; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+@keyframes flame-flicker {
+  0%, 100% { transform: scale(1) translateY(0) rotate(0deg); filter: drop-shadow(0 0 6px currentColor); }
+  25% { transform: scale(1.12, 0.92) translateY(-2px) rotate(-4deg); filter: drop-shadow(0 0 12px currentColor); }
+  50% { transform: scale(0.92, 1.12) translateY(1px) rotate(4deg); filter: drop-shadow(0 0 16px currentColor); }
+  75% { transform: scale(1.06, 1.02) translateY(-1px) rotate(-1deg); filter: drop-shadow(0 0 8px currentColor); }
+}
+
+@keyframes spark-flash {
+  0%, 100% { opacity: 1; transform: scale(1); filter: drop-shadow(0 0 4px currentColor); }
+  20% { opacity: 0.2; transform: scale(0.9); }
+  40% { opacity: 1; transform: scale(1.25) rotate(10deg); filter: drop-shadow(0 0 18px currentColor); }
+  60% { opacity: 0.3; transform: scale(0.95); }
+  80% { opacity: 1; transform: scale(1.15) rotate(-6deg); filter: drop-shadow(0 0 14px currentColor); }
+}
+
+@keyframes wind-blowing {
+  0% { transform: translateX(-3px); opacity: 0.4; }
+  50% { transform: translateX(3px); opacity: 1; filter: drop-shadow(0 0 8px currentColor); }
+  100% { transform: translateX(8px); opacity: 0.2; }
+}
+
+@keyframes spin-reverse {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
+
+.animate-icon-wind {
+  animation: wind-blowing 1.2s ease-in-out infinite;
+}
+
+.animate-spin-reverse {
+  animation: spin-reverse 3s linear infinite;
+}
+
+.animate-spin-slow {
+  animation: spin-slow 6s linear infinite;
+}
+
+/* Animation Speed Utility Overrides */
+.anim-speed-slow {
+  animation-duration: 2.5s !important;
+}
+.animate-icon-spin.anim-speed-slow,
+.animate-spin-slow.anim-speed-slow,
+.animate-spin-reverse.anim-speed-slow {
+  animation-duration: 9s !important;
+}
+.animate-icon-wind.anim-speed-slow {
+  animation-duration: 2.5s !important;
+}
+.animate-icon-drip.anim-speed-slow {
+  animation-duration: 2.4s !important;
+}
+.animate-icon-strobe.anim-speed-slow {
+  animation-duration: 3s !important;
+}
+.animate-icon-flame.anim-speed-slow {
+  animation-duration: 3.5s !important;
+}
+.animate-icon-soundwave.anim-speed-slow {
+  animation-duration: 3s !important;
+}
+
+.anim-speed-fast {
+  animation-duration: 0.8s !important;
+}
+.animate-icon-spin.anim-speed-fast,
+.animate-spin-slow.anim-speed-fast,
+.animate-spin-reverse.anim-speed-fast {
+  animation-duration: 1.2s !important;
+}
+.animate-icon-wind.anim-speed-fast {
+  animation-duration: 0.5s !important;
+}
+.animate-icon-drip.anim-speed-fast {
+  animation-duration: 0.5s !important;
+}
+.animate-icon-strobe.anim-speed-fast {
+  animation-duration: 0.5s !important;
+}
+.animate-icon-flame.anim-speed-fast {
+  animation-duration: 0.6s !important;
+}
+.animate-icon-soundwave.anim-speed-fast {
+  animation-duration: 0.6s !important;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-icon-spin {
+  animation: spin-slow 3s linear infinite;
+}
+
+.animate-icon-soundwave {
+  animation: sound-wave-pulse 1.2s ease-in-out infinite;
+}
+
+.animate-icon-strobe {
+  animation: strobe-beacon 0.8s ease-in-out infinite;
+}
+
+.animate-icon-drip {
+  animation: water-drip-flow 1.4s ease-in-out infinite;
+}
+
+.animate-icon-flame {
+  animation: flame-flicker 1.5s ease-in-out infinite;
+}
+
+.animate-icon-spark {
+  animation: spark-flash 1s step-end infinite;
+}
+
+.animate-icon-wifi {
+  animation: wifi-wave-pulse 1.6s ease-in-out infinite;
+}
+
+.animate-icon-alert {
+  animation: alert-warning-bounce 1.2s ease-in-out infinite;
+}
+
+/* === Equipment Trip / Fault Hazard Animation Styles === */
+@keyframes trip-strobe-flash {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+  15% { opacity: 0.15; box-shadow: 0 0 20px 4px rgba(239, 68, 68, 0.9); }
+  30% { opacity: 1; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+  45% { opacity: 0.15; box-shadow: 0 0 20px 4px rgba(239, 68, 68, 0.9); }
+  60% { opacity: 1; }
+}
+
+@keyframes trip-warning-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3); }
+  50% { box-shadow: 0 0 16px 6px rgba(239, 68, 68, 0.65); }
+}
+
+@keyframes trip-hazard-border {
+  0%, 100% { border-color: rgba(239, 68, 68, 0.9); }
+  50% { border-color: rgba(250, 204, 21, 0.9); }
+}
+
+@keyframes trip-badge-blink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.08); }
+}
+
+.trip-anim-flash_strobe {
+  animation: trip-strobe-flash 0.6s ease-in-out infinite !important;
+}
+.trip-anim-warning_pulse {
+  animation: trip-warning-pulse 1.2s ease-in-out infinite !important;
+}
+.trip-anim-red_hazard_border {
+  border: 2.5px solid #ef4444 !important;
+  animation: trip-hazard-border 0.8s ease-in-out infinite !important;
+}
+.trip-anim-trip_badge {
+  /* Static badge, no container anim */
+}
+
+.trip-badge-overlay {
+  animation: trip-badge-blink 0.7s ease-in-out infinite;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(2, 6, 23, 0.6);
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* Modal and overlay animations */
+.animate-in {
+  animation-duration: 0.2s;
+  animation-fill-mode: both;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes zoom-in {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.fade-in { animation-name: fade-in; }
+.zoom-in { animation-name: zoom-in; }
+
+/* Custom Touch-Optimized Slider Thumb & Track */
+input[type=range] {
+  touch-action: pan-x;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #38bdf8;
+  cursor: pointer;
+  border: 2px solid #020617;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
+  transition: transform 0.1s ease, background-color 0.1s ease;
+}
+
+input[type=range]::-webkit-slider-thumb:active {
+  transform: scale(1.25);
+  background: #38bdf8;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.9);
+}
+
+input[type=range]::-moz-range-thumb {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #38bdf8;
+  cursor: pointer;
+  border: 2px solid #020617;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
+  transition: transform 0.1s ease, background-color 0.1s ease;
+}
+
+input[type=range]::-moz-range-thumb:active {
+  transform: scale(1.25);
+  background: #38bdf8;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.9);
+}
+
+

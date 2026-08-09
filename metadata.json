@@ -1,0 +1,8 @@
+{
+  "name": "TASC IIoT Studio",
+  "description": "Comprehensive MQTT Dashboard and Client Management System for IoT monitoring, dashboard creation, client packaging, and real-time visualization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
