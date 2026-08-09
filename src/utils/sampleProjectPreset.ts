@@ -32,7 +32,7 @@ export function getSampleProject(connectionId: string): {
 
   const panels: Panel[] = [
     // ==========================================
-    // SCREEN 1: WATER SYSTEM (4 WIDGETS)
+    // SCREEN 1: WATER SYSTEM (5 WIDGETS)
     // ==========================================
     {
       panelId: `p_w_title_${ts}`,
@@ -65,26 +65,29 @@ export function getSampleProject(connectionId: string): {
       secondColor: '#06b6d4',
       thirdColor: '#10b981',
       decimalPrecision: 1,
-      x: 20, y: 95, w: 370, h: 230
+      x: 20, y: 95, w: 280, h: 230
     },
     {
-      panelId: `p_w_level_${ts}`,
+      panelId: `p_w_tank_${ts}`,
       dashboardId: dashWaterId,
       connectionId,
-      panelName: 'STORAGE TANK LEVEL',
-      type: PanelType.GAUGE,
+      panelName: 'WATER STORAGE TANK',
+      type: PanelType.IMAGE,
+      symbolId: 'tank_vertical',
       topic: 'water/tank_level',
       unit: '%',
       payloadMin: 0,
       payloadMax: 100,
-      firstColor: '#10b981',
-      secondColor: '#f59e0b',
-      thirdColor: '#ef4444',
       decimalPrecision: 1,
-      x: 415, y: 95, w: 370, h: 230
+      firstColor: '#0284c7',
+      secondColor: '#06b6d4',
+      thirdColor: '#10b981',
+      bgColor: '#09152b',
+      borderColor: '#0284c7',
+      x: 315, y: 95, w: 270, h: 230
     },
     {
-      panelId: `p_w_pump_${ts}`,
+      panelId: `p_w_pump_ctrl_${ts}`,
       dashboardId: dashWaterId,
       connectionId,
       panelName: 'PUMP-01 POWER CONTROL',
@@ -96,7 +99,25 @@ export function getSampleProject(connectionId: string): {
       bgColor: '#022c22',
       textColor: '#4ade80',
       borderColor: '#16a34a',
-      x: 810, y: 95, w: 370, h: 230
+      x: 600, y: 95, w: 280, h: 230
+    },
+    {
+      panelId: `p_w_pump_sym_${ts}`,
+      dashboardId: dashWaterId,
+      connectionId,
+      panelName: 'PUMP-01 RUNNING FEEDBACK',
+      type: PanelType.IMAGE,
+      symbolId: 'pump_centrifugal',
+      topic: 'water/pump_control',
+      payloadOn: 'ON',
+      payloadOff: 'OFF',
+      rotateOn: true,
+      animSpeedOn: 'fast',
+      iconColorOn: '#10b981',
+      iconColorOff: '#ef4444',
+      bgColor: '#09152b',
+      borderColor: '#10b981',
+      x: 895, y: 95, w: 285, h: 230
     },
 
     // ==========================================

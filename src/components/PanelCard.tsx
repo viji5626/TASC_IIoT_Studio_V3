@@ -7,6 +7,7 @@ import { formatPublishPayload, getNormalizedOptions } from '../utils/mqttHelper'
 import { getSmartIconAnimationClass, SmartIcon } from '../utils/iconAnimator';
 import { isPanelTripped } from '../utils/tripHelper';
 import { AlarmHistorianWidget } from './AlarmHistorianWidget';
+import { DynamicIndustrialSymbol } from './DynamicIndustrialSymbol';
 
 interface PanelCardProps {
   panel: Panel;
@@ -676,7 +677,15 @@ const PanelCard: React.FC<PanelCardProps> = ({
       case PanelType.IMAGE: {
         return (
           <div className="flex flex-col w-full h-full items-center justify-center overflow-hidden py-1">
-            {panel.imageUrl || panel.staticText ? (
+            {panel.symbolId || panel.symbolAnimType ? (
+              <DynamicIndustrialSymbol
+                symbolId={panel.symbolId}
+                panel={panel}
+                liveValue={lastValue}
+                latestValues={latestValues}
+                className="w-full h-full min-h-[140px]"
+              />
+            ) : panel.imageUrl || panel.staticText ? (
               <img
                 src={panel.imageUrl || panel.staticText}
                 alt={panel.panelName || 'Media'}
