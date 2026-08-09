@@ -1654,7 +1654,7 @@ export function App() {
               accentColor={activeThemeObj.primary} 
               isCommunity={userRole === 'community' || productEdition === ProductEdition.COMMUNITY} 
             />
-            <span className="font-extrabold text-white text-base tracking-tight hidden sm:inline">TASC IIoT Studio</span>
+            <span className="font-extrabold text-white text-sm sm:text-base tracking-tight whitespace-nowrap shrink-0 hidden sm:inline">TASC IIoT Studio</span>
             <button
               type="button"
               onClick={editionMgr.IsClient() ? undefined : handleOpenActiveBrokerSettings}
@@ -1819,16 +1819,6 @@ export function App() {
               </div>
             ) : (
               <div className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  onClick={handleRequestExitSession}
-                  className="flex items-center space-x-1.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-lg text-[11px] font-bold hover:bg-amber-500/30 transition-all cursor-pointer"
-                  title="Engineering Studio — Click to exit / change mode"
-                >
-                  <i className="fas fa-user-gear text-xs"></i>
-                  <span className="hidden sm:inline">ENGINEERING STUDIO</span>
-                  <span className="text-[9px] bg-amber-500 text-slate-950 px-1 rounded font-mono font-extrabold">ADMIN</span>
-                </button>
 
                 {!isFullscreen && (
                   <button

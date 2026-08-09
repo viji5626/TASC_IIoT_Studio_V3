@@ -24,9 +24,7 @@ export const AppLogo: React.FC<AppLogoProps> = ({
 
   const defaultCandidates = [
     '/logo.png',
-    '/logo.svg',
-    '/Community_logo.png',
-    '/community_logo.png'
+    '/logo.svg'
   ];
 
   const candidates = isCommunity ? communityCandidates : defaultCandidates;
@@ -40,7 +38,7 @@ export const AppLogo: React.FC<AppLogoProps> = ({
   }, [isCommunity]);
 
   const currentSrc = candidates[srcIndex] || '';
-  const isCommunityLogo = isCommunity || currentSrc.toLowerCase().includes('community');
+  const isCommunityLogo = isCommunity;
 
   const dimMap = {
     sm: isCommunityLogo ? 'w-11 h-11 text-xs' : 'w-7 h-7 text-xs',

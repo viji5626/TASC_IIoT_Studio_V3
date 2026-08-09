@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Panel, PanelType, AppState } from '../types';
 import KeypadModal from './KeypadModal';
 import { SymbolLibraryModal, IndustrialSymbolItem, convertSvgToPngDataUrl } from './SymbolLibraryModal';
@@ -275,6 +275,68 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
   const touchStartDistRef = useRef<number | null>(null);
   const touchStartZoomRef = useRef<number>(1.0);
+
+  // Auto-Fit state & outer canvas dimensions
+  const [isAutoFit, setIsAutoFit] = useState<boolean>(true);
+  const [containerDimensions, setContainerDimensions] = useState<{ width: number; height: number }>({
+    width: typeof window !== 'undefined' ? window.innerWidth : 1220,
+    height: typeof window !== 'undefined' ? window.innerHeight : 750
+  });
+
+  useEffect(() => {
+    const updateDimensions = () => {
+      if (canvasRef.current) {
+        setContainerDimensions({
+          width: canvasRef.current.clientWidth || window.innerWidth,
+          height: canvasRef.current.clientHeight || window.innerHeight
+        });
+      }
+    };
+    updateDimensions();
+    window.addEventListener('resize', updateDimensions);
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && canvasRef.current) {
+      observer = new ResizeObserver(updateDimensions);
+      observer.observe(canvasRef.current);
+    }
+    return () => {
+      window.removeEventListener('resize', updateDimensions);
+      if (observer) observer.disconnect();
+    };
+  }, []);
+
+  const activeScreenPanels = useMemo(() => {
+    return appState.panels.filter(p => p.dashboardId === activeDashboardId);
+  }, [appState.panels, activeDashboardId]);
+
+  const contentBounds = useMemo(() => {
+    if (activeScreenPanels.length === 0) {
+      return { width: 1220, height: 750 };
+    }
+    let maxX = 1220;
+    let maxY = 700;
+    for (const p of activeScreenPanels) {
+      const right = (p.x || 0) + (p.w || 180);
+      const bottom = (p.y || 0) + (p.h || 60);
+      if (right > maxX) maxX = right;
+      if (bottom > maxY) maxY = bottom;
+    }
+    return {
+      width: Math.max(1220, maxX + 30),
+      height: Math.max(700, maxY + 30)
+    };
+  }, [activeScreenPanels]);
+
+  const autoFitScale = useMemo(() => {
+    if (containerDimensions.width <= 0 || containerDimensions.height <= 0) return 1.0;
+    const scaleX = containerDimensions.width / contentBounds.width;
+    const scaleY = containerDimensions.height / contentBounds.height;
+    return Math.min(scaleX, scaleY);
+  }, [containerDimensions, contentBounds]);
+
+  const effectiveScale = (!isEditMode || isAutoFit) && autoFitScale < 1.0
+    ? autoFitScale * zoomLevel
+    : zoomLevel;
 
   // Symbol Factory 3.0 Industrial Library Modal State
   const [isSymbolLibraryOpen, setIsSymbolLibraryOpen] = useState<boolean>(false);
@@ -2591,6 +2653,21 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     </button>
                   )}
                 </div>
+
+                {/* Auto-Fit Screen Toggle Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsAutoFit(prev => !prev)}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer shadow-sm ${
+                    isAutoFit
+                      ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 hover:bg-sky-500/30'
+                      : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
+                  }`}
+                  title="Auto Fit Screen (Dynamically scales all canvas elements to fit mobile/desktop screen without scrolling)"
+                >
+                  <i className="fas fa-expand text-xs text-sky-400"></i>
+                  <span>{isAutoFit ? 'Auto Fit ON' : 'Auto Fit'}</span>
+                </button>
               </>
             )}
 
@@ -3111,7 +3188,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
           setContextMenu({ isOpen: false, x: 0, y: 0 });
         }}
         onContextMenu={(e) => handleContextMenu(e)}
-        className={`flex-1 relative overflow-auto p-0.5 min-h-[600px] min-w-[1220px] transition-colors ${
+        className={`flex-1 relative p-0.5 transition-colors ${
+          !isEditMode || isAutoFit ? 'overflow-hidden' : 'overflow-auto min-h-[600px] min-w-[1220px]'
+        } ${
           isPanning
             ? 'cursor-grabbing select-none'
             : isPanMode || isSpacePressed || zoomLevel > 1.0
@@ -3129,12 +3208,12 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
         {/* Scaled Canvas Inner Container */}
         <div
           style={{
-            transform: `scale(${zoomLevel})`,
+            transform: `scale(${effectiveScale})`,
             transformOrigin: '0 0',
-            width: `${Math.max(1220, 1220 * Math.max(1, zoomLevel))}px`,
-            height: `${Math.max(700, 800 * Math.max(1, zoomLevel))}px`,
-            minWidth: '1220px',
-            minHeight: '600px'
+            width: `${contentBounds.width}px`,
+            height: `${contentBounds.height}px`,
+            minWidth: isEditMode && !isAutoFit ? '1220px' : '0px',
+            minHeight: isEditMode && !isAutoFit ? '600px' : '0px'
           }}
           className="relative transition-transform duration-75 origin-top-left"
         >
