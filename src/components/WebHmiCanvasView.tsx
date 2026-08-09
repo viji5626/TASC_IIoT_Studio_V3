@@ -309,34 +309,47 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     return appState.panels.filter(p => p.dashboardId === activeDashboardId);
   }, [appState.panels, activeDashboardId]);
 
+  // Dynamic Content Bounding Box Calculation (Scans Top-Left to Bottom-Right of all elements on screen)
   const contentBounds = useMemo(() => {
     if (activeScreenPanels.length === 0) {
-      return { width: 1220, height: 750 };
+      return { width: 1000, height: 580 };
     }
-    let maxX = 1220;
-    let maxY = 700;
+
+    let maxX = 0;
+    let maxY = 0;
+
     for (const p of activeScreenPanels) {
       const right = (p.x || 0) + (p.w || 180);
       const bottom = (p.y || 0) + (p.h || 60);
       if (right > maxX) maxX = right;
       if (bottom > maxY) maxY = bottom;
     }
+
+    const boundedW = Math.ceil(maxX + 30);
+    const boundedH = Math.ceil(maxY + 30);
+
     return {
-      width: Math.max(1220, maxX + 30),
-      height: Math.max(700, maxY + 30)
+      width: Math.max(800, boundedW),
+      height: Math.max(450, boundedH)
     };
   }, [activeScreenPanels]);
 
+  // Auto-Fit Scale: Dynamically calculates exact scale factor to fit all elements cleanly inside visible container viewport
   const autoFitScale = useMemo(() => {
     if (containerDimensions.width <= 0 || containerDimensions.height <= 0) return 1.0;
-    const scaleX = containerDimensions.width / contentBounds.width;
-    const scaleY = containerDimensions.height / contentBounds.height;
-    return Math.min(scaleX, scaleY);
+
+    const availW = Math.max(300, containerDimensions.width - 24);
+    const availH = Math.max(300, containerDimensions.height - 24);
+
+    const scaleX = availW / contentBounds.width;
+    const scaleY = availH / contentBounds.height;
+
+    let fit = Math.min(scaleX, scaleY);
+    return Math.max(0.35, Math.min(2.5, fit));
   }, [containerDimensions, contentBounds]);
 
-  const effectiveScale = (!isEditMode || isAutoFit) && autoFitScale < 1.0
-    ? autoFitScale * zoomLevel
-    : zoomLevel;
+  // Effective Scale applied to canvas container
+  const effectiveScale = isAutoFit ? autoFitScale * zoomLevel : zoomLevel;
 
   // Symbol Factory 3.0 Industrial Library Modal State
   const [isSymbolLibraryOpen, setIsSymbolLibraryOpen] = useState<boolean>(false);
@@ -1456,8 +1469,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     const handleMouseMove = (e: MouseEvent) => {
       if (!isDragging || selectedPanelIds.length === 0) return;
 
-      const deltaX = (e.clientX - dragStartPos.current.mouseX) / zoomLevel;
-      const deltaY = (e.clientY - dragStartPos.current.mouseY) / zoomLevel;
+      const deltaX = (e.clientX - dragStartPos.current.mouseX) / effectiveScale;
+      const deltaY = (e.clientY - dragStartPos.current.mouseY) / effectiveScale;
 
       const updatedPanels = appState.panels.map(p => {
         if (selectedPanelIds.includes(p.panelId)) {
@@ -1497,7 +1510,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, selectedPanelIds, gridSnap, appState, zoomLevel]);
+  }, [isDragging, selectedPanelIds, gridSnap, appState, effectiveScale]);
 
   // Effect for Marquee Drag Box Selection
   useEffect(() => {
@@ -1507,8 +1520,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       const scrollLeft = canvasRef.current.scrollLeft || 0;
       const scrollTop = canvasRef.current.scrollTop || 0;
 
-      const currentX = (e.clientX - rect.left + scrollLeft) / zoomLevel;
-      const currentY = (e.clientY - rect.top + scrollTop) / zoomLevel;
+      const currentX = (e.clientX - rect.left + scrollLeft) / effectiveScale;
+      const currentY = (e.clientY - rect.top + scrollTop) / effectiveScale;
 
       if (Math.abs(currentX - marqueeRect.startX) > 4 || Math.abs(currentY - marqueeRect.startY) > 4) {
         hasDraggedMarqueeRef.current = true;
@@ -3189,7 +3202,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
         }}
         onContextMenu={(e) => handleContextMenu(e)}
         className={`flex-1 relative p-0.5 transition-colors ${
-          !isEditMode || isAutoFit ? 'overflow-hidden' : 'overflow-auto min-h-[600px] min-w-[1220px]'
+          !isEditMode || isAutoFit ? 'overflow-hidden flex items-center justify-center' : 'overflow-auto min-h-[600px] min-w-[1220px]'
         } ${
           isPanning
             ? 'cursor-grabbing select-none'
@@ -3209,13 +3222,13 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
         <div
           style={{
             transform: `scale(${effectiveScale})`,
-            transformOrigin: '0 0',
+            transformOrigin: isAutoFit ? 'center center' : 'top left',
             width: `${contentBounds.width}px`,
             height: `${contentBounds.height}px`,
             minWidth: isEditMode && !isAutoFit ? '1220px' : '0px',
             minHeight: isEditMode && !isAutoFit ? '600px' : '0px'
           }}
-          className="relative transition-transform duration-75 origin-top-left"
+          className="relative transition-transform duration-100 ease-out shrink-0"
         >
           {/* Marquee Drag Box Selection Overlay */}
         {isMarqueeSelecting && marqueeRect && (
