@@ -2744,10 +2744,27 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
               <span className="text-[10px] text-slate-300 font-bold hidden sm:inline">Element BG:</span>
               <input
                 type="color"
-                value={selectedPanel?.bgColor || '#0f172a'}
+                value={selectedPanel?.bgColor && selectedPanel.bgColor !== 'transparent' ? selectedPanel.bgColor : '#0f172a'}
                 onChange={(e) => updateSelectedPanelProp('bgColor', e.target.value)}
                 className="w-5 h-5 bg-transparent cursor-pointer rounded border-0 outline-none overflow-hidden"
+                title="Pick solid background color"
               />
+              <button
+                type="button"
+                onClick={() => {
+                  const isCurrentlyTransparent = selectedPanel?.bgColor === 'transparent';
+                  updateSelectedPanelProp('bgColor', isCurrentlyTransparent ? '#09152b' : 'transparent');
+                }}
+                className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold border transition-all cursor-pointer flex items-center space-x-1 ${
+                  selectedPanel?.bgColor === 'transparent'
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/60 shadow-[0_0_8px_rgba(245,158,11,0.3)]'
+                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                }`}
+                title="Toggle No Color (100% Transparent Background)"
+              >
+                <i className="fas fa-ban text-[9px]"></i>
+                <span>{selectedPanel?.bgColor === 'transparent' ? 'No BG' : 'Transparent'}</span>
+              </button>
             </div>
 
             <div className="flex items-center space-x-1.5 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800" title="Text Color">
@@ -2766,10 +2783,27 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
               <span className="text-[10px] text-slate-300 font-bold hidden lg:inline">Border:</span>
               <input
                 type="color"
-                value={selectedPanel?.borderColor || '#1e293b'}
+                value={selectedPanel?.borderColor && selectedPanel.borderColor !== 'transparent' ? selectedPanel.borderColor : '#1e293b'}
                 onChange={(e) => updateSelectedPanelProp('borderColor', e.target.value)}
                 className="w-5 h-5 bg-transparent cursor-pointer rounded border-0 outline-none overflow-hidden"
+                title="Pick solid border color"
               />
+              <button
+                type="button"
+                onClick={() => {
+                  const isCurrentlyTransparent = selectedPanel?.borderColor === 'transparent';
+                  updateSelectedPanelProp('borderColor', isCurrentlyTransparent ? '#0284c7' : 'transparent');
+                }}
+                className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold border transition-all cursor-pointer flex items-center space-x-1 ${
+                  selectedPanel?.borderColor === 'transparent'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/60 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
+                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                }`}
+                title="Toggle No Border (Invisible / Transparent Border)"
+              >
+                <i className="fas fa-border-none text-[9px]"></i>
+                <span>{selectedPanel?.borderColor === 'transparent' ? 'No Border' : 'Transparent'}</span>
+              </button>
             </div>
 
             {/* Element Opacity Slider */}
