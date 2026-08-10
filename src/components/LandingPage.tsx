@@ -123,7 +123,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
   };
 
   return (
-    <div className="w-full min-h-screen h-screen overflow-y-auto bg-[#060a12] text-slate-100 flex flex-col justify-between p-4 sm:p-8 relative select-none font-sans">
+    <div className="w-full min-h-screen sm:h-screen overflow-y-auto bg-[#060a12] text-slate-100 flex flex-col justify-between p-3 sm:p-5 relative select-none font-sans">
       
       {/* Background Industrial Lighting Glows */}
       <div 
@@ -136,105 +136,105 @@ const LandingPage: React.FC<LandingPageProps> = ({
       />
 
       {/* Top Header Branding */}
-      <header className="max-w-7xl mx-auto w-full flex items-center justify-between py-4 relative z-10 border-b border-slate-800/80 pb-6 shrink-0">
-        <div className="flex items-center space-x-4">
-          <div className="p-2.5 bg-slate-950/90 rounded-2xl border border-slate-800 shadow-xl flex items-center justify-center">
-            <AppLogo size="md" accentColor={accentColor} />
+      <header className="max-w-7xl mx-auto w-full flex items-center justify-between py-2 sm:py-2.5 relative z-10 border-b border-slate-800/80 pb-3 shrink-0">
+        <div className="flex items-center space-x-3.5">
+          <div className="p-2 bg-slate-950/90 rounded-xl border border-slate-800 shadow-xl flex items-center justify-center">
+            <AppLogo size="sm" accentColor={accentColor} />
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+              <h1 className="text-lg sm:text-xl font-black text-white tracking-tight">
                 TASC IIoT Studio
               </h1>
-              <span className="text-[10px] uppercase tracking-widest font-mono font-bold bg-sky-500/10 text-sky-400 border border-sky-500/30 px-2 py-0.5 rounded-md">
+              <span className="text-[9px] uppercase tracking-widest font-mono font-bold bg-sky-500/10 text-sky-400 border border-sky-500/30 px-2 py-0.5 rounded-md">
                 v2.4 Enterprise
               </span>
             </div>
-            <p className="text-xs text-slate-400 font-medium">
+            <p className="text-[11px] text-slate-400 font-medium">
               Industrial HMI & IoT Telemetry Platform
             </p>
           </div>
         </div>
 
         <div className="hidden sm:flex items-center space-x-3 text-xs text-slate-400">
-          <div className="flex items-center space-x-1.5 bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800">
+          <div className="flex items-center space-x-1.5 bg-slate-900/80 px-2.5 py-1 rounded-lg border border-slate-800">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span className="font-mono text-[11px]">System Ready</span>
+            <span className="font-mono text-[10px]">System Ready</span>
           </div>
         </div>
       </header>
 
       {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto w-full py-6 sm:py-10 relative z-10 space-y-8 shrink-0">
+      <main className="max-w-7xl mx-auto w-full py-2 sm:py-3 relative z-10 space-y-3 sm:space-y-4 my-auto shrink-0">
         
         {/* Title Section */}
-        <div className="text-center space-y-3 max-w-3xl mx-auto">
-          <span className="text-xs font-bold uppercase tracking-widest text-sky-400 bg-sky-500/10 px-3.5 py-1 rounded-full border border-sky-500/20 inline-block">
+        <div className="text-center space-y-1 max-w-2xl mx-auto">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-sky-400 bg-sky-500/10 px-3 py-0.5 rounded-full border border-sky-500/20 inline-block">
             Select Software Execution Mode
           </span>
-          <h2 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight">
+          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight leading-tight">
             Industrial Automation & HMI Runtime Architecture
           </h2>
-          <p className="text-xs sm:text-sm text-slate-400 leading-relaxed max-w-2xl mx-auto">
+          <p className="text-[11px] sm:text-xs text-slate-400 leading-normal max-w-xl mx-auto">
             Choose your application mode below to begin. Build custom HMI screens in Community Mode, load pre-configured client runtime packages, or enter Engineering Studio.
           </p>
         </div>
 
-        {/* 3 Large Product Edition Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-stretch">
+        {/* 3 Product Edition Cards */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3.5 sm:gap-5 items-stretch">
           
           {/* OPTION 1: COMMUNITY EDITION */}
-          <div className="bg-slate-900/80 hover:bg-slate-900/95 border border-slate-800/90 hover:border-emerald-500/50 rounded-3xl p-6 sm:p-8 flex flex-col justify-between shadow-2xl backdrop-blur-xl transition-all duration-300 hover:shadow-emerald-500/10 group relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-bl-full pointer-events-none group-hover:bg-emerald-500/10 transition-all" />
+          <div className="bg-slate-900/80 hover:bg-slate-900/95 border border-slate-800/90 hover:border-emerald-500/50 rounded-2xl p-4 sm:p-5 flex flex-col justify-between shadow-2xl backdrop-blur-xl transition-all duration-300 hover:shadow-emerald-500/10 group relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-bl-full pointer-events-none group-hover:bg-emerald-500/10 transition-all" />
             
-            <div className="space-y-5">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center text-xl shadow-inner">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center text-lg shadow-inner">
                   <i className="fas fa-cube"></i>
                 </div>
-                <span className="text-[10px] font-extrabold uppercase tracking-widest bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full">
+                <span className="text-[9px] font-extrabold uppercase tracking-widest bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
                   Free • Self-Serve
                 </span>
               </div>
 
               <div>
-                <h3 className="text-xl font-bold text-white group-hover:text-emerald-300 transition-colors">
+                <h3 className="text-base sm:text-lg font-bold text-white group-hover:text-emerald-300 transition-colors">
                   Community Edition
                 </h3>
-                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
                   For learning, testing, and building small personal MQTT HMI dashboards.
                 </p>
               </div>
 
-              <div className="space-y-2.5 pt-2 border-t border-slate-800/80 text-xs">
-                <div className="flex items-start space-x-2.5 text-slate-300">
-                  <i className="fas fa-check text-emerald-400 mt-0.5 shrink-0"></i>
+              <div className="space-y-1.5 pt-1.5 border-t border-slate-800/80 text-[11px]">
+                <div className="flex items-start space-x-2 text-slate-300">
+                  <i className="fas fa-check text-emerald-400 mt-0.5 shrink-0 text-[10px]"></i>
                   <span>Connect to custom MQTT broker</span>
                 </div>
-                <div className="flex items-start space-x-2.5 text-emerald-300 font-medium">
-                  <i className="fas fa-unlock text-emerald-400 mt-0.5 shrink-0"></i>
+                <div className="flex items-start space-x-2 text-emerald-300 font-medium">
+                  <i className="fas fa-unlock text-emerald-400 mt-0.5 shrink-0 text-[10px]"></i>
                   <span><strong>Unlocked Grid Studio & HMI Canvas</strong></span>
                 </div>
-                <div className="flex items-start space-x-2.5 text-amber-300 font-medium">
-                  <i className="fas fa-circle-exclamation text-amber-400 mt-0.5 shrink-0"></i>
+                <div className="flex items-start space-x-2 text-amber-300 font-medium">
+                  <i className="fas fa-circle-exclamation text-amber-400 mt-0.5 shrink-0 text-[10px]"></i>
                   <span><strong>Limit: Max 1 Screen</strong> (Single Dashboard)</span>
                 </div>
-                <div className="flex items-start space-x-2.5 text-amber-300 font-medium">
-                  <i className="fas fa-circle-exclamation text-amber-400 mt-0.5 shrink-0"></i>
+                <div className="flex items-start space-x-2 text-amber-300 font-medium">
+                  <i className="fas fa-circle-exclamation text-amber-400 mt-0.5 shrink-0 text-[10px]"></i>
                   <span><strong>Limit: Max 10 Widgets</strong> (10 Panels max)</span>
                 </div>
-                <div className="flex items-start space-x-2.5 text-slate-400">
-                  <i className="fas fa-lock text-slate-500 mt-0.5 shrink-0"></i>
+                <div className="flex items-start space-x-2 text-slate-400">
+                  <i className="fas fa-lock text-slate-500 mt-0.5 shrink-0 text-[10px]"></i>
                   <span>Full Editing Unlocked • Backup/Restore Revoked</span>
                 </div>
               </div>
             </div>
 
-            <div className="pt-8 mt-auto">
+            <div className="pt-4 mt-auto">
               <button
                 type="button"
                 onClick={onSelectCommunityMode}
-                className="w-full py-3.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-2xl shadow-lg shadow-emerald-500/20 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer"
+                className="w-full py-2.5 px-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/20 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer"
               >
                 <span>Start Community Edition</span>
                 <i className="fas fa-arrow-right text-xs"></i>
@@ -243,54 +243,54 @@ const LandingPage: React.FC<LandingPageProps> = ({
           </div>
 
           {/* OPTION 2: CLIENT EDITION */}
-          <div className="bg-slate-900/80 hover:bg-slate-900/95 border border-sky-500/40 hover:border-sky-400 rounded-3xl p-6 sm:p-8 flex flex-col justify-between shadow-2xl backdrop-blur-xl transition-all duration-300 hover:shadow-sky-500/10 group relative overflow-hidden ring-1 ring-sky-500/20">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/10 rounded-bl-full pointer-events-none group-hover:bg-sky-500/15 transition-all" />
+          <div className="bg-slate-900/80 hover:bg-slate-900/95 border border-sky-500/40 hover:border-sky-400 rounded-2xl p-4 sm:p-5 flex flex-col justify-between shadow-2xl backdrop-blur-xl transition-all duration-300 hover:shadow-sky-500/10 group relative overflow-hidden ring-1 ring-sky-500/20">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-sky-500/10 rounded-bl-full pointer-events-none group-hover:bg-sky-500/15 transition-all" />
             
-            <div className="space-y-5">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <div className="w-12 h-12 rounded-2xl bg-sky-500/10 border border-sky-500/30 text-sky-400 flex items-center justify-center text-xl shadow-inner">
+                <div className="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-400 flex items-center justify-center text-lg shadow-inner">
                   <i className="fas fa-file-shield"></i>
                 </div>
-                <span className="text-[10px] font-extrabold uppercase tracking-widest bg-sky-500/15 text-sky-300 border border-sky-500/30 px-3 py-1 rounded-full">
+                <span className="text-[9px] font-extrabold uppercase tracking-widest bg-sky-500/15 text-sky-300 border border-sky-500/30 px-2.5 py-0.5 rounded-full">
                   Operator Runtime
                 </span>
               </div>
 
               <div>
-                <h3 className="text-xl font-bold text-white group-hover:text-sky-300 transition-colors">
+                <h3 className="text-base sm:text-lg font-bold text-white group-hover:text-sky-300 transition-colors">
                   Client Edition
                 </h3>
-                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
                   For clients loading engineered <code className="text-sky-300 font-mono">.tasc</code> or <code className="text-sky-300 font-mono">.json</code> HMI packages.
                 </p>
               </div>
 
-              <div className="space-y-2.5 pt-2 border-t border-slate-800/80 text-xs">
-                <div className="flex items-start space-x-2.5 text-slate-300">
-                  <i className="fas fa-check text-sky-400 mt-0.5 shrink-0"></i>
+              <div className="space-y-1.5 pt-1.5 border-t border-slate-800/80 text-[11px]">
+                <div className="flex items-start space-x-2 text-slate-300">
+                  <i className="fas fa-check text-sky-400 mt-0.5 shrink-0 text-[10px]"></i>
                   <span>Auto-loads Brokers, Dashboards & Tags</span>
                 </div>
-                <div className="flex items-start space-x-2.5 text-slate-300">
-                  <i className="fas fa-check text-sky-400 mt-0.5 shrink-0"></i>
+                <div className="flex items-start space-x-2 text-slate-300">
+                  <i className="fas fa-check text-sky-400 mt-0.5 shrink-0 text-[10px]"></i>
                   <span>Operate setpoints, sliders, switches & trends</span>
                 </div>
-                <div className="flex items-start space-x-2.5 text-slate-300">
-                  <i className="fas fa-check text-sky-400 mt-0.5 shrink-0"></i>
+                <div className="flex items-start space-x-2 text-slate-300">
+                  <i className="fas fa-check text-sky-400 mt-0.5 shrink-0 text-[10px]"></i>
                   <span>Rearrange & resize grid layouts freely</span>
                 </div>
-                <div className="flex items-start space-x-2.5 text-sky-300 font-semibold">
-                  <i className="fas fa-shield-halved text-sky-400 mt-0.5 shrink-0"></i>
-                  <span>Operator Mode (Broker endpoints & topics locked)</span>
+                <div className="flex items-start space-x-2 text-sky-300 font-semibold">
+                  <i className="fas fa-shield-halved text-sky-400 mt-0.5 shrink-0 text-[10px]"></i>
+                  <span>Operator Mode (Endpoints & topics locked)</span>
                 </div>
-                <div className="flex items-start space-x-2.5 text-slate-400">
-                  <i className="fas fa-key text-sky-400 mt-0.5 shrink-0"></i>
+                <div className="flex items-start space-x-2 text-slate-400">
+                  <i className="fas fa-key text-sky-400 mt-0.5 shrink-0 text-[10px]"></i>
                   <span>SHA-256 HMAC integrity verification</span>
                 </div>
               </div>
             </div>
 
             {savedSetupAvailable ? (
-              <div className="pt-6 mt-auto space-y-2">
+              <div className="pt-3 mt-auto space-y-1.5">
                 <button
                   type="button"
                   onClick={() => {
@@ -300,28 +300,28 @@ const LandingPage: React.FC<LandingPageProps> = ({
                       setShowImportModal(true);
                     }
                   }}
-                  className="w-full py-3.5 px-4 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg shadow-sky-500/20 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer"
+                  className="w-full py-2.5 px-3 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-sky-500/20 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer"
                 >
-                  <i className="fas fa-floppy-disk text-sm"></i>
+                  <i className="fas fa-floppy-disk text-xs"></i>
                   <span>Load Client Edition (Saved Setup)</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowImportModal(true)}
-                  className="w-full py-1.5 px-3 text-sky-400 hover:text-sky-300 font-semibold text-[11px] flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
+                  className="w-full py-1 px-2 text-sky-400 hover:text-sky-300 font-semibold text-[10px] flex items-center justify-center space-x-1 transition-colors cursor-pointer"
                 >
-                  <i className="fas fa-cloud-arrow-up text-xs"></i>
+                  <i className="fas fa-cloud-arrow-up text-[10px]"></i>
                   <span>Upload New Package (.tasc / .json)</span>
                 </button>
               </div>
             ) : (
-              <div className="pt-8 mt-auto">
+              <div className="pt-4 mt-auto">
                 <button
                   type="button"
                   onClick={() => setShowImportModal(true)}
-                  className="w-full py-3.5 px-4 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-2xl shadow-lg shadow-sky-500/20 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer"
+                  className="w-full py-2.5 px-3.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-sky-500/20 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer"
                 >
-                  <i className="fas fa-cloud-arrow-up text-sm"></i>
+                  <i className="fas fa-cloud-arrow-up text-xs"></i>
                   <span>Load Client Edition (.tasc / .json)</span>
                 </button>
               </div>
@@ -329,57 +329,57 @@ const LandingPage: React.FC<LandingPageProps> = ({
           </div>
 
           {/* OPTION 3: ADMIN / ENGINEERING STUDIO */}
-          <div className="bg-slate-900/80 hover:bg-slate-900/95 border border-slate-800/90 hover:border-amber-500/50 rounded-3xl p-6 sm:p-8 flex flex-col justify-between shadow-2xl backdrop-blur-xl transition-all duration-300 hover:shadow-amber-500/10 group relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-bl-full pointer-events-none group-hover:bg-amber-500/10 transition-all" />
+          <div className="bg-slate-900/80 hover:bg-slate-900/95 border border-slate-800/90 hover:border-amber-500/50 rounded-2xl p-4 sm:p-5 flex flex-col justify-between shadow-2xl backdrop-blur-xl transition-all duration-300 hover:shadow-amber-500/10 group relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-bl-full pointer-events-none group-hover:bg-amber-500/10 transition-all" />
             
-            <div className="space-y-5">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center text-xl shadow-inner">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center text-lg shadow-inner">
                   <i className="fas fa-user-gear"></i>
                 </div>
-                <span className="text-[10px] font-extrabold uppercase tracking-widest bg-amber-500/15 text-amber-400 border border-amber-500/30 px-3 py-1 rounded-full">
+                <span className="text-[9px] font-extrabold uppercase tracking-widest bg-amber-500/15 text-amber-400 border border-amber-500/30 px-2.5 py-0.5 rounded-full">
                   Full Engineering
                 </span>
               </div>
 
               <div>
-                <h3 className="text-xl font-bold text-white group-hover:text-amber-300 transition-colors">
+                <h3 className="text-base sm:text-lg font-bold text-white group-hover:text-amber-300 transition-colors">
                   Engineering Studio
                 </h3>
-                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
                   Reserved for TASC automation engineers to design & deploy systems.
                 </p>
               </div>
 
-              <div className="space-y-2.5 pt-2 border-t border-slate-800/80 text-xs">
-                <div className="flex items-start space-x-2.5 text-slate-300">
-                  <i className="fas fa-check text-amber-400 mt-0.5 shrink-0"></i>
+              <div className="space-y-1.5 pt-1.5 border-t border-slate-800/80 text-[11px]">
+                <div className="flex items-start space-x-2 text-slate-300">
+                  <i className="fas fa-check text-amber-400 mt-0.5 shrink-0 text-[10px]"></i>
                   <span>Unlimited Screens & Unlimited Widgets</span>
                 </div>
-                <div className="flex items-start space-x-2.5 text-slate-300">
-                  <i className="fas fa-check text-amber-400 mt-0.5 shrink-0"></i>
+                <div className="flex items-start space-x-2 text-slate-300">
+                  <i className="fas fa-check text-amber-400 mt-0.5 shrink-0 text-[10px]"></i>
                   <span>Full Broker, Tag & Topic configuration</span>
                 </div>
-                <div className="flex items-start space-x-2.5 text-slate-300">
-                  <i className="fas fa-check text-amber-400 mt-0.5 shrink-0"></i>
+                <div className="flex items-start space-x-2 text-slate-300">
+                  <i className="fas fa-check text-amber-400 mt-0.5 shrink-0 text-[10px]"></i>
                   <span>Widget script & pattern payload binding</span>
                 </div>
-                <div className="flex items-start space-x-2.5 text-slate-300">
-                  <i className="fas fa-check text-amber-400 mt-0.5 shrink-0"></i>
+                <div className="flex items-start space-x-2 text-slate-300">
+                  <i className="fas fa-check text-amber-400 mt-0.5 shrink-0 text-[10px]"></i>
                   <span>Export signed <code className="text-amber-300 font-mono">.tasc</code> packages</span>
                 </div>
-                <div className="flex items-start space-x-2.5 text-amber-300 font-medium">
-                  <i className="fas fa-lock text-amber-400 mt-0.5 shrink-0"></i>
+                <div className="flex items-start space-x-2 text-amber-300 font-medium">
+                  <i className="fas fa-lock text-amber-400 mt-0.5 shrink-0 text-[10px]"></i>
                   <span>Protected with Master PIN authentication</span>
                 </div>
               </div>
             </div>
 
-            <div className="pt-8 mt-auto">
+            <div className="pt-4 mt-auto">
               <button
                 type="button"
                 onClick={() => setShowAdminPinModal(true)}
-                className="w-full py-3.5 px-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-2xl shadow-lg shadow-amber-500/20 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer"
+                className="w-full py-2.5 px-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-amber-500/20 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer"
               >
                 <i className="fas fa-key text-xs"></i>
                 <span>Admin Login</span>
@@ -391,7 +391,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
       </main>
 
       {/* Footer */}
-      <footer className="max-w-7xl mx-auto w-full pt-6 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2 relative z-10">
+      <footer className="max-w-7xl mx-auto w-full pt-2 sm:pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-500 gap-1.5 relative z-10 shrink-0">
         <div className="flex items-center space-x-3">
           <span>TASC IIoT Studio • Industrial HMI Runtime v2.4</span>
         </div>

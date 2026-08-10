@@ -71,6 +71,61 @@ export interface OptionItem {
   value: string;
 }
 
+export interface TrendPen {
+  id: string;
+  name: string;
+  topic: string;
+  jsonPath?: string;        // Per-pen JSONPath query (e.g. $.d.value[0]) for JSON payload extraction
+  color: string;
+  thickness?: number;
+  unit?: string;
+  min?: number;
+  max?: number;
+  visible?: boolean;
+  showNodeMarkers?: boolean;   // Show/hide data point dot markers on the trend line
+  loggingEnabled?: boolean;    // Enable/disable historian logging for this specific pen
+}
+
+/**
+ * A single compressed telemetry log point stored in IndexedDB.
+ * Compact key names (~80 bytes/record) to maximise mobile storage efficiency.
+ */
+export interface TrendLogPoint {
+  /** Compound unique key: `${topic}_${timestampMs}` */
+  id: string;
+  /** Panel ID that owns this pen */
+  pid: string;
+  /** MQTT topic / pen identifier */
+  pen: string;
+  /** Numeric telemetry value */
+  v: number;
+  /** UTC timestamp in milliseconds (IDB indexed) */
+  t: number;
+}
+
+/**
+ * Placeholder record written to IndexedDB when historian sampling is interrupted
+ * (e.g. app went to background, screen locked on mobile).
+ */
+export interface HistorianGapRecord extends TrendLogPoint {
+  isGap: true;
+  /** Timestamp when app went to background (ms) */
+  gapStartMs: number;
+  /** Timestamp when app came back to foreground (ms) */
+  gapEndMs: number;
+}
+
+/** Storage tier for live estimator badge in configuration UI */
+export type HistorianStorageTier = 'safe' | 'warn' | 'critical';
+
+export interface HistorianStorageEstimate {
+  totalPoints: number;
+  estimatedBytes: number;
+  estimatedMb: number;
+  formattedSize: string;
+  tier: HistorianStorageTier;
+}
+
 export interface Panel {
   panelId: string;
   dashboardId: string;
@@ -131,9 +186,34 @@ export interface Panel {
   optionItems?: OptionItem[]; // Explicit option items with Label and Value
   penColor?: string; // Pen color for Line Graph / Bar Graph
   penThickness?: number; // Pen thickness for Line Graph (1-6)
-  graphType?: 'line' | 'bar' | 'hbar' | 'area'; // Type of chart
+  graphType?: 'line' | 'curve' | 'stepped' | 'bar' | 'hbar' | 'area'; // Type of chart
   showGrid?: boolean;
   fillArea?: boolean;
+  pens?: TrendPen[]; // Multi-pen trend configuration
+  showMonitoringTable?: boolean; // Show/hide legend monitoring window
+  enableDualCursor?: boolean; // Enable dual cursors by default
+  showNodeMarkers?: boolean;  // Show/hide data point node dot markers (default: false = clean lines)
+  autoScaleY?: boolean;       // Enable auto Y-axis scaling (disables manual min/max limits)
+  tableColumns?: {
+    status?: boolean;
+    lastVal?: boolean;
+    lastTime?: boolean;
+    c1Time?: boolean;
+    c1Val?: boolean;
+    c2Time?: boolean;
+    c2Val?: boolean;
+    valDiff?: boolean; // Cursor 1 and 2 value difference Δv
+    timeDiff?: boolean; // Cursor 1 and 2 time difference Δt
+    minVal?: boolean; // Min of visible time frame
+    maxVal?: boolean; // Max of visible time frame
+    avgVal?: boolean; // Avg of visible time frame
+  };
+  // --- Historian Logging Config ---
+  enableHistorianLogging?: boolean;  // Persist telemetry to IndexedDB
+  logIntervalSeconds?: number;       // Sampling interval (>= 1 sec enforced)
+  retentionValue?: number;           // e.g. 7, 30, 6, 1
+  retentionUnit?: 'MINUTES' | 'HOURS' | 'DAYS' | 'WEEKS' | 'MONTHS' | 'YEARS'; // Retention window unit
+  logStorageCapMb?: number;          // Hard storage quota cap in MB (safety valve)
   buttonPayload?: string; // For Button
   sliderStep?: number; // For Slider
   publishPattern?: string; // JSON pattern for publish, e.g. { "d": { "data_vijay": [<payload>] } }
@@ -179,6 +259,9 @@ export interface Panel {
   symbolId?: string;
   symbolCategory?: string;
   symbolAnimType?: 'digital_on_off' | 'analog_level' | 'analog_valve_angle' | 'motor_rotation' | 'none';
+  alarmViewMode?: 'live' | 'historian';
+  pageSize?: number;
+  maxDisplayRows?: number;
 }
 
 export interface MqttMessageLog {
@@ -280,6 +363,7 @@ export interface AppState {
   dashboards: Dashboard[];
   panels: Panel[];
   editPin?: string;
+  runtimePinTimeoutMinutes?: number; // Auto-lock timeout in minutes (default: 2)
   clearPassword?: string;
   isLocked?: boolean;
   isLockedPackage?: boolean;

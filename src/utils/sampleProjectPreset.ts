@@ -1,13 +1,18 @@
 import { Dashboard, Panel, PanelType } from '../types';
 
-export function getSampleProject(connectionId: string): {
+export function getSampleProject(
+  connectionId: string,
+  customDashWaterId?: string,
+  customDashAirId?: string,
+  singleScreenOnly: boolean = false
+): {
   dashboards: Dashboard[];
   panels: Panel[];
 } {
   const ts = Date.now();
 
-  const dashWaterId = `dash_water_${ts}`;
-  const dashAirId = `dash_air_${ts}`;
+  const dashWaterId = customDashWaterId || `dash_water_${ts}`;
+  const dashAirId = customDashAirId || `dash_air_${ts}`;
 
   const dashboards: Dashboard[] = [
     {
@@ -18,8 +23,11 @@ export function getSampleProject(connectionId: string): {
       icon: 'fa-droplet',
       themeColor: '#0284c7',
       canvasBgColor: '#0b1329'
-    },
-    {
+    }
+  ];
+
+  if (!singleScreenOnly) {
+    dashboards.push({
       dashboardId: dashAirId,
       dashboardName: 'Air Monitoring',
       connectionId,
@@ -27,8 +35,8 @@ export function getSampleProject(connectionId: string): {
       icon: 'fa-wind',
       themeColor: '#10b981',
       canvasBgColor: '#0b1329'
-    }
-  ];
+    });
+  }
 
   const panels: Panel[] = [
     // ==========================================
@@ -118,76 +126,80 @@ export function getSampleProject(connectionId: string): {
       bgColor: '#09152b',
       borderColor: '#10b981',
       x: 895, y: 95, w: 285, h: 230
-    },
-
-    // ==========================================
-    // SCREEN 2: AIR MONITORING (4 WIDGETS)
-    // ==========================================
-    {
-      panelId: `p_a_title_${ts}`,
-      dashboardId: dashAirId,
-      connectionId,
-      panelName: 'Header Banner',
-      type: PanelType.STATIC_TEXT,
-      topic: 'air/title',
-      staticText: 'AIR QUALITY MONITORING',
-      fontSize: '22',
-      textColor: '#4ade80',
-      bgColor: '#030d22',
-      borderColor: '#10b981',
-      borderWidth: 2,
-      borderRadius: 12,
-      textAlign: 'center',
-      x: 20, y: 20, w: 1160, h: 55
-    },
-    {
-      panelId: `p_a_temp_${ts}`,
-      dashboardId: dashAirId,
-      connectionId,
-      panelName: 'AMBIENT TEMPERATURE',
-      type: PanelType.GAUGE,
-      topic: 'air/temperature',
-      unit: '°C',
-      payloadMin: 0,
-      payloadMax: 50,
-      firstColor: '#10b981',
-      secondColor: '#f59e0b',
-      thirdColor: '#ef4444',
-      decimalPrecision: 1,
-      x: 20, y: 95, w: 370, h: 230
-    },
-    {
-      panelId: `p_a_hum_${ts}`,
-      dashboardId: dashAirId,
-      connectionId,
-      panelName: 'RELATIVE HUMIDITY',
-      type: PanelType.GAUGE,
-      topic: 'air/humidity',
-      unit: '%',
-      payloadMin: 0,
-      payloadMax: 100,
-      firstColor: '#0284c7',
-      secondColor: '#06b6d4',
-      thirdColor: '#10b981',
-      decimalPrecision: 1,
-      x: 415, y: 95, w: 370, h: 230
-    },
-    {
-      panelId: `p_a_fan_${ts}`,
-      dashboardId: dashAirId,
-      connectionId,
-      panelName: 'EXHAUST FAN CONTROL',
-      type: PanelType.SWITCH,
-      topic: 'air/fan_control',
-      publishTopic: 'air/fan_control',
-      payloadOn: 'ON',
-      payloadOff: 'OFF',
-      bgColor: '#022c22',
-      textColor: '#4ade80',
-      borderColor: '#16a34a',
-      x: 810, y: 95, w: 370, h: 230
     }
   ];
+
+  if (!singleScreenOnly) {
+    panels.push(
+      // ==========================================
+      // SCREEN 2: AIR MONITORING (4 WIDGETS)
+      // ==========================================
+      {
+        panelId: `p_a_title_${ts}`,
+        dashboardId: dashAirId,
+        connectionId,
+        panelName: 'Header Banner',
+        type: PanelType.STATIC_TEXT,
+        topic: 'air/title',
+        staticText: 'AIR QUALITY MONITORING',
+        fontSize: '22',
+        textColor: '#4ade80',
+        bgColor: '#030d22',
+        borderColor: '#10b981',
+        borderWidth: 2,
+        borderRadius: 12,
+        textAlign: 'center',
+        x: 20, y: 20, w: 1160, h: 55
+      },
+      {
+        panelId: `p_a_temp_${ts}`,
+        dashboardId: dashAirId,
+        connectionId,
+        panelName: 'AMBIENT TEMPERATURE',
+        type: PanelType.GAUGE,
+        topic: 'air/temperature',
+        unit: '°C',
+        payloadMin: 0,
+        payloadMax: 50,
+        firstColor: '#10b981',
+        secondColor: '#f59e0b',
+        thirdColor: '#ef4444',
+        decimalPrecision: 1,
+        x: 20, y: 95, w: 370, h: 230
+      },
+      {
+        panelId: `p_a_hum_${ts}`,
+        dashboardId: dashAirId,
+        connectionId,
+        panelName: 'RELATIVE HUMIDITY',
+        type: PanelType.GAUGE,
+        topic: 'air/humidity',
+        unit: '%',
+        payloadMin: 0,
+        payloadMax: 100,
+        firstColor: '#0284c7',
+        secondColor: '#06b6d4',
+        thirdColor: '#10b981',
+        decimalPrecision: 1,
+        x: 415, y: 95, w: 370, h: 230
+      },
+      {
+        panelId: `p_a_fan_${ts}`,
+        dashboardId: dashAirId,
+        connectionId,
+        panelName: 'EXHAUST FAN CONTROL',
+        type: PanelType.SWITCH,
+        topic: 'air/fan_control',
+        publishTopic: 'air/fan_control',
+        payloadOn: 'ON',
+        payloadOff: 'OFF',
+        bgColor: '#022c22',
+        textColor: '#4ade80',
+        borderColor: '#16a34a',
+        x: 810, y: 95, w: 370, h: 230
+      }
+    );
+  }
 
   return { dashboards, panels };
 }

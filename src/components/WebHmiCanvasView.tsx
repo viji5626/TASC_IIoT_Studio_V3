@@ -10,6 +10,8 @@ import { getSampleProject } from '../utils/sampleProjectPreset';
 import { getSmartIconAnimationClass, SmartIcon } from '../utils/iconAnimator';
 import { isPanelTripped } from '../utils/tripHelper';
 import { AlarmHistorianWidget } from './AlarmHistorianWidget';
+import { EditionManager } from '../utils/EditionManager';
+import { ColorBoxPopover } from './ColorBoxPopover';
 
 interface WebHmiCanvasViewProps {
   appState: AppState;
@@ -18,6 +20,7 @@ interface WebHmiCanvasViewProps {
   onUpdateAppState: (newState: AppState) => void;
   onPublish?: (topic: string, payload: string | number) => void;
   latestValues: Record<string, { val: any; time: string }>;
+  historyValues?: Record<string, { value: number; time: string }[]>;
   userRole?: string;
   isFullscreen?: boolean;
   onOpenAddPanel: () => void;
@@ -261,6 +264,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   onUpdateAppState,
   onPublish,
   latestValues,
+  historyValues = {},
   isFullscreen = false,
   onOpenAddPanel,
   onEditPanel,
@@ -282,6 +286,16 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     width: typeof window !== 'undefined' ? window.innerWidth : 1220,
     height: typeof window !== 'undefined' ? window.innerHeight : 750
   });
+
+  useEffect(() => {
+    const handleRestoreEvent = () => {
+      setIsAutoFit(true);
+      setZoomLevel(1.0);
+      setPanPosition({ x: 0, y: 0 });
+    };
+    window.addEventListener('hmi-restore-autofit', handleRestoreEvent);
+    return () => window.removeEventListener('hmi-restore-autofit', handleRestoreEvent);
+  }, []);
 
   useEffect(() => {
     const updateDimensions = () => {
@@ -312,44 +326,83 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   // Dynamic Content Bounding Box Calculation (Scans Top-Left to Bottom-Right of all elements on screen)
   const contentBounds = useMemo(() => {
     if (activeScreenPanels.length === 0) {
-      return { width: 1000, height: 580 };
+      return { width: 1000, height: 580, totalW: 1000, totalH: 580 };
     }
 
-    let maxX = 0;
-    let maxY = 0;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
 
     for (const p of activeScreenPanels) {
-      const right = (p.x || 0) + (p.w || 180);
-      const bottom = (p.y || 0) + (p.h || 60);
+      const left = Number(p.x || 0);
+      const top = Number(p.y || 0);
+      const right = left + Number(p.w || 180);
+      const bottom = top + Number(p.h || 60);
+
+      if (left < minX) minX = left;
+      if (top < minY) minY = top;
       if (right > maxX) maxX = right;
       if (bottom > maxY) maxY = bottom;
     }
 
-    const boundedW = Math.ceil(maxX + 30);
-    const boundedH = Math.ceil(maxY + 30);
+    if (!isFinite(minX)) minX = 0;
+    if (!isFinite(minY)) minY = 0;
+    if (!isFinite(maxX)) maxX = 1000;
+    if (!isFinite(maxY)) maxY = 580;
+
+    // Tightest bounding box around active elements
+    const totalW = Math.max(600, Math.ceil(maxX + 4));
+    const totalH = Math.max(350, Math.ceil(maxY + 4));
 
     return {
-      width: Math.max(800, boundedW),
-      height: Math.max(450, boundedH)
+      minX,
+      minY,
+      maxX,
+      maxY,
+      width: totalW,
+      height: totalH,
+      totalW,
+      totalH
     };
   }, [activeScreenPanels]);
 
-  // Auto-Fit Scale: Dynamically calculates exact scale factor to fit all elements cleanly inside visible container viewport
+  // Auto-Fit Scale: Dynamically calculates exact scale factor to fit HMI canvas inside screen without bottom/side overflow
   const autoFitScale = useMemo(() => {
     if (containerDimensions.width <= 0 || containerDimensions.height <= 0) return 1.0;
 
-    const availW = Math.max(300, containerDimensions.width - 24);
-    const availH = Math.max(300, containerDimensions.height - 24);
+    // Apply 12px cushion to guarantee 100% visibility of all bottom tables, legends, and side elements
+    const availW = Math.max(100, containerDimensions.width - 12);
+    const availH = Math.max(100, containerDimensions.height - 12);
 
-    const scaleX = availW / contentBounds.width;
-    const scaleY = availH / contentBounds.height;
+    const scaleX = availW / contentBounds.totalW;
+    const scaleY = availH / contentBounds.totalH;
 
-    let fit = Math.min(scaleX, scaleY);
-    return Math.max(0.35, Math.min(2.5, fit));
+    // Strictly enforce Math.min(scaleX, scaleY) so scaled height/width NEVER exceeds available viewport
+    const fit = Math.min(scaleX, scaleY);
+
+    return Math.max(0.1, Math.min(3.0, fit));
   }, [containerDimensions, contentBounds]);
 
   // Effective Scale applied to canvas container
   const effectiveScale = isAutoFit ? autoFitScale * zoomLevel : zoomLevel;
+
+  // Auto-Fit Offset Position with 0px minimum margin (flush to edges)
+  const autoFitOffset = useMemo(() => {
+    if (!isAutoFit || containerDimensions.width <= 0 || containerDimensions.height <= 0) {
+      return { left: 0, top: 0 };
+    }
+    const scaledW = contentBounds.totalW * effectiveScale;
+    const scaledH = contentBounds.totalH * effectiveScale;
+
+    // Flush placement centered within available viewport with 0px minimum margin
+    const left = Math.max(0, (containerDimensions.width - scaledW) / 2);
+    const top = Math.max(0, (containerDimensions.height - scaledH) / 2);
+
+    return { left: Math.round(left), top: Math.round(top) };
+  }, [isAutoFit, containerDimensions, contentBounds, effectiveScale]);
+
+
 
   // Symbol Factory 3.0 Industrial Library Modal State
   const [isSymbolLibraryOpen, setIsSymbolLibraryOpen] = useState<boolean>(false);
@@ -468,18 +521,25 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   // History Stack for Undo / Redo in Design Window
   const historyRef = useRef<AppState[]>([appState]);
   const historyIndexRef = useRef<number>(0);
+  const prevDashboardIdRef = useRef<string>(activeDashboardId);
+  const appStateRef = useRef<AppState>(appState);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
-  // Sync initial history stack on mount or dashboard change
   useEffect(() => {
-    if (historyRef.current.length === 0 || historyRef.current[0] !== appState) {
+    appStateRef.current = appState;
+  }, [appState]);
+
+  // Sync initial history stack when switching screens
+  useEffect(() => {
+    if (prevDashboardIdRef.current !== activeDashboardId) {
+      prevDashboardIdRef.current = activeDashboardId;
       historyRef.current = [appState];
       historyIndexRef.current = 0;
       setCanUndo(false);
       setCanRedo(false);
     }
-  }, [activeDashboardId]);
+  }, [activeDashboardId, appState]);
 
   const updateAppStateWithHistory = useCallback((newState: AppState, pushHistory = true) => {
     if (pushHistory) {
@@ -1281,7 +1341,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       }
       return p;
     });
-    onUpdateAppState({ ...appState, panels: updatedPanels });
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
   };
 
   // Copy / Paste Element Visual Properties State
@@ -1499,6 +1559,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     const handleMouseUp = () => {
       if (isDragging) {
         setIsDragging(false);
+        updateAppStateWithHistory(appStateRef.current);
       }
     };
 
@@ -1794,7 +1855,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     };
 
     const handleMouseUp = () => {
-      setTransformState(null);
+      if (transformState) {
+        setTransformState(null);
+        updateAppStateWithHistory(appStateRef.current);
+      }
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -1891,7 +1955,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       }
     }
 
-    onUpdateAppState({ ...appState, panels: updatedPanels });
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
   };
 
   // Grouping & Ungrouping
@@ -1904,7 +1968,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       }
       return p;
     });
-    onUpdateAppState({ ...appState, panels: updatedPanels });
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
   };
 
   const handleUngroupSelected = () => {
@@ -1915,7 +1979,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       }
       return p;
     });
-    onUpdateAppState({ ...appState, panels: updatedPanels });
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
   };
 
   // Duplicate / Clone Selected
@@ -1938,7 +2002,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       newSelectedIds.push(newId);
     });
 
-    onUpdateAppState({ ...appState, panels: [...appState.panels, ...newPanels] });
+    updateAppStateWithHistory({ ...appState, panels: [...appState.panels, ...newPanels] });
     setSelectedPanelIds(newSelectedIds);
     setMasterPanelId(newSelectedIds[0] || null);
   };
@@ -1947,7 +2011,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   const handleDeleteSelected = () => {
     if (selectedPanelIds.length === 0) return;
     const updatedPanels = appState.panels.filter(p => !selectedPanelIds.includes(p.panelId));
-    onUpdateAppState({ ...appState, panels: updatedPanels });
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
     setSelectedPanelIds([]);
     setMasterPanelId(null);
   };
@@ -2176,13 +2240,15 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     const ts = Date.now();
 
     if (presetId === 'water_air_sample' || presetId === 'daman_hatchery') {
-      const { dashboards, panels } = getSampleProject(connId);
+      const editionMgr = EditionManager.fromState(appState);
+      const isCommunity = editionMgr.IsCommunity();
+      const { dashboards, panels } = getSampleProject(connId, undefined, undefined, isCommunity);
       onUpdateAppState({
         ...appState,
-        dashboards: [...appState.dashboards.filter(d => !d.dashboardId.includes('water') && !d.dashboardId.includes('air') && !d.dashboardId.includes('daman')), ...dashboards],
-        panels: [...appState.panels.filter(p => !p.dashboardId.includes('water') && !p.dashboardId.includes('air') && !p.dashboardId.includes('daman')), ...panels]
+        dashboards: isCommunity ? dashboards : [...appState.dashboards.filter(d => !d.dashboardId.includes('water') && !d.dashboardId.includes('air') && !d.dashboardId.includes('daman') && d.dashboardName !== 'Main Dashboard'), ...dashboards],
+        panels: isCommunity ? panels : [...appState.panels.filter(p => !p.dashboardId.includes('water') && !p.dashboardId.includes('air') && !p.dashboardId.includes('daman')), ...panels]
       });
-      if (onSelectDashboard) {
+      if (onSelectDashboard && dashboards.length > 0) {
         onSelectDashboard(dashboards[0].dashboardId);
       }
       return;
@@ -2425,40 +2491,14 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   return (
     <div className="flex flex-col h-full bg-[#030712] text-slate-100 select-none overflow-hidden relative">
       
-      {/* Web HMI Canvas Top Navigation Bar */}
-      <div className="bg-slate-900/95 border-b border-slate-800 px-3 py-1 flex flex-wrap items-center justify-between gap-2 shrink-0 z-20 backdrop-blur-md">
-        
-        {/* Dropdown Screen Switcher */}
-        <div className="flex items-center space-x-2 shrink-0">
-          <div className="flex items-center space-x-1.5 text-sky-400 font-extrabold text-xs">
-            <i className="fas fa-desktop text-sm"></i>
-            <span className="hidden sm:inline">HMI Screen:</span>
-          </div>
+      {/* Web HMI Canvas Top Navigation Bar (Hidden in Fullscreen mode to allow full canvas auto-fit) */}
+      {!isFullscreen && (
+        <div className="bg-slate-900/95 border-b border-slate-800 px-3 py-1 flex flex-wrap items-center justify-between gap-2 shrink-0 z-20 backdrop-blur-md">
+          {/* HMI Canvas Element Controls */}
+          <div className="flex items-center space-x-2">
+            {effectiveEditMode && (
+              <>
 
-          <select
-            value={activeDashboardId}
-            onChange={(e) => {
-              const newDashId = e.target.value;
-              if (onSelectDashboard) {
-                onSelectDashboard(newDashId);
-              }
-              setSelectedPanelIds([]);
-              setMasterPanelId(null);
-            }}
-            className="bg-slate-950 text-white font-bold text-xs px-2.5 py-1 rounded-xl border border-slate-800 outline-none focus:border-sky-500 cursor-pointer max-w-[210px] shadow-inner"
-          >
-            {appState.dashboards.map(d => (
-              <option key={d.dashboardId} value={d.dashboardId}>
-                {d.dashboardName} {d.isHome ? '★ (Home)' : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* HMI Canvas Element Controls */}
-        <div className="flex items-center space-x-2">
-          {!isFullscreen && !isClientMode && (
-            <>
               <button
                 type="button"
                 onClick={onOpenAddPanel}
@@ -2545,10 +2585,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
         </div>
 
         {/* Toolbar Controls */}
-        {!isFullscreen && (
-          <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+        <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+
             
-            {!isClientMode && (
+            {effectiveEditMode && (
               <>
                 {/* Screen Background Color Swatch Picker */}
                 <div className="flex items-center space-x-1.5 bg-slate-950 px-2 py-1 rounded-xl border border-slate-800" title="Screen Background Color">
@@ -2681,6 +2721,23 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   <i className="fas fa-expand text-xs text-sky-400"></i>
                   <span>{isAutoFit ? 'Auto Fit ON' : 'Auto Fit'}</span>
                 </button>
+
+                {/* Restore Fit Button (Visible when zoomed or not AutoFit) */}
+                {(zoomLevel !== 1.0 || !isAutoFit) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAutoFit(true);
+                      setZoomLevel(1.0);
+                      setPanPosition({ x: 0, y: 0 });
+                    }}
+                    className="px-2.5 py-1 rounded-xl text-xs font-extrabold bg-indigo-500/20 text-indigo-300 border border-indigo-500/50 hover:bg-indigo-500/30 transition-all flex items-center space-x-1.5 cursor-pointer shadow-sm"
+                    title="Restore Fit (Reset screen zoom and position to fit screen)"
+                  >
+                    <i className="fas fa-compress-arrows-alt text-xs text-indigo-400"></i>
+                    <span>Restore Fit</span>
+                  </button>
+                )}
               </>
             )}
 
@@ -2714,9 +2771,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
               </button>
             )}
           </div>
-        )}
+        </div>
+      )}
 
-      </div>
+
 
       {/* Selected Element(s) & Alignment Floating Toolbar */}
       {effectiveEditMode && selectedPanelIds.length > 0 && (
@@ -2738,73 +2796,33 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
               )}
             </div>
 
-            {/* Element Styling Color Pickers (Available for single or multiple selection) */}
-            <div className="flex items-center space-x-1.5 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800" title="Element Background Color">
-              <i className="fas fa-fill-drip text-[11px] text-amber-400"></i>
-              <span className="text-[10px] text-slate-300 font-bold hidden sm:inline">Element BG:</span>
-              <input
-                type="color"
-                value={selectedPanel?.bgColor && selectedPanel.bgColor !== 'transparent' ? selectedPanel.bgColor : '#0f172a'}
-                onChange={(e) => updateSelectedPanelProp('bgColor', e.target.value)}
-                className="w-5 h-5 bg-transparent cursor-pointer rounded border-0 outline-none overflow-hidden"
-                title="Pick solid background color"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  const isCurrentlyTransparent = selectedPanel?.bgColor === 'transparent';
-                  updateSelectedPanelProp('bgColor', isCurrentlyTransparent ? '#09152b' : 'transparent');
-                }}
-                className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold border transition-all cursor-pointer flex items-center space-x-1 ${
-                  selectedPanel?.bgColor === 'transparent'
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/60 shadow-[0_0_8px_rgba(245,158,11,0.3)]'
-                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
-                }`}
-                title="Toggle No Color (100% Transparent Background)"
-              >
-                <i className="fas fa-ban text-[9px]"></i>
-                <span>{selectedPanel?.bgColor === 'transparent' ? 'No BG' : 'Transparent'}</span>
-              </button>
-            </div>
+            {/* Element Styling Color Pickers (Integrated Popover with Transparent toggle & Opacity Slider + Numeric % Input) */}
+            <ColorBoxPopover
+              label="Element BG"
+              icon="fa-fill-drip"
+              iconColorClass="text-amber-400"
+              color={selectedPanel?.bgColor || 'transparent'}
+              onChange={(newColor) => updateSelectedPanelProp('bgColor', newColor)}
+              defaultColor="#09152b"
+            />
 
-            <div className="flex items-center space-x-1.5 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800" title="Text Color">
-              <i className="fas fa-font text-[11px] text-sky-400"></i>
-              <span className="text-[10px] text-slate-300 font-bold hidden lg:inline">Text:</span>
-              <input
-                type="color"
-                value={selectedPanel?.textColor || '#f8fafc'}
-                onChange={(e) => updateSelectedPanelProp('textColor', e.target.value)}
-                className="w-5 h-5 bg-transparent cursor-pointer rounded border-0 outline-none overflow-hidden"
-              />
-            </div>
+            <ColorBoxPopover
+              label="Text"
+              icon="fa-font"
+              iconColorClass="text-sky-400"
+              color={selectedPanel?.textColor || '#f8fafc'}
+              onChange={(newColor) => updateSelectedPanelProp('textColor', newColor)}
+              defaultColor="#f8fafc"
+            />
 
-            <div className="flex items-center space-x-1.5 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800" title="Border Color">
-              <i className="fas fa-border-all text-[11px] text-emerald-400"></i>
-              <span className="text-[10px] text-slate-300 font-bold hidden lg:inline">Border:</span>
-              <input
-                type="color"
-                value={selectedPanel?.borderColor && selectedPanel.borderColor !== 'transparent' ? selectedPanel.borderColor : '#1e293b'}
-                onChange={(e) => updateSelectedPanelProp('borderColor', e.target.value)}
-                className="w-5 h-5 bg-transparent cursor-pointer rounded border-0 outline-none overflow-hidden"
-                title="Pick solid border color"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  const isCurrentlyTransparent = selectedPanel?.borderColor === 'transparent';
-                  updateSelectedPanelProp('borderColor', isCurrentlyTransparent ? '#0284c7' : 'transparent');
-                }}
-                className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold border transition-all cursor-pointer flex items-center space-x-1 ${
-                  selectedPanel?.borderColor === 'transparent'
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/60 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
-                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
-                }`}
-                title="Toggle No Border (Invisible / Transparent Border)"
-              >
-                <i className="fas fa-border-none text-[9px]"></i>
-                <span>{selectedPanel?.borderColor === 'transparent' ? 'No Border' : 'Transparent'}</span>
-              </button>
-            </div>
+            <ColorBoxPopover
+              label="Border"
+              icon="fa-border-all"
+              iconColorClass="text-emerald-400"
+              color={selectedPanel?.borderColor || '#1e293b'}
+              onChange={(newColor) => updateSelectedPanelProp('borderColor', newColor)}
+              defaultColor="#0284c7"
+            />
 
             {/* Element Opacity Slider */}
             <div className="flex items-center space-x-1.5 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800" title="Element Opacity (Semi-Transparency)">
@@ -3236,7 +3254,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
         }}
         onContextMenu={(e) => handleContextMenu(e)}
         className={`flex-1 relative p-0.5 transition-colors ${
-          !isEditMode || isAutoFit ? 'overflow-hidden flex items-center justify-center' : 'overflow-auto min-h-[600px] min-w-[1220px]'
+          !isEditMode || isAutoFit ? 'overflow-hidden' : 'overflow-auto min-h-[600px] min-w-[1220px]'
         } ${
           isPanning
             ? 'cursor-grabbing select-none'
@@ -3255,15 +3273,19 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
         {/* Scaled Canvas Inner Container */}
         <div
           style={{
+            position: isAutoFit ? 'absolute' : 'relative',
+            left: isAutoFit ? `${autoFitOffset.left}px` : '0px',
+            top: isAutoFit ? `${autoFitOffset.top}px` : '0px',
             transform: `scale(${effectiveScale})`,
-            transformOrigin: isAutoFit ? 'center center' : 'top left',
-            width: `${contentBounds.width}px`,
-            height: `${contentBounds.height}px`,
+            transformOrigin: 'top left',
+            width: `${contentBounds.totalW}px`,
+            height: `${contentBounds.totalH}px`,
             minWidth: isEditMode && !isAutoFit ? '1220px' : '0px',
             minHeight: isEditMode && !isAutoFit ? '600px' : '0px'
           }}
-          className="relative transition-transform duration-100 ease-out shrink-0"
+          className="transition-all duration-100 ease-out shrink-0"
         >
+
           {/* Marquee Drag Box Selection Overlay */}
         {isMarqueeSelecting && marqueeRect && (
           <div
@@ -3810,24 +3832,24 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   </div>
                 ) : panel.type === PanelType.LINE_GRAPH ? (
                   /* Line Graph Element */
-                  <div className="w-full h-full p-2 flex flex-col overflow-hidden">
-                    <span className="text-[10px] font-bold truncate uppercase tracking-wider mb-1" style={{ color: panel.textColor || '#94a3b8' }}>
-                      {panel.panelName}
-                    </span>
-                    <div className="flex-1 w-full overflow-hidden">
-                      <LineGraph 
-                        history={[]} 
-                        unit={panel.unit} 
-                        color={panel.penColor || panel.firstColor || '#38bdf8'} 
-                        penThickness={panel.penThickness || 2}
-                        graphType={panel.graphType || 'line'}
-                        showGrid={panel.showGrid !== false}
-                        fillArea={panel.fillArea !== false}
-                        payloadMin={panel.payloadMin}
-                        payloadMax={panel.payloadMax}
-                        height={60}
-                      />
-                    </div>
+                  <div className="w-full h-full p-1 flex flex-col overflow-hidden bg-[#080d16] border border-slate-800/80 rounded-xl shadow-2xl">
+                    <LineGraph 
+                      panel={panel}
+                      history={historyValues?.[panel.panelId] || (panel.topic ? historyValues?.[panel.topic] : [])} 
+                      historyValues={historyValues}
+                      latestValues={latestValues}
+                      unit={panel.unit} 
+                      color={panel.penColor || panel.firstColor || '#38bdf8'} 
+                      penThickness={panel.penThickness || 2}
+                      graphType={panel.graphType || 'line'}
+                      showGrid={panel.showGrid !== false}
+                      fillArea={panel.fillArea !== false}
+                      showMonitoringTable={panel.showMonitoringTable !== false}
+                      enableDualCursor={panel.enableDualCursor}
+                      pens={panel.pens}
+                      payloadMin={panel.payloadMin}
+                      payloadMax={panel.payloadMax}
+                    />
                   </div>
                 ) : panel.type === PanelType.GAUGE ? (
                   <div className="w-full h-full p-2 flex flex-col items-center justify-between text-center overflow-hidden">
@@ -4229,26 +4251,28 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       {/* Interactive Vertex Node Bending Points for Lines, Polylines, Process Pipes & Custom Polygons */}
                       {isSelected && effectiveEditMode && (panel.shapeType === 'polyline' || panel.shapeType === 'custom_polygon' || panel.shapeType === 'line' || panel.shapeType === 'polygon' || panel.shapeType === 'pipe' || panel.type === PanelType.PIPE || (panel.type as string) === 'pipe') && (
                         <>
-                          <div className="absolute inset-0 pointer-events-auto z-50">
+                          <div className="absolute inset-0 pointer-events-auto z-[80]">
                             {shapePts.map((pt, nIdx) => {
                               const isNodeSelected = selectedNodeInfo?.panelId === panel.panelId && selectedNodeInfo?.nodeIndex === nIdx;
                               return (
                                 <div
                                   key={nIdx}
                                   onMouseDown={(e) => handleNodeMouseDown(e, panel.panelId, nIdx)}
-                                  className={`w-4 h-4 rounded-full absolute -translate-x-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing hover:scale-125 transition-transform shadow-lg border-2 border-slate-950 ${
+                                  className={`w-5 h-5 rounded-full absolute -translate-x-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing hover:scale-125 transition-transform shadow-xl border-2 font-bold text-[9px] flex items-center justify-center select-none ${
                                     isNodeSelected
-                                      ? 'bg-cyan-300 ring-4 ring-cyan-400 ring-offset-2 ring-offset-slate-950 scale-125 z-50 animate-pulse'
-                                      : 'bg-amber-400 hover:bg-amber-300'
+                                      ? 'bg-cyan-300 text-slate-950 border-cyan-100 ring-4 ring-cyan-400 ring-offset-2 ring-offset-slate-950 scale-125 z-[85] animate-pulse'
+                                      : 'bg-amber-400 text-slate-950 border-slate-950 hover:bg-amber-300 z-[75]'
                                   }`}
                                   style={{ left: `${pt.x}%`, top: `${pt.y}%` }}
                                   title={`Bending Point ${nIdx + 1} (${pt.x}%, ${pt.y}%) - Click to select, drag or use Arrow keys (← ↑ → ↓) to move`}
-                                />
+                                >
+                                  {nIdx + 1}
+                                </div>
                               );
                             })}
                           </div>
 
-                          <div className="absolute -top-9 left-0 flex items-center space-x-1 bg-slate-950/95 border border-amber-500/60 text-amber-300 px-2 py-0.5 rounded-lg text-[10px] font-bold shadow-xl z-50 pointer-events-auto">
+                          <div className={`absolute ${pos.y < 45 ? 'top-2 left-2' : '-top-9 left-0'} flex items-center space-x-1 bg-slate-950/95 border border-amber-500/60 text-amber-300 px-2 py-0.5 rounded-lg text-[10px] font-bold shadow-xl z-[75] pointer-events-auto`}>
                             <i className="fas fa-draw-polygon text-amber-400 text-xs"></i>
                             <span className="hidden sm:inline">Nodes ({shapePts.length}):</span>
                             <button
@@ -4318,7 +4342,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 {/* Edit Mode Selection Handle Badges */}
                 {effectiveEditMode && isSelected && (
                   <>
-                    <div className={`absolute -top-3 -right-2 px-1.5 py-0.5 rounded text-[9px] font-black uppercase shadow z-50 ${
+                    <div className={`absolute ${pos.y < 30 ? 'top-1 right-1' : '-top-3 -right-2'} px-1.5 py-0.5 rounded text-[9px] font-black uppercase shadow z-[70] ${
                       isMaster ? 'bg-amber-500 text-slate-950' : 'bg-sky-500 text-slate-950'
                     }`}>
                       {isMaster ? 'Master Ref' : 'Selected'}
@@ -4331,7 +4355,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
                       {/* Rotation Handle (Top Center) */}
                       <div 
-                        className="absolute -top-9 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-auto cursor-grab active:cursor-grabbing group/rot"
+                        className={`absolute ${pos.y < 45 ? 'top-2 left-1/2 -translate-x-1/2' : '-top-9 left-1/2 -translate-x-1/2'} flex flex-col items-center pointer-events-auto cursor-grab active:cursor-grabbing group/rot z-[70]`}
                         onMouseDown={(e) => handleRotateStart(e, panel, e.currentTarget.parentElement)}
                         title="Click and drag to rotate element (Shift for 15° snap)"
                       >
@@ -4392,7 +4416,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       />
 
                       {/* Dimension & Rotation Badge Overlay */}
-                      <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-900/95 text-amber-300 border border-slate-700 rounded text-[9px] font-mono shadow-xl font-bold whitespace-nowrap pointer-events-none">
+                      <div className={`absolute ${pos.y + pos.h > 720 ? 'bottom-1' : '-bottom-6'} left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-900/95 text-amber-300 border border-slate-700 rounded text-[9px] font-mono shadow-xl font-bold whitespace-nowrap pointer-events-none z-[70]`}>
                         {pos.w} × {pos.h} px {panel.rotation ? `| ${panel.rotation}°` : ''}
                       </div>
                     </div>

@@ -95,8 +95,8 @@ const PinModal: React.FC<PinModalProps> = ({
 
         <p className="text-xs text-slate-400 leading-relaxed">
           {mode === 'enter' 
-            ? 'Enter your security PIN to unlock dashboard panel edits and reordering.'
-            : 'Create a security PIN to protect dashboard layouts from unauthorized edits.'
+            ? 'Enter your Security PIN to unlock layout edits and authorize runtime safeguard operations.'
+            : 'Create a Security PIN for runtime safeguard operation security (Value input, Pushbutton, Toggle switch) and layout protection across Community Edition, Engineering Edition, and Client Edition.'
           }
         </p>
 

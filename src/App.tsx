@@ -45,8 +45,15 @@ import { ConfirmModal } from './components/ConfirmModal';
 import { isPanelTripped } from './utils/tripHelper';
 import { recordAlarmTriggerEvent, recordAlarmAckEvent, recordAlarmResolvedEvent } from './utils/alarmHistorianEngine';
 import { AlarmHistorianModal } from './components/AlarmHistorianModal';
+import {
+  initTrendHistorianDB,
+  enqueueTelemetryPoint,
+  pruneFIFOByRetention,
+  getHistorianRetentionConfig,
+  getIsPrivateBrowsing
+} from './utils/trendHistorianEngine';
 
-const sampleInitial = getSampleProject('conn_demo');
+const sampleInitial = getSampleProject('conn_demo', undefined, undefined, true);
 
 const INITIAL_STATE: AppState = {
   connections: [
@@ -87,6 +94,25 @@ export function App() {
     applyThemeToDocument(appState.appTheme);
   }, [appState]);
 
+  // Initialize Telemetry Trend Historian DB on startup
+  useEffect(() => {
+    initTrendHistorianDB().then((ok) => {
+      if (!ok) {
+        setIsHistorianPrivateBrowsing(getIsPrivateBrowsing());
+      }
+    });
+
+    // Periodic FIFO pruner sweep (every 10 minutes)
+    const prunerTimer = setInterval(() => {
+      const cfg = getHistorianRetentionConfig();
+      if (cfg) {
+        pruneFIFOByRetention(cfg.retentionValue, cfg.retentionUnit, cfg.storageCapMb);
+      }
+    }, 10 * 60 * 1000);
+
+    return () => clearInterval(prunerTimer);
+  }, []);
+
   const activeThemeObj = getAppTheme(appState.appTheme);
 
   // User Role & Product Edition State
@@ -107,6 +133,8 @@ export function App() {
   const [communityLimitNotice, setCommunityLimitNotice] = useState<string | null>(null);
   const [isExitSessionModalOpen, setIsExitSessionModalOpen] = useState(false);
   const [isClearAllModalOpen, setIsClearAllModalOpen] = useState(false);
+  // Historian private browsing mode warning banner
+  const [isHistorianPrivateBrowsing, setIsHistorianPrivateBrowsing] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -402,10 +430,39 @@ export function App() {
     }
   }, [isLocked]);
 
-  // Security PIN modal state
+  // Security PIN modal state & Runtime Control Safeguard
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [pinModalMode, setPinModalMode] = useState<'enter' | 'set'>('enter');
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const [isRuntimeUnlocked, setIsRuntimeUnlocked] = useState(false);
+
+  // Runtime control safeguard auto-lock timeout logic (Default: 2 minutes)
+  const runtimeTimeoutTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const resetRuntimeTimeoutTimer = useCallback(() => {
+    if (runtimeTimeoutTimerRef.current) {
+      clearTimeout(runtimeTimeoutTimerRef.current);
+      runtimeTimeoutTimerRef.current = null;
+    }
+
+    const timeoutMinutes = appState.runtimePinTimeoutMinutes ?? 2;
+    if (isRuntimeUnlocked && timeoutMinutes > 0) {
+      const timeoutMs = timeoutMinutes * 60 * 1000;
+      runtimeTimeoutTimerRef.current = setTimeout(() => {
+        console.log(`Runtime safeguard auto-locked after ${timeoutMinutes} minutes idle timeout.`);
+        setIsRuntimeUnlocked(false);
+      }, timeoutMs);
+    }
+  }, [isRuntimeUnlocked, appState.runtimePinTimeoutMinutes]);
+
+  useEffect(() => {
+    resetRuntimeTimeoutTimer();
+    return () => {
+      if (runtimeTimeoutTimerRef.current) {
+        clearTimeout(runtimeTimeoutTimerRef.current);
+      }
+    };
+  }, [resetRuntimeTimeoutTimer]);
 
   const handleQuickResizePanel = (panelId: string, colSpan: number, rowSpan: number) => {
     setAppState(prev => ({
@@ -420,15 +477,18 @@ export function App() {
         setPinModalMode('enter');
         setPendingAction(() => () => {
           setIsLocked(false);
+          setIsRuntimeUnlocked(true);
           setAppState(prev => ({ ...prev, isLocked: false }));
         });
         setIsPinModalOpen(true);
       } else {
         setIsLocked(false);
+        setIsRuntimeUnlocked(true);
         setAppState(prev => ({ ...prev, isLocked: false }));
       }
     } else {
       setIsLocked(true);
+      setIsRuntimeUnlocked(false);
       setIsLayoutMode(false);
       setShowLockedNotice(true);
       setAppState(prev => ({ ...prev, isLocked: true }));
@@ -441,12 +501,14 @@ export function App() {
         setPinModalMode('enter');
         setPendingAction(() => () => {
           setIsLocked(false);
+          setIsRuntimeUnlocked(true);
           setIsLayoutMode(true);
           setAppState(prev => ({ ...prev, isLocked: false }));
         });
         setIsPinModalOpen(true);
       } else {
         setIsLocked(false);
+        setIsRuntimeUnlocked(true);
         setIsLayoutMode(true);
         setAppState(prev => ({ ...prev, isLocked: false }));
       }
@@ -461,12 +523,14 @@ export function App() {
         setPinModalMode('enter');
         setPendingAction(() => () => {
           setIsLocked(false);
+          setIsRuntimeUnlocked(true);
           setIsAddPanelOpen(true);
           setAppState(prev => ({ ...prev, isLocked: false }));
         });
         setIsPinModalOpen(true);
       } else {
         setIsLocked(false);
+        setIsRuntimeUnlocked(true);
         setIsAddPanelOpen(true);
         setAppState(prev => ({ ...prev, isLocked: false }));
       }
@@ -484,11 +548,13 @@ export function App() {
   const [mqttLogs, setMqttLogs] = useState<MqttMessageLog[]>([]);
   const [mqttConnected, setMqttConnected] = useState(false);
 
-  // Inbuilt Alarm System State & Haptic Control
+  // Inbuilt Alarm System State & Haptic/Sound/Popup Toggles
   const [activeAlarms, setActiveAlarms] = useState<ActiveAlarm[]>([]);
   const [isAlarmModalOpen, setIsAlarmModalOpen] = useState(false);
   const [isAlarmHistorianModalOpen, setIsAlarmHistorianModalOpen] = useState(false);
   const [isVibrateEnabled, setIsVibrateEnabled] = useState(true);
+  const [isSoundEnabled, setIsSoundEnabled] = useState(true);
+  const [isAutoPopupEnabled, setIsAutoPopupEnabled] = useState(true);
   const [acknowledgedAlarms, setAcknowledgedAlarms] = useState<Record<string, boolean>>({});
   const [latestAlarmTriggered, setLatestAlarmTriggered] = useState<ActiveAlarm | null>(null);
   const prevAlarmKeysRef = useRef<string[]>([]);
@@ -626,22 +692,79 @@ export function App() {
         setLatestAlarmTriggered(newestAlarm);
       }
 
-      // Automatically open alarm pop-up modal
-      setIsAlarmModalOpen(true);
-
-      // Trigger 5-second mobile vibration haptic
-      if (isVibrateEnabled && typeof window !== 'undefined' && 'vibrate' in navigator) {
-        try {
-          navigator.vibrate([1000, 200, 1000, 200, 1000, 200, 1000]); // 5 seconds vibration pattern
-        } catch (err) {
-          console.warn('Vibration API not supported on this device:', err);
-        }
+      // Automatically open alarm pop-up modal IF auto-popup is enabled
+      if (isAutoPopupEnabled) {
+        setIsAlarmModalOpen(true);
       }
     }
 
     prevAlarmKeysRef.current = currentAlarmKeys;
     prevAlarmCountRef.current = newAlarmsList.length;
-  }, [latestValues, appState.panels, acknowledgedAlarms, isVibrateEnabled]);
+  }, [latestValues, appState.panels, acknowledgedAlarms, isAutoPopupEnabled]);
+
+  // Dedicated 5-Second Recurring Mobile Haptic & Industrial Alarm Sound Siren Loop
+  useEffect(() => {
+    const unackAlarmsCount = activeAlarms.filter(a => !a.acknowledged).length;
+
+    if (unackAlarmsCount === 0 || typeof window === 'undefined') {
+      if ('vibrate' in navigator) {
+        try { navigator.vibrate(0); } catch {}
+      }
+      return;
+    }
+
+    const triggerHapticAndSound = () => {
+      // 1. Try Navigator Vibrate API (Pattern across 5 seconds if enabled)
+      if (isVibrateEnabled && 'vibrate' in navigator) {
+        try {
+          navigator.vibrate([400, 150, 400, 150, 400]);
+        } catch {}
+      }
+
+      // 2. Web Audio Dual-Tone Industrial Alarm Siren Sound Pulse (if sound enabled)
+      if (isSoundEnabled) {
+        try {
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          if (AudioContextClass) {
+            const ctx = new AudioContextClass();
+            if (ctx.state === 'suspended') {
+              ctx.resume();
+            }
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.type = 'sawtooth';
+            // Alternating industrial siren pitch: 880Hz -> 660Hz -> 880Hz pulse
+            osc.frequency.setValueAtTime(880, now);
+            osc.frequency.setValueAtTime(660, now + 0.15);
+            osc.frequency.setValueAtTime(880, now + 0.30);
+
+            gain.gain.setValueAtTime(0.15, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.45);
+          }
+        } catch {}
+      }
+    };
+
+    // Fire immediately when unacknowledged alarm starts
+    triggerHapticAndSound();
+
+    // Repeat every 5 seconds (5000ms) while active unacknowledged alarms persist
+    const hapticInterval = setInterval(triggerHapticAndSound, 5000);
+
+    return () => {
+      clearInterval(hapticInterval);
+      if ('vibrate' in navigator) {
+        try { navigator.vibrate(0); } catch {}
+      }
+    };
+  }, [activeAlarms, isVibrateEnabled, isSoundEnabled]);
 
   const handleAcknowledgeAlarm = (alarmKey: string) => {
     setAcknowledgedAlarms(prev => ({ ...prev, [alarmKey]: true }));
@@ -686,24 +809,40 @@ export function App() {
     activeDashboardRef.current = activeDashboard;
   }, [activeDashboard]);
 
-  // Ensure every active connection has at least one dashboard
+  // Ensure every active connection has at least one dashboard (enforcing 1-screen max in Community mode)
   useEffect(() => {
     if (!activeConnection) return;
+    const editionMgr = EditionManager.fromState(appState);
+    const isCommunity = editionMgr.IsCommunity();
+    
     const dashesForConn = appState.dashboards.filter(d => d.connectionId === activeConnection.connectionId);
     if (dashesForConn.length === 0) {
-      const defaultDash: Dashboard = {
-        dashboardId: `dash_${Date.now()}`,
-        dashboardName: `${activeConnection.connectionName || 'Broker'} Dashboard`,
-        connectionId: activeConnection.connectionId,
-        isHome: true,
-        icon: 'fa-house',
-        themeColor: '#0ea5e9'
-      };
-      setAppState(prev => ({
-        ...prev,
-        dashboards: [...prev.dashboards, defaultDash]
-      }));
-      setActiveDashboardId(defaultDash.dashboardId);
+      if (isCommunity && appState.dashboards.length > 0) {
+        // In Community mode, bind existing single screen to new connection instead of breaking 1-screen limit
+        const updatedDash: Dashboard = {
+          ...appState.dashboards[0],
+          connectionId: activeConnection.connectionId
+        };
+        setAppState(prev => sanitizeAppState({
+          ...prev,
+          dashboards: [updatedDash]
+        }));
+        setActiveDashboardId(updatedDash.dashboardId);
+      } else {
+        const defaultDash: Dashboard = {
+          dashboardId: `dash_${Date.now()}`,
+          dashboardName: `${activeConnection.connectionName || 'Broker'} Dashboard`,
+          connectionId: activeConnection.connectionId,
+          isHome: true,
+          icon: 'fa-house',
+          themeColor: '#0ea5e9'
+        };
+        setAppState(prev => sanitizeAppState({
+          ...prev,
+          dashboards: isCommunity ? [defaultDash] : [...prev.dashboards, defaultDash]
+        }));
+        setActiveDashboardId(defaultDash.dashboardId);
+      }
     }
   }, [activeConnection, appState.dashboards]);
 
@@ -751,8 +890,9 @@ export function App() {
 
     // Update panel matching topics
     currentAppState.panels.forEach(panel => {
-      if (!panel.topic && !panel.publishTopic) return;
-      const rawTopics = [panel.topic?.trim(), panel.publishTopic?.trim()].filter(Boolean) as string[];
+      if (!panel.topic && !panel.publishTopic && (!panel.pens || panel.pens.length === 0)) return;
+      const penTopics = (panel.pens || []).map(p => p.topic?.trim()).filter(Boolean) as string[];
+      const rawTopics = [panel.topic?.trim(), panel.publishTopic?.trim(), ...penTopics].filter(Boolean) as string[];
       const prefix = currentDash?.prefixTopic ? currentDash.prefixTopic.trim() : '';
 
       let matches = false;
@@ -778,8 +918,10 @@ export function App() {
       if (matches) {
         let extracted: any = payloadStr;
 
-        if (panel.jsonPath) {
-          const jsonVal = getJsonValue(payloadStr, panel.jsonPath);
+        const effectiveJsonPath = panel.jsonPath || (panel.pens && panel.pens.length > 0 ? panel.pens[0]?.jsonPath : undefined);
+
+        if (effectiveJsonPath) {
+          const jsonVal = getJsonValue(payloadStr, effectiveJsonPath);
           if (jsonVal !== undefined) {
             extracted = jsonVal;
           }
@@ -804,16 +946,83 @@ export function App() {
           };
         });
 
-        const numVal = typeof extracted === 'number' ? extracted : parseFloat(extracted);
-        if (!isNaN(numVal)) {
-          setHistoryValues(prev => ({
+        // Process telemetry / trend values for history and historian engine
+        setHistoryValues(prev => {
+          const pId = panel.panelId;
+          const top = panel.topic;
+          const currentIdArr = prev[pId] || [];
+          const currentTopArr = top ? (prev[top] || []) : [];
+          const multiPenUpdates: Record<string, any[]> = {};
+
+          // 1. Process multi-pens if configured
+          if (panel.pens && panel.pens.length > 0) {
+            panel.pens.forEach(pen => {
+              const queryPath = (pen.jsonPath && pen.jsonPath.trim()) ? pen.jsonPath.trim() : (panel.jsonPath || '');
+              let penVal: any;
+              if (queryPath) {
+                penVal = getJsonValue(payloadStr, queryPath);
+              } else if (typeof extracted === 'number') {
+                penVal = extracted;
+              } else {
+                penVal = getJsonValue(payloadStr, '');
+              }
+
+              const penNum = typeof penVal === 'number' ? penVal : parseFloat(String(penVal ?? ''));
+              if (!isNaN(penNum)) {
+                const penPoint = { value: penNum, time: timeStr, timestampMs: Date.now() };
+                const curPenArr = prev[pen.id] || [];
+                const newArr = [...curPenArr, penPoint].slice(-3600);
+                multiPenUpdates[pen.id] = newArr;
+
+                if (pen.topic && pen.topic !== panel.topic) {
+                  multiPenUpdates[pen.topic] = newArr;
+                }
+
+                // Log into historian engine
+                if (panel.type === PanelType.LINE_GRAPH && panel.enableHistorianLogging && panel.logIntervalSeconds && pen.loggingEnabled !== false) {
+                  enqueueTelemetryPoint(panel.panelId, pen.topic || panel.topic || pen.id, penNum, panel.logIntervalSeconds, pen.id);
+                }
+              }
+            });
+          }
+
+          // 2. Process primary panel value (for single pen mode or standard panels)
+          let primaryNumVal: number | null = null;
+          let primaryValToParse = extracted;
+          if (panel.jsonPath && (typeof extracted !== 'number' || isNaN(extracted))) {
+            const extractedJson = getJsonValue(payloadStr, panel.jsonPath);
+            if (extractedJson !== undefined) {
+              primaryValToParse = extractedJson;
+            }
+          }
+          const parsedPrimary = typeof primaryValToParse === 'number' ? primaryValToParse : parseFloat(String(primaryValToParse ?? ''));
+          if (!isNaN(parsedPrimary)) {
+            primaryNumVal = parsedPrimary;
+          }
+
+          let updatedPrimaryId = currentIdArr;
+          let updatedPrimaryTop = currentTopArr;
+          if (primaryNumVal !== null) {
+            const newPoint = { value: primaryNumVal, time: timeStr, timestampMs: Date.now() };
+            updatedPrimaryId = [...currentIdArr, newPoint].slice(-3600);
+            if (top) {
+              updatedPrimaryTop = [...currentTopArr, newPoint].slice(-3600);
+            }
+
+            if (panel.type === PanelType.LINE_GRAPH && panel.enableHistorianLogging && panel.logIntervalSeconds && (!panel.pens || panel.pens.length === 0)) {
+              if (panel.topic) {
+                enqueueTelemetryPoint(panel.panelId, panel.topic, primaryNumVal, panel.logIntervalSeconds);
+              }
+            }
+          }
+
+          return {
             ...prev,
-            [panel.panelId]: [
-              ...(prev[panel.panelId] || []),
-              { value: numVal, time: timeStr }
-            ].slice(-30)
-          }));
-        }
+            [pId]: updatedPrimaryId,
+            ...(top ? { [top]: updatedPrimaryTop } : {}),
+            ...multiPenUpdates
+          };
+        });
       }
     });
   }, []);
@@ -982,13 +1191,23 @@ export function App() {
 
         const numVal = typeof simVal === 'number' ? simVal : parseFloat(simVal);
         if (!isNaN(numVal)) {
-          setHistoryValues(prev => ({
-            ...prev,
-            [panel.panelId]: [
-              ...(prev[panel.panelId] || []),
-              { value: numVal, time: timeStr }
-            ].slice(-30)
-          }));
+          setHistoryValues(prev => {
+            const pId = panel.panelId;
+            const top = panel.topic;
+            const currentIdArr = prev[pId] || [];
+            const currentTopArr = top ? (prev[top] || []) : [];
+            const newPoint = { value: numVal, time: timeStr };
+            return {
+              ...prev,
+              [pId]: [...currentIdArr, newPoint].slice(-200),
+              ...(top ? { [top]: [...currentTopArr, newPoint].slice(-200) } : {})
+            };
+          });
+
+          // Feed into historian engine for simulated panels too
+          if (panel.type === PanelType.LINE_GRAPH && panel.enableHistorianLogging && panel.logIntervalSeconds) {
+            enqueueTelemetryPoint(panel.panelId, panel.topic, numVal, panel.logIntervalSeconds);
+          }
         }
       });
     }, 2000);
@@ -996,8 +1215,9 @@ export function App() {
     return () => clearInterval(interval);
   }, [isSimulated, activePanels, latestValues]);
 
-  // Publish MQTT Handler
-  const handlePublish = (topic: string, payload: string | number) => {
+  // Core MQTT Publish Execution
+  const executePublish = (topic: string, payload: string | number) => {
+    resetRuntimeTimeoutTimer();
     const timeStr = new Date().toLocaleTimeString();
     const payloadStr = String(payload);
 
@@ -1047,6 +1267,23 @@ export function App() {
         });
       }
     });
+  };
+
+  // Publish MQTT Handler with Safeguard Security PIN check
+  const handlePublish = (topic: string, payload: string | number) => {
+    // If Security PIN is assigned and runtime control is locked, prompt for PIN first!
+    if (appState.editPin && !isRuntimeUnlocked) {
+      setPinModalMode('enter');
+      setPendingAction(() => () => {
+        setIsRuntimeUnlocked(true);
+        executePublish(topic, payload);
+      });
+      setIsPinModalOpen(true);
+      return;
+    }
+
+    // No PIN assigned (or already unlocked), execute write directly!
+    executePublish(topic, payload);
   };
 
   // Panel CRUD
@@ -1610,14 +1847,15 @@ export function App() {
   }
 
   const handleLoadHatcheryDemo = () => {
-    if (window.confirm('Load Water & Air Monitoring Sample Project? This will load 2 clean HMI screens (Water & Air) with 4 widgets each.')) {
+    if (window.confirm('Load Water System Sample Project? This will replace your dashboards with a clean 5-widget sample HMI screen.')) {
       const connId = activeConnectionId || 'conn_demo';
-      const { dashboards, panels } = getSampleProject(connId);
+      const isCommunity = editionMgr.IsCommunity();
+      const { dashboards, panels } = getSampleProject(connId, undefined, undefined, isCommunity);
       
       setAppState(prev => sanitizeAppState({
         ...prev,
-        dashboards: [...prev.dashboards.filter(d => !d.dashboardId.includes('water') && !d.dashboardId.includes('air') && !d.dashboardId.includes('daman')), ...dashboards],
-        panels: [...prev.panels.filter(p => !p.dashboardId.includes('water') && !p.dashboardId.includes('air') && !p.dashboardId.includes('daman')), ...panels]
+        dashboards: isCommunity ? dashboards : [...prev.dashboards.filter(d => !d.dashboardId.includes('water') && !d.dashboardId.includes('air') && !d.dashboardId.includes('daman') && d.dashboardName !== 'Main Dashboard'), ...dashboards],
+        panels: isCommunity ? panels : [...prev.panels.filter(p => !p.dashboardId.includes('water') && !p.dashboardId.includes('air') && !p.dashboardId.includes('daman')), ...panels]
       }));
 
       if (dashboards.length > 0) {
@@ -1632,40 +1870,40 @@ export function App() {
   return (
     <div className="flex flex-col h-screen w-screen text-slate-200 overflow-hidden font-sans select-none" style={{ backgroundColor: activeThemeObj.bgCanvas }}>
       {/* Top Navbar */}
-      <header className="theme-header h-11 px-3 border-b border-slate-800 flex items-center justify-between shrink-0 z-40 backdrop-blur-md">
-        <div className="flex items-center space-x-3">
+      <header className="theme-header h-12 sm:h-[50px] px-2 sm:px-3 border-b border-slate-800 flex items-center justify-between shrink-0 z-40 backdrop-blur-md overflow-x-auto no-scrollbar max-w-full">
+        <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
           <button 
             onClick={() => setIsSidebarOpen(true)}
-            className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+            className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors shrink-0"
           >
             <i className="fas fa-bars text-lg"></i>
           </button>
           
-          <div className="flex items-center space-x-2.5">
+          <div className="flex items-center space-x-2 shrink-0">
             <AppLogo 
               size="sm" 
               accentColor={activeThemeObj.primary} 
               isCommunity={userRole === 'community' || productEdition === ProductEdition.COMMUNITY} 
             />
-            <span className="font-extrabold text-white text-sm sm:text-base tracking-tight whitespace-nowrap shrink-0 hidden sm:inline">TASC IIoT Studio</span>
+            <span className="font-extrabold text-white text-xs sm:text-sm tracking-tight whitespace-nowrap shrink-0 hidden md:inline">TASC IIoT Studio</span>
             <button
               type="button"
               onClick={editionMgr.IsClient() ? undefined : handleOpenActiveBrokerSettings}
-              className={`flex items-center space-x-1.5 bg-slate-950/80 ${editionMgr.IsClient() ? 'cursor-default' : 'hover:bg-slate-800 cursor-pointer'} px-3 py-1 rounded-lg border border-slate-800 transition-all group`}
+              className={`flex items-center space-x-1.5 bg-slate-950/80 ${editionMgr.IsClient() ? 'cursor-default' : 'hover:bg-slate-800 cursor-pointer'} px-2.5 py-1.5 rounded-lg border border-slate-800 transition-all group shrink-0 min-h-[34px]`}
               title={editionMgr.IsClient() ? "MQTT Connection Status" : "Click to configure MQTT Broker Settings (Address, Port, Auth)"}
             >
               <span className={`w-2 h-2 rounded-full ${isSimulated ? 'bg-amber-400 animate-pulse' : mqttConnected ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-              <span className="text-[11px] font-mono text-slate-300 group-hover:text-white font-semibold">
-                {isSimulated ? 'SIMULATED' : mqttConnected ? 'CONNECTED' : 'OFFLINE'}
+              <span className="text-[10px] sm:text-[11px] font-mono text-slate-300 group-hover:text-white font-semibold">
+                {isSimulated ? 'SIM' : mqttConnected ? 'CONNECTED' : 'OFFLINE'}
               </span>
-              {!editionMgr.IsClient() && <i className="fas fa-server text-[10px] text-sky-400 opacity-70 group-hover:opacity-100 ml-0.5"></i>}
+              {!editionMgr.IsClient() && <i className="fas fa-server text-[10px] text-sky-400 opacity-70 group-hover:opacity-100 ml-0.5 hidden sm:inline"></i>}
             </button>
 
             {/* Inbuilt Alarm Center Bell Button */}
             <button
               type="button"
               onClick={() => setIsAlarmModalOpen(true)}
-              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer relative ${
+              className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer relative shrink-0 min-h-[34px] ${
                 activeAlarms.length > 0
                   ? 'bg-rose-500/20 text-rose-300 border border-rose-500/60 hover:bg-rose-500/30 animate-pulse'
                   : 'bg-slate-800/80 text-slate-400 border border-slate-700 hover:text-white'
@@ -1673,9 +1911,9 @@ export function App() {
               title="Telemetry Inbuilt Parameter Alarms"
             >
               <i className={`fas fa-bell text-xs ${activeAlarms.length > 0 ? 'text-rose-400 animate-bounce' : 'text-slate-400'}`}></i>
-              <span className="hidden sm:inline">ALARMS</span>
+              <span className="hidden md:inline">ALARMS</span>
               {activeAlarms.length > 0 && (
-                <span className="bg-rose-500 text-black text-[10px] font-mono font-black px-1.5 py-0.2 rounded-full">
+                <span className="bg-rose-500 text-black text-[9px] font-mono font-black px-1.5 py-0.2 rounded-full">
                   {activeAlarms.length}
                 </span>
               )}
@@ -1685,25 +1923,26 @@ export function App() {
             <button
               type="button"
               onClick={() => setIsAlarmHistorianModalOpen(true)}
-              className="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/50 hover:bg-indigo-500/30 transition-all cursor-pointer shadow-sm"
+              className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/50 hover:bg-indigo-500/30 transition-all cursor-pointer shadow-sm shrink-0 min-h-[34px]"
               title="Industrial Alarm Historian Window (FIFO Storage & Exporter)"
             >
               <i className="fas fa-history text-xs text-indigo-400"></i>
-              <span className="hidden sm:inline">HISTORIAN</span>
+              <span className="hidden md:inline">HISTORIAN</span>
             </button>
 
             {userRole === 'community' || productEdition === ProductEdition.COMMUNITY ? (
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1.5 shrink-0">
+                {/* Ultra-Compact Community Edition Badge */}
                 <button
                   type="button"
                   onClick={handleRequestExitSession}
-                  className="flex items-center space-x-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-lg text-[11px] font-bold hover:bg-emerald-500/30 transition-all cursor-pointer"
+                  className="flex items-center space-x-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-emerald-500/30 transition-all cursor-pointer shrink-0 min-h-[34px]"
                   title={`Community Edition (Free) • ${appState.dashboards.length} Screens / 10 Widgets Max — Click to exit / change mode`}
                 >
                   <i className="fas fa-cube text-xs text-emerald-400"></i>
-                  <span className="hidden lg:inline">COMMUNITY EDITION</span>
+                  <span className="hidden 2xl:inline">COMMUNITY</span>
                   <span className={`text-[9px] px-1 rounded font-mono font-extrabold ${appState.panels.length > 10 ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-slate-950'}`}>
-                    FREE ({appState.panels.length}/10W)
+                    Free Demo ({appState.panels.length}/10W)
                   </span>
                 </button>
 
@@ -1711,20 +1950,20 @@ export function App() {
                   <button
                     type="button"
                     onClick={handleToggleFullscreen}
-                    className="flex items-center space-x-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
+                    className="flex items-center space-x-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer shrink-0 min-h-[34px]"
                     title="Toggle Fullscreen Mode"
                   >
                     <i className="fas fa-expand text-xs text-emerald-400"></i>
-                    <span className="hidden sm:inline">Full Screen</span>
+                    <span className="hidden md:inline">Full Screen</span>
                   </button>
                 )}
 
                 {/* Workstation Mode Switcher Toggle for Community Edition */}
-                <div className="flex items-center p-0.5 bg-slate-950 rounded-lg border border-slate-800">
+                <div className="flex items-center p-0.5 bg-slate-950 rounded-lg border border-slate-800 shrink-0 min-h-[34px]">
                   <button
                     type="button"
                     onClick={() => setActiveMode('grid')}
-                    className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
+                    className={`px-2 py-1 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
                       activeMode === 'grid'
                         ? 'bg-emerald-500 text-slate-950 shadow'
                         : 'text-slate-400 hover:text-white'
@@ -1737,7 +1976,7 @@ export function App() {
                   <button
                     type="button"
                     onClick={() => setActiveMode('hmi')}
-                    className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
+                    className={`px-2 py-1 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
                       activeMode === 'hmi'
                         ? 'bg-sky-500 text-slate-950 shadow'
                         : 'text-slate-400 hover:text-white'
@@ -1756,38 +1995,78 @@ export function App() {
                     <i className="fas fa-sliders text-xs"></i>
                   </button>
                 </div>
+
+                {/* HMI Screen Switcher Dropdown — right beside HMI Canvas button */}
+                {appState.dashboards && appState.dashboards.length > 0 && (
+                  <select
+                    value={activeDashboardId}
+                    onChange={(e) => handleSelectDashboard(e.target.value)}
+                    className="bg-slate-950 text-sky-400 font-bold text-xs px-2.5 py-1.5 rounded-lg border border-slate-800 outline-none focus:border-sky-500 cursor-pointer max-w-[130px] sm:max-w-[190px] shadow-inner shrink-0 truncate hover:border-slate-700 transition-colors min-h-[34px]"
+                    title="Switch Active HMI Screen Page"
+                  >
+                    {appState.dashboards.map(d => (
+                      <option key={d.dashboardId} value={d.dashboardId} className="bg-slate-900 text-white font-normal">
+                        {d.dashboardName} {d.isHome ? '★ (Home)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {/* Inline Fullscreen Controls inside Header to prevent overlapping */}
+                {isFullscreen && (
+                  <div className="flex items-center space-x-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => window.dispatchEvent(new CustomEvent('hmi-restore-autofit'))}
+                      className="flex items-center space-x-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 px-2.5 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[34px]"
+                      title="Restore Fit (Reset zoom to fit all screen elements)"
+                    >
+                      <i className="fas fa-compress-arrows-alt text-xs text-indigo-400"></i>
+                      <span className="hidden md:inline">Restore Fit</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExitFullscreen}
+                      className="flex items-center space-x-1 bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 px-2.5 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[34px]"
+                      title="Exit Full Screen Mode"
+                    >
+                      <i className="fas fa-compress text-xs text-sky-400"></i>
+                      <span className="hidden md:inline">Exit Full Screen</span>
+                    </button>
+                  </div>
+                )}
               </div>
             ) : userRole === 'client' || productEdition === ProductEdition.CLIENT_RUNTIME ? (
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1.5 shrink-0">
                 <button
                   type="button"
                   onClick={handleRequestExitSession}
-                  className="flex items-center space-x-1.5 bg-sky-500/20 text-sky-300 border border-sky-500/30 px-2.5 py-1 rounded-lg text-[11px] font-bold hover:bg-sky-500/30 transition-all cursor-pointer"
+                  className="flex items-center space-x-1 bg-sky-500/20 text-sky-300 border border-sky-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-sky-500/30 transition-all cursor-pointer shrink-0 min-h-[34px]"
                   title="Client Edition (Operator Mode) — Click to exit / change mode"
                 >
                   <i className="fas fa-shield-halved text-xs text-sky-400"></i>
                   <span className="hidden lg:inline">{clientInfo?.clientName || 'CLIENT EDITION'}</span>
-                  <span className="text-[9px] bg-sky-500 text-slate-950 px-1 rounded font-mono font-extrabold">OPERATOR MODE</span>
+                  <span className="text-[9px] bg-sky-500 text-slate-950 px-1 rounded font-mono font-extrabold">OPERATOR</span>
                 </button>
 
                 {!isFullscreen && (
                   <button
                     type="button"
                     onClick={handleToggleFullscreen}
-                    className="flex items-center space-x-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
+                    className="flex items-center space-x-1 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer shrink-0 min-h-[34px]"
                     title="Toggle Fullscreen Mode"
                   >
                     <i className="fas fa-expand text-xs text-sky-400"></i>
-                    <span className="hidden sm:inline">Full Screen</span>
+                    <span className="hidden md:inline">Full Screen</span>
                   </button>
                 )}
 
                 {/* Workstation Mode Switcher Toggle for Client Edition */}
-                <div className="flex items-center p-0.5 bg-slate-950 rounded-lg border border-slate-800">
+                <div className="flex items-center p-0.5 bg-slate-950 rounded-lg border border-slate-800 shrink-0 min-h-[34px]">
                   <button
                     type="button"
                     onClick={() => setActiveMode('grid')}
-                    className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
+                    className={`px-2 py-1 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
                       activeMode === 'grid'
                         ? 'bg-sky-500 text-slate-950 shadow'
                         : 'text-slate-400 hover:text-white'
@@ -1800,7 +2079,7 @@ export function App() {
                   <button
                     type="button"
                     onClick={() => setActiveMode('hmi')}
-                    className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
+                    className={`px-2 py-1 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
                       activeMode === 'hmi'
                         ? 'bg-sky-500 text-slate-950 shadow'
                         : 'text-slate-400 hover:text-white'
@@ -1811,28 +2090,68 @@ export function App() {
                     <span className="hidden xl:inline">HMI View</span>
                   </button>
                 </div>
+
+                {/* HMI Screen Switcher Dropdown — right beside HMI View button */}
+                {appState.dashboards && appState.dashboards.length > 0 && (
+                  <select
+                    value={activeDashboardId}
+                    onChange={(e) => handleSelectDashboard(e.target.value)}
+                    className="bg-slate-950 text-sky-400 font-bold text-xs px-2.5 py-1.5 rounded-lg border border-slate-800 outline-none focus:border-sky-500 cursor-pointer max-w-[130px] sm:max-w-[190px] shadow-inner shrink-0 truncate hover:border-slate-700 transition-colors min-h-[34px]"
+                    title="Switch Active HMI Screen Page"
+                  >
+                    {appState.dashboards.map(d => (
+                      <option key={d.dashboardId} value={d.dashboardId} className="bg-slate-900 text-white font-normal">
+                        {d.dashboardName} {d.isHome ? '★ (Home)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {/* Inline Fullscreen Controls inside Header to prevent overlapping */}
+                {isFullscreen && (
+                  <div className="flex items-center space-x-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => window.dispatchEvent(new CustomEvent('hmi-restore-autofit'))}
+                      className="flex items-center space-x-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 px-2.5 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[34px]"
+                      title="Restore Fit (Reset zoom to fit all screen elements)"
+                    >
+                      <i className="fas fa-compress-arrows-alt text-xs text-indigo-400"></i>
+                      <span className="hidden md:inline">Restore Fit</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExitFullscreen}
+                      className="flex items-center space-x-1 bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 px-2.5 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[34px]"
+                      title="Exit Full Screen Mode"
+                    >
+                      <i className="fas fa-compress text-xs text-sky-400"></i>
+                      <span className="hidden md:inline">Exit Full Screen</span>
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1.5 shrink-0">
 
                 {!isFullscreen && (
                   <button
                     type="button"
                     onClick={handleToggleFullscreen}
-                    className="flex items-center space-x-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
+                    className="flex items-center space-x-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer shrink-0 min-h-[34px]"
                     title="Toggle Fullscreen Mode"
                   >
                     <i className="fas fa-expand text-xs text-amber-400"></i>
-                    <span className="hidden sm:inline">Full Screen</span>
+                    <span className="hidden md:inline">Full Screen</span>
                   </button>
                 )}
 
                 {/* Workstation Mode Switcher Toggle */}
-                <div className="flex items-center p-0.5 bg-slate-950 rounded-lg border border-slate-800">
+                <div className="flex items-center p-0.5 bg-slate-950 rounded-lg border border-slate-800 shrink-0">
                   <button
                     type="button"
                     onClick={() => setActiveMode('grid')}
-                    className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
                       activeMode === 'grid'
                         ? 'bg-amber-500 text-slate-950 shadow'
                         : 'text-slate-400 hover:text-white'
@@ -1845,7 +2164,7 @@ export function App() {
                   <button
                     type="button"
                     onClick={() => setActiveMode('hmi')}
-                    className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
                       activeMode === 'hmi'
                         ? 'bg-sky-500 text-slate-950 shadow'
                         : 'text-slate-400 hover:text-white'
@@ -1864,8 +2183,49 @@ export function App() {
                     <i className="fas fa-sliders text-xs"></i>
                   </button>
                 </div>
+
+                {/* HMI Screen Switcher Dropdown — right beside HMI Canvas button */}
+                {appState.dashboards && appState.dashboards.length > 0 && (
+                  <select
+                    value={activeDashboardId}
+                    onChange={(e) => handleSelectDashboard(e.target.value)}
+                    className="bg-slate-950 text-sky-400 font-bold text-xs px-2 py-0.5 rounded-lg border border-slate-800 outline-none focus:border-sky-500 cursor-pointer max-w-[130px] sm:max-w-[190px] shadow-inner shrink-0 truncate hover:border-slate-700 transition-colors"
+                    title="Switch Active HMI Screen Page"
+                  >
+                    {appState.dashboards.map(d => (
+                      <option key={d.dashboardId} value={d.dashboardId} className="bg-slate-900 text-white font-normal">
+                        {d.dashboardName} {d.isHome ? '★ (Home)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {/* Inline Fullscreen Controls inside Header to prevent overlapping */}
+                {isFullscreen && (
+                  <div className="flex items-center space-x-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => window.dispatchEvent(new CustomEvent('hmi-restore-autofit'))}
+                      className="flex items-center space-x-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 px-2 py-0.5 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0"
+                      title="Restore Fit (Reset zoom to fit all screen elements)"
+                    >
+                      <i className="fas fa-compress-arrows-alt text-xs text-indigo-400"></i>
+                      <span className="hidden md:inline">Restore Fit</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExitFullscreen}
+                      className="flex items-center space-x-1 bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 px-2 py-0.5 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0"
+                      title="Exit Full Screen Mode"
+                    >
+                      <i className="fas fa-compress text-xs text-sky-400"></i>
+                      <span className="hidden md:inline">Exit Full Screen</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
+
           </div>
         </div>
 
@@ -1873,7 +2233,7 @@ export function App() {
 
         {/* Right Toolbar */}
         <div className="flex items-center space-x-1.5">
-          {currentView === AppView.DASHBOARD && (
+          {currentView === AppView.DASHBOARD && activeMode === 'grid' && (
             <>
               {!isFullscreen && (
                 <button 
@@ -1932,16 +2292,16 @@ export function App() {
                   <span className="hidden sm:inline">Editing Layout</span>
                 </button>
               )}
-            </>
-          )}
 
-          {currentView === AppView.DASHBOARD && (
-            <button 
-              onClick={() => setIsDashMenuOpen(true)}
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-            >
-              <i className="fas fa-ellipsis-vertical text-sm"></i>
-            </button>
+              {/* 3-Dot Dropdown Menu - Shown strictly in Grid Studio mode */}
+              <button 
+                onClick={() => setIsDashMenuOpen(true)}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                title="Dashboard Options Menu"
+              >
+                <i className="fas fa-ellipsis-vertical text-sm"></i>
+              </button>
+            </>
           )}
         </div>
       </header>
@@ -2019,6 +2379,7 @@ export function App() {
                 onUpdateAppState={setAppState}
                 onPublish={handlePublish}
                 latestValues={latestValues}
+                historyValues={historyValues}
                 userRole={userRole}
                 isFullscreen={isFullscreen}
                 onOpenAddPanel={handleOpenAddPanel}
@@ -2243,6 +2604,7 @@ export function App() {
             userRole={userRole}
             productEdition={productEdition}
             onRequestClearAll={handleRequestClearAll}
+            onSaveRuntimeTimeout={(mins) => setAppState(prev => ({ ...prev, runtimePinTimeoutMinutes: mins }))}
           />
         )}
 
@@ -2425,18 +2787,7 @@ export function App() {
         editionName={userRole === 'community' || productEdition === ProductEdition.COMMUNITY ? 'Community Edition' : 'Engineering Studio'}
       />
 
-      {/* Floating Exit Fullscreen button inside browser when fullscreen */}
-      {isFullscreen && (
-        <button
-          type="button"
-          onClick={handleExitFullscreen}
-          className="fixed top-3 right-4 z-[9999] bg-slate-950/90 hover:bg-slate-900 text-sky-300 border border-sky-500/50 px-3.5 py-2 rounded-xl text-xs font-extrabold shadow-2xl flex items-center space-x-2 transition-all cursor-pointer backdrop-blur-md animate-in fade-in"
-          title="Exit Full Screen Mode"
-        >
-          <i className="fas fa-compress text-xs text-sky-400"></i>
-          <span>Exit Full Screen</span>
-        </button>
-      )}
+
 
       {/* Mandatory Client Edition Save Setup Modal */}
       {!isClientSetupSaved && (userRole === 'client' || productEdition === ProductEdition.CLIENT_RUNTIME) && (
@@ -2487,6 +2838,10 @@ export function App() {
         onAcknowledgeAll={handleAcknowledgeAllAlarms}
         isVibrateEnabled={isVibrateEnabled}
         onToggleVibrate={() => setIsVibrateEnabled(!isVibrateEnabled)}
+        isSoundEnabled={isSoundEnabled}
+        onToggleSound={() => setIsSoundEnabled(!isSoundEnabled)}
+        isAutoPopupEnabled={isAutoPopupEnabled}
+        onToggleAutoPopup={() => setIsAutoPopupEnabled(!isAutoPopupEnabled)}
         latestAlarmTriggered={latestAlarmTriggered}
         onOpenHistorian={() => {
           setIsAlarmModalOpen(false);
@@ -2504,6 +2859,7 @@ export function App() {
           setIsAlarmHistorianModalOpen(false);
           setIsAlarmModalOpen(true);
         }}
+        isCommunity={userRole === 'community' || productEdition === ProductEdition.COMMUNITY}
       />
 
       {/* Session Exit Confirmation Modal */}

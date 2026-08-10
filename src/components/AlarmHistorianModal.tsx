@@ -8,6 +8,7 @@ import {
   getHistorianConfig,
   saveHistorianConfig,
   estimateStorageForRows,
+  isCommunityEditionActive,
   HistorianConfig
 } from '../utils/alarmHistorianEngine';
 import { exportAlarmHistoryCSV, exportAlarmHistoryJSON } from '../utils/alarmExporter';
@@ -18,6 +19,7 @@ interface AlarmHistorianModalProps {
   dashboardId?: string;
   onAcknowledgeAlarm?: (alarmKey: string) => void;
   onOpenLiveAlarms?: () => void;
+  isCommunity?: boolean;
 }
 
 export const AlarmHistorianModal: React.FC<AlarmHistorianModalProps> = ({
@@ -25,8 +27,10 @@ export const AlarmHistorianModal: React.FC<AlarmHistorianModalProps> = ({
   onClose,
   dashboardId,
   onAcknowledgeAlarm,
-  onOpenLiveAlarms
+  onOpenLiveAlarms,
+  isCommunity
 }) => {
+  const isCommunityMode = isCommunity || isCommunityEditionActive();
   const [tabFilter, setTabFilter] = useState<'ALL' | 'TRIP_FAULT' | 'ACTIVE' | 'RESOLVED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [historyEntries, setHistoryEntries] = useState<HistorianAlarmEntry[]>([]);
@@ -81,51 +85,51 @@ export const AlarmHistorianModal: React.FC<AlarmHistorianModalProps> = ({
         }`}
       >
         {/* Modal Header */}
-        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950/90 px-5 py-3 border-b border-indigo-500/30 flex items-center justify-between shrink-0">
-          <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-500/50 flex items-center justify-center text-indigo-400">
-              <i className="fas fa-history text-lg"></i>
+        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950/90 px-3 sm:px-5 py-1.5 sm:py-2.5 border-b border-indigo-500/30 flex items-center justify-between shrink-0">
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shrink-0">
+              <i className="fas fa-history text-xs sm:text-sm"></i>
             </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <h2 className="text-sm sm:text-base font-black text-white tracking-wide uppercase">
+              <div className="flex items-center space-x-1.5">
+                <h2 className="text-xs sm:text-sm font-black text-white tracking-wide uppercase truncate">
                   Industrial Alarm Historian Engine
                 </h2>
-                <span className="bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 text-[10px] font-bold px-2 py-0.5 rounded-full font-mono">
+                <span className="bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded-full font-mono shrink-0">
                   {storageMetrics.totalRows} / {storageMetrics.maxRows} ROWS (FIFO)
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 flex items-center space-x-2">
+              <p className="text-[9px] sm:text-[11px] text-slate-400 flex items-center space-x-1.5">
                 <span>{storageMetrics.engineType}</span>
                 <span>•</span>
-                <span className="text-sky-300 font-mono font-bold">Allocated Storage Cap: {storageMetrics.maxStorageMb} MB</span>
+                <span className="text-sky-300 font-mono font-bold">Storage Cap: {storageMetrics.maxStorageMb} MB</span>
               </p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1.5">
             {onOpenLiveAlarms && (
               <button
                 onClick={onOpenLiveAlarms}
-                className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/50 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer shadow-sm active:scale-95"
+                className="px-2 sm:px-3 py-1 sm:py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/50 rounded-lg text-[10px] sm:text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shadow-sm active:scale-95"
                 title="Switch to Live Alarms Window"
               >
-                <i className="fas fa-bell text-xs text-rose-400 animate-pulse"></i>
+                <i className="fas fa-bell text-[10px] text-rose-400 animate-pulse"></i>
                 <span className="hidden sm:inline">Live Alarms</span>
-                <i className="fas fa-arrow-right text-[10px] text-rose-400"></i>
+                <i className="fas fa-arrow-right text-[9px] text-rose-400"></i>
               </button>
             )}
 
             <button
               onClick={() => setIsMaximized(!isMaximized)}
-              className="w-8 h-8 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-all cursor-pointer border border-slate-800"
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-all cursor-pointer border border-slate-800"
               title={isMaximized ? "Restore window size" : "Maximize window"}
             >
               <i className={`fas ${isMaximized ? 'fa-compress' : 'fa-expand'} text-xs`}></i>
             </button>
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-lg bg-slate-900 hover:bg-rose-950/50 text-slate-400 hover:text-rose-400 flex items-center justify-center transition-all cursor-pointer border border-slate-800"
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-900 hover:bg-rose-950/50 text-slate-400 hover:text-rose-400 flex items-center justify-center transition-all cursor-pointer border border-slate-800"
               title="Close window"
             >
               <i className="fas fa-xmark text-sm"></i>
@@ -134,14 +138,14 @@ export const AlarmHistorianModal: React.FC<AlarmHistorianModalProps> = ({
         </div>
 
         {/* Live Storage Meter & Quick Controls */}
-        <div className="bg-slate-950/90 border-b border-slate-800/80 px-5 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center space-x-4 flex-1 min-w-[280px]">
+        <div className="bg-slate-950/90 border-b border-slate-800/80 px-3 sm:px-5 py-1.5 flex flex-wrap items-center justify-between gap-2 shrink-0 text-[10px] sm:text-xs">
+          <div className="flex items-center space-x-3 flex-1 min-w-[200px]">
             <div className="flex-1 max-w-xs">
-              <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 mb-1">
-                <span>LOCAL DEVICE STORAGE USED</span>
+              <div className="flex items-center justify-between text-[9px] font-bold text-slate-400 mb-0.5">
+                <span>STORAGE USED</span>
                 <span className="text-indigo-400 font-mono">{storageMetrics.percentUsed}%</span>
               </div>
-              <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+              <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
                 <div 
                   className={`h-full transition-all duration-300 ${
                     storageMetrics.percentUsed > 85 ? 'bg-rose-500' : storageMetrics.percentUsed > 60 ? 'bg-amber-500' : 'bg-indigo-500'
@@ -151,93 +155,93 @@ export const AlarmHistorianModal: React.FC<AlarmHistorianModalProps> = ({
               </div>
             </div>
 
-            <div className="text-[11px] font-mono text-slate-400 hidden sm:block">
+            <div className="text-[10px] font-mono text-slate-400 hidden sm:block">
               <span className="text-slate-500">Size: </span>
               <span className="text-slate-200 font-bold">{storageMetrics.formattedSize}</span>
-              <span className="text-slate-500 ml-1.5">/ {storageMetrics.maxStorageMb} MB</span>
+              <span className="text-slate-500 ml-1">/ {storageMetrics.maxStorageMb} MB</span>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
             <button
               onClick={() => setShowConfigModal(true)}
-              className="px-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer shadow-sm active:scale-95"
+              className="px-2 py-0.5 sm:px-3 sm:py-1 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 rounded-md text-[10px] sm:text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer active:scale-95"
               title="Configure Historian Row Capacity & Storage Limits"
             >
-              <i className="fas fa-gear text-xs text-indigo-400"></i>
-              <span>Config & Capacity</span>
+              <i className="fas fa-gear text-[9px] text-indigo-400"></i>
+              <span>Config</span>
             </button>
 
             <button
               onClick={() => exportAlarmHistoryCSV(historyEntries)}
-              className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer shadow-sm active:scale-95"
+              className="px-2 py-0.5 sm:px-3 sm:py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded-md text-[10px] sm:text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer active:scale-95"
               title="Export alarm history to CSV file"
             >
-              <i className="fas fa-file-csv text-sm"></i>
-              <span>Export CSV</span>
+              <i className="fas fa-file-csv text-[10px]"></i>
+              <span>CSV</span>
             </button>
 
             <button
               onClick={() => exportAlarmHistoryJSON(historyEntries)}
-              className="px-3 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer shadow-sm active:scale-95"
+              className="px-2 py-0.5 sm:px-3 sm:py-1 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 rounded-md text-[10px] sm:text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer active:scale-95"
               title="Export alarm history to JSON format"
             >
-              <i className="fas fa-file-code text-sm"></i>
-              <span>Export JSON</span>
+              <i className="fas fa-file-code text-[10px]"></i>
+              <span>JSON</span>
             </button>
 
             <button
               onClick={() => setShowClearConfirm(true)}
-              className="px-3 py-1.5 bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer active:scale-95"
+              className="px-2 py-0.5 sm:px-3 sm:py-1 bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 rounded-md text-[10px] sm:text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer active:scale-95"
               title="Clear alarm history buffer"
             >
-              <i className="fas fa-trash-can text-xs"></i>
-              <span>Clear History</span>
+              <i className="fas fa-trash-can text-[9px]"></i>
+              <span>Clear</span>
             </button>
           </div>
         </div>
 
         {/* Category Tabs & Search Bar */}
-        <div className="bg-[#121824] px-5 py-3 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center space-x-1 overflow-x-auto pb-1 sm:pb-0">
+        <div className="bg-[#121824] px-3 sm:px-5 py-1.5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center space-x-1 overflow-x-auto pb-0.5 sm:pb-0">
             {(
               [
-                { id: 'ALL', label: 'All Events', icon: 'fa-list-ul', color: 'text-indigo-400' },
-                { id: 'TRIP_FAULT', label: 'Trips & Faults', icon: 'fa-triangle-exclamation', color: 'text-rose-400' },
-                { id: 'ACTIVE', label: 'Active Alarms', icon: 'fa-bell', color: 'text-amber-400' },
-                { id: 'RESOLVED', label: 'Cleared History', icon: 'fa-circle-check', color: 'text-emerald-400' }
+                { id: 'ALL', label: 'All', icon: 'fa-list-ul', color: 'text-indigo-400' },
+                { id: 'TRIP_FAULT', label: 'Trips', icon: 'fa-triangle-exclamation', color: 'text-rose-400' },
+                { id: 'ACTIVE', label: 'Active', icon: 'fa-bell', color: 'text-amber-400' },
+                { id: 'RESOLVED', label: 'Cleared', icon: 'fa-circle-check', color: 'text-emerald-400' }
               ] as const
             ).map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setTabFilter(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer whitespace-nowrap ${
+                className={`px-2 sm:px-3 py-1 rounded-md text-[10px] sm:text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer whitespace-nowrap ${
                   tabFilter === tab.id
                     ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
                     : 'bg-slate-900/80 text-slate-400 hover:text-white hover:bg-slate-800'
                 }`}
               >
-                <i className={`fas ${tab.icon} ${tab.color}`}></i>
+                <i className={`fas ${tab.icon} ${tab.color} text-[9px]`}></i>
                 <span>{tab.label}</span>
               </button>
             ))}
           </div>
 
-          <div className="relative flex-1 max-w-xs min-w-[200px]">
-            <i className="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+          <div className="relative flex-1 max-w-xs min-w-[150px]">
+            <i className="fas fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 text-[10px]"></i>
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by equipment, topic, tag, message..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none font-sans"
+              placeholder="Search history..."
+              className="w-full bg-slate-950 border border-slate-800 rounded-md pl-7 pr-3 py-1 text-[10px] sm:text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none font-sans"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
               >
-                <i className="fas fa-times text-xs"></i>
+                <i className="fas fa-times text-[10px]"></i>
               </button>
             )}
           </div>
@@ -377,6 +381,14 @@ export const AlarmHistorianModal: React.FC<AlarmHistorianModalProps> = ({
             </div>
 
             <div className="space-y-4">
+              {/* Community Edition 50-Row Limit Banner */}
+              {isCommunityMode && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-[11px] font-semibold flex items-center space-x-2">
+                  <i className="fas fa-crown text-amber-400 text-sm shrink-0"></i>
+                  <span>Free Demo Active: FIFO Buffer is locked to <strong className="text-white">50 Rows Max</strong>. Upgrade to Engineering Studio for up to 100,000 Rows capacity.</span>
+                </div>
+              )}
+
               {/* Max Row Capacity Input with Automatic Memory Calculator */}
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1.5">
@@ -385,40 +397,69 @@ export const AlarmHistorianModal: React.FC<AlarmHistorianModalProps> = ({
                 <div className="relative">
                   <input
                     type="number"
-                    min={10}
-                    max={100000}
-                    value={currentConfig.maxRows}
+                    min={1}
+                    max={isCommunityMode ? 50 : 100000}
+                    value={isCommunityMode ? Math.min(currentConfig.maxRows, 50) : currentConfig.maxRows}
                     onChange={(e) => {
-                      const val = Math.max(1, parseInt(e.target.value) || 0);
+                      const inputVal = parseInt(e.target.value) || 0;
+                      if (isCommunityMode && inputVal > 50) {
+                        alert("🔒 Free Demo Limit: Maximum 50 Rows allowed for Community Edition. Upgrade to Engineering Studio for higher row limits.");
+                        handleUpdateConfig(50, 1);
+                        return;
+                      }
+                      const val = Math.max(1, inputVal);
                       const est = estimateStorageForRows(val);
                       handleUpdateConfig(val, Math.max(currentConfig.maxStorageMb, est.recommendedMb));
                     }}
-                    className="w-full bg-slate-950 border border-slate-700 text-amber-300 font-mono text-sm font-bold rounded-xl p-3 outline-none focus:border-indigo-500 shadow-inner"
-                    placeholder="Enter row count (e.g. 1150)"
+                    className={`w-full border text-amber-300 font-mono text-sm font-bold rounded-xl p-3 outline-none focus:border-indigo-500 shadow-inner ${
+                      isCommunityMode ? 'bg-slate-900 border-amber-500/40' : 'bg-slate-950 border-slate-700'
+                    }`}
+                    placeholder="Enter row count (e.g. 50)"
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-400">
                     ROWS
                   </span>
                 </div>
 
+                {isCommunityMode && (
+                  <p className="text-[10px] text-amber-400/90 mt-1 font-medium flex items-center space-x-1">
+                    <i className="fas fa-info-circle text-[9px]"></i>
+                    <span>Max 50 Rows allowed in Free Demo. Enter &gt;50 requires Engineering Studio.</span>
+                  </p>
+                )}
+
                 {/* Quick Row Count Presets */}
                 <div className="flex flex-wrap gap-1.5 mt-2">
-                  {[500, 1000, 1150, 2500, 5000, 10000].map((presetRows) => (
-                    <button
-                      key={presetRows}
-                      onClick={() => {
-                        const est = estimateStorageForRows(presetRows);
-                        handleUpdateConfig(presetRows, Math.max(currentConfig.maxStorageMb, est.recommendedMb));
-                      }}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer ${
-                        currentConfig.maxRows === presetRows
-                          ? 'bg-indigo-600 text-white shadow-md'
-                          : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
-                      }`}
-                    >
-                      {presetRows.toLocaleString()} Rows
-                    </button>
-                  ))}
+                  {[50, 500, 1000, 2500, 5000, 10000].map((presetRows) => {
+                    const isLocked = isCommunityMode && presetRows > 50;
+                    const isSelected = currentConfig.maxRows === presetRows || (isCommunityMode && presetRows === 50 && currentConfig.maxRows <= 50);
+
+                    return (
+                      <button
+                        key={presetRows}
+                        type="button"
+                        onClick={() => {
+                          if (isLocked) {
+                            alert(`🔒 Free Demo Limit: ${presetRows.toLocaleString()} Rows requires Engineering Studio. Upgrade to unlock higher row limits.`);
+                            return;
+                          }
+                          const est = estimateStorageForRows(presetRows);
+                          handleUpdateConfig(presetRows, Math.max(currentConfig.maxStorageMb, est.recommendedMb));
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition-all flex items-center space-x-1 ${
+                          isSelected
+                            ? 'bg-indigo-600 text-white shadow-md border border-indigo-400'
+                            : isLocked
+                            ? 'bg-slate-900/60 text-slate-500 border border-slate-800 cursor-pointer hover:border-amber-500/50 hover:text-amber-400'
+                            : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800 cursor-pointer'
+                        }`}
+                        title={isLocked ? "Upgrade to Engineering Studio to unlock higher row limits" : `Set capacity to ${presetRows} rows`}
+                      >
+                        {isLocked && <i className="fas fa-lock text-[9px] text-amber-400"></i>}
+                        <span>{presetRows} Rows {presetRows === 50 && isCommunityMode ? '(Free Demo)' : isLocked ? '(Pro)' : ''}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

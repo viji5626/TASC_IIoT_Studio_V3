@@ -113,20 +113,22 @@ const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
           </div>
         )}
 
-        {/* Community Edition Revoked Card */}
+        {/* Community Edition Lock Banner */}
         {isCommunity && (
-          <div className="bg-rose-500/10 rounded-2xl p-6 border border-rose-500/30 space-y-3 text-rose-300 animate-in fade-in duration-200">
-            <div className="flex items-center space-x-3 text-rose-400">
-              <div className="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center">
-                <i className="fas fa-ban text-xl"></i>
+          <div className="bg-amber-500/10 rounded-2xl p-5 border border-amber-500/30 space-y-2.5 text-amber-300 animate-in fade-in duration-200">
+            <div className="flex items-center space-x-3 text-amber-400">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
+                <i className="fas fa-lock text-xl"></i>
               </div>
               <div>
-                <h2 className="text-base font-bold text-white">Backup & Restore Revoked</h2>
-                <span className="text-[10px] uppercase tracking-wider font-semibold text-rose-400">Community Edition Restriction</span>
+                <h2 className="text-sm font-extrabold text-white uppercase tracking-wider">Backup & Restore Locked</h2>
+                <span className="text-[11px] font-bold text-amber-400">
+                  Unlock with Engineering Edition or Client Package
+                </span>
               </div>
             </div>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Backup and restore functionality is revoked in Community Edition. Switch to Engineering Studio to export backup configurations or restore project states.
+              Backup export, project state restoration, and distribution package features are locked in Community Edition. Switch to Engineering Studio or Client Package to unlock full Backup & Restore capabilities.
             </p>
           </div>
         )}
@@ -146,28 +148,44 @@ const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
         </div>
 
         {/* Client Package Section */}
-        {onRequestExportClientPackage && !isCommunity && (
-          <div className="bg-[#121212] rounded-2xl p-5 border border-sky-500/30 space-y-3">
+        {onRequestExportClientPackage && (
+          <div className={`bg-[#121212] rounded-2xl p-5 border space-y-3 ${isCommunity ? 'border-amber-500/30 opacity-80' : 'border-sky-500/30'}`}>
             <div className="flex items-center space-x-3 text-sky-400">
-              <div className="w-10 h-10 rounded-xl bg-sky-500/10 flex items-center justify-center text-sky-400 border border-sky-500/20">
-                <i className="fas fa-file-shield text-lg"></i>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${isCommunity ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 'bg-sky-500/10 text-sky-400 border-sky-500/20'}`}>
+                <i className={`fas ${isCommunity ? 'fa-lock' : 'fa-file-shield'} text-lg`}></i>
               </div>
               <div>
-                <h2 className="text-sm font-bold text-white">Client Distribution Package</h2>
-                <p className="text-xs text-gray-400">Export SHA-256 signed JSON for client deployment (Read-Only Mode)</p>
+                <div className="flex items-center space-x-2">
+                  <h2 className="text-sm font-bold text-white">Client Distribution Package</h2>
+                  {isCommunity && (
+                    <span className="text-[9px] font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.2 rounded">
+                      Locked
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400">
+                  {isCommunity ? 'Unlock with Engineering Edition or Client Package' : 'Export SHA-256 signed JSON for client deployment (Read-Only Mode)'}
+                </p>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
               <button 
-                onClick={onRequestExportClientPackage}
-                className="w-full bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-slate-950 py-3 rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg shadow-sky-500/20 active:scale-95 transition-all flex items-center justify-center space-x-2"
+                onClick={() => {
+                  if (isCommunity) {
+                    alert('🔒 Client Package Export is locked in Community Edition. Unlock with Engineering Edition or Client Package.');
+                    return;
+                  }
+                  onRequestExportClientPackage();
+                }}
+                className="w-full bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-slate-950 py-3 rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg shadow-sky-500/20 active:scale-95 transition-all flex items-center justify-center space-x-2 cursor-pointer"
               >
+                {isCommunity && <i className="fas fa-lock text-slate-950 text-xs"></i>}
                 <i className="fas fa-file-export text-sm"></i>
                 <span>Export Client Package</span>
               </button>
               <button 
                 onClick={() => setShowInspectModal(true)}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-amber-400 border border-amber-500/30 py-3 rounded-xl font-bold text-xs uppercase tracking-wider shadow-md active:scale-95 transition-all flex items-center justify-center space-x-2"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-amber-400 border border-amber-500/30 py-3 rounded-xl font-bold text-xs uppercase tracking-wider shadow-md active:scale-95 transition-all flex items-center justify-center space-x-2 cursor-pointer"
               >
                 <i className="fas fa-microscope text-sm"></i>
                 <span>Inspect Package (.tasc)</span>
@@ -179,27 +197,39 @@ const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
         {/* Action Buttons */}
         <div className="grid grid-cols-2 gap-4">
           <button 
-            disabled={isCommunity}
-            onClick={() => setShowExcludeDialog(true)}
-            className={`py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg transition-all flex items-center justify-center space-x-2 ${
+            onClick={() => {
+              if (isCommunity) {
+                alert('🔒 Export Backup is locked in Community Edition. Unlock with Engineering Edition or Client Package.');
+                return;
+              }
+              setShowExcludeDialog(true);
+            }}
+            className={`py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg transition-all flex items-center justify-center space-x-2 cursor-pointer ${
               isCommunity 
-                ? 'bg-slate-800/50 text-slate-500 border border-slate-800 cursor-not-allowed opacity-50' 
-                : 'bg-amber-500 hover:bg-amber-400 text-black active:scale-95 cursor-pointer'
+                ? 'bg-slate-900 text-amber-400/90 border border-amber-500/30 hover:bg-slate-800' 
+                : 'bg-amber-500 hover:bg-amber-400 text-black active:scale-95'
             }`}
           >
+            {isCommunity && <i className="fas fa-lock text-amber-400 text-xs"></i>}
             <i className="fas fa-download text-sm"></i>
             <span>Export Backup</span>
           </button>
 
           <button 
-            disabled={isCommunity}
-            onClick={() => fileInputRef.current?.click()}
-            className={`py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg transition-all flex items-center justify-center space-x-2 ${
+            onClick={() => {
+              if (isCommunity) {
+                alert('🔒 Restore Backup is locked in Community Edition. Unlock with Engineering Edition or Client Package.');
+                return;
+              }
+              fileInputRef.current?.click();
+            }}
+            className={`py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg transition-all flex items-center justify-center space-x-2 cursor-pointer ${
               isCommunity 
-                ? 'bg-slate-800/50 text-slate-500 border border-slate-800 cursor-not-allowed opacity-50' 
-                : 'bg-[#181818] hover:bg-[#222] border border-[#333] text-white active:scale-95 cursor-pointer'
+                ? 'bg-slate-900 text-amber-400/90 border border-amber-500/30 hover:bg-slate-800' 
+                : 'bg-[#181818] hover:bg-[#222] border border-[#333] text-white active:scale-95'
             }`}
           >
+            {isCommunity && <i className="fas fa-lock text-amber-400 text-xs"></i>}
             <i className="fas fa-upload text-sm text-amber-500"></i>
             <span>Restore Backup</span>
           </button>
@@ -214,14 +244,20 @@ const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
         </div>
 
         <button 
-          disabled={isCommunity}
-          onClick={() => setShowShareModal(true)}
-          className={`w-full py-4 rounded-xl font-bold uppercase tracking-wider text-xs flex items-center justify-center space-x-3 border transition-all ${
+          onClick={() => {
+            if (isCommunity) {
+              alert('🔒 Share Config Payload is locked in Community Edition. Unlock with Engineering Edition or Client Package.');
+              return;
+            }
+            setShowShareModal(true);
+          }}
+          className={`w-full py-4 rounded-xl font-bold uppercase tracking-wider text-xs flex items-center justify-center space-x-3 border transition-all cursor-pointer ${
             isCommunity 
-              ? 'bg-slate-800/50 text-slate-500 border-slate-800 cursor-not-allowed opacity-50' 
-              : 'bg-[#121212] hover:bg-[#181818] text-white border-[#262626] active:scale-95 cursor-pointer'
+              ? 'bg-slate-900 text-amber-400/90 border-amber-500/30 hover:bg-slate-800' 
+              : 'bg-[#121212] hover:bg-[#181818] text-white border-[#262626] active:scale-95'
           }`}
         >
+          {isCommunity && <i className="fas fa-lock text-amber-400 text-xs"></i>}
           <i className="fas fa-share-nodes text-blue-400 text-sm"></i>
           <span>Share Config Payload</span>
         </button>

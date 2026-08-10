@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Panel, PanelType, AppState } from '../types';
 import IconPicker from './IconPicker';
 import ColorPicker from './ColorPicker';
 import TopicAutocompleteInput from './TopicAutocompleteInput';
 import TagAutocompleteInput from './TagAutocompleteInput';
 import { getSmartIconAnimationClass, SmartIcon } from '../utils/iconAnimator';
+import { estimateStorageFootprint, saveHistorianRetentionConfig, getIsStoragePersisted, detectOEMBrowserWarning } from '../utils/trendHistorianEngine';
 
 interface EditPanelModalProps {
   panel: Partial<Panel>;
@@ -20,6 +21,8 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
   const [pickingColorFor, setPickingColorFor] = useState<'iconOn' | 'iconOff' | 'first' | 'second' | 'third' | null>(null);
   const [optionsStr, setOptionsStr] = useState('');
   const [optionItems, setOptionItems] = useState<{ label: string; value: string }[]>([]);
+  const [historianCustomIntervalError, setHistorianCustomIntervalError] = useState<string | null>(null);
+  const [historianSectionOpen, setHistorianSectionOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -68,6 +71,7 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
         graphType: panel.graphType ?? 'line',
         showGrid: panel.showGrid ?? true,
         fillArea: panel.fillArea ?? true,
+        showNodeMarkers: panel.showNodeMarkers ?? false,
         iconOn: panel.iconOn ?? 'fa-fan',
         iconOff: panel.iconOff ?? 'fa-fan',
         iconColorOn: panel.iconColorOn ?? '#10b981',
@@ -90,7 +94,22 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
         midAlarmMsg: panel.midAlarmMsg ?? 'Mid Zone Warning',
         highAlarmMsg: panel.highAlarmMsg ?? 'High Critical Alarm',
         options: initialOptionItems.map(o => `${o.label}:${o.value}`),
-        optionItems: initialOptionItems
+        optionItems: initialOptionItems,
+        alarmViewMode: panel.alarmViewMode ?? 'live',
+        pageSize: panel.pageSize ?? 5,
+        maxDisplayRows: panel.maxDisplayRows ?? 100,
+        // Historian logging fields
+        enableHistorianLogging: panel.enableHistorianLogging ?? false,
+        logIntervalSeconds: panel.logIntervalSeconds ?? 10,
+        retentionValue: (appState?.userRole === 'community' || appState?.productEdition === 'community') ? 1 : (panel.retentionValue ?? 7),
+        retentionUnit: (appState?.userRole === 'community' || appState?.productEdition === 'community') ? 'HOURS' : (panel.retentionUnit ?? 'DAYS'),
+        logStorageCapMb: panel.logStorageCapMb ?? 500,
+        // Historian interval preset (separate from actual logIntervalSeconds for custom entry)
+        _historianIntervalPreset: (() => {
+          const v = panel.logIntervalSeconds ?? 10;
+          if ([1, 10, 60, 300, 600].includes(v)) return String(v);
+          return 'custom';
+        })()
       });
       setOptionsStr(initialOptionItems.map(o => `${o.label}:${o.value}`).join(', '));
     }
@@ -1076,57 +1095,97 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
                 </span>
               </span>
 
-              {/* Animate Equipment Checkbox & Speed Selector */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-black/30 p-3 rounded-lg border border-white/5">
-                <div className="flex items-center space-x-3">
+              {/* Equipment Motion Animation Controls (ON & OFF States) */}
+              <div className="space-y-3 bg-black/30 p-3 rounded-lg border border-white/5">
+                <div className="text-xs text-sky-300 font-bold flex items-center space-x-1.5 border-b border-slate-800 pb-1.5">
+                  <i className="fas fa-arrows-rotate text-sky-400 text-xs"></i>
+                  <span>Equipment Motion & Speed Controls</span>
+                </div>
+
+                {/* ON State Motion Config */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-emerald-500/5 p-2.5 rounded border border-emerald-500/20">
                   <label className="flex items-center space-x-2 cursor-pointer select-none">
                     <input 
                       type="checkbox"
                       name="rotateOn"
-                      checked={!!formData.rotateOn}
-                      onChange={handleChange}
-                      className="w-4 h-4 accent-sky-500 rounded cursor-pointer"
+                      checked={formData.rotateOn !== false}
+                      onChange={(e) => setFormData((prev: any) => ({ ...prev, rotateOn: e.target.checked }))}
+                      className="w-4 h-4 accent-emerald-500 rounded cursor-pointer"
                     />
-                    <span className="text-xs text-gray-200 font-bold flex items-center space-x-1">
-                      <i className="fas fa-arrows-rotate text-sky-400 text-xs"></i>
-                      <span>⚡ Animate Equipment Motion</span>
+                    <span className="text-xs text-emerald-300 font-bold flex items-center space-x-1">
+                      <i className="fas fa-play text-emerald-400 text-[10px]"></i>
+                      <span>Animate Motion when ON</span>
                     </span>
                   </label>
+
+                  {formData.rotateOn !== false && (
+                    <div className="flex items-center space-x-2">
+                      <label className="text-[11px] text-emerald-200 font-semibold shrink-0">ON Speed:</label>
+                      <select
+                        name="animSpeedOn"
+                        value={formData.animSpeedOn || 'medium'}
+                        onChange={handleChange}
+                        className="w-full bg-slate-900 border border-emerald-500/50 text-xs text-emerald-300 font-bold px-2 py-1 rounded outline-none cursor-pointer"
+                      >
+                        <option value="slow">Slow (Low RPM)</option>
+                        <option value="medium">Medium (Standard - Default)</option>
+                        <option value="fast">Fast (High RPM)</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
 
-                {formData.rotateOn && (
-                  <div className="flex items-center space-x-2">
-                    <label className="text-xs text-slate-400 font-semibold shrink-0">Animation Speed:</label>
-                    <select
-                      name="animSpeedOn"
-                      value={formData.animSpeedOn || 'medium'}
-                      onChange={handleChange}
-                      className="w-full bg-[#1e1e1e] border border-sky-500/50 text-xs text-sky-300 font-bold px-2 py-1 rounded outline-none cursor-pointer hover:border-sky-400"
-                    >
-                      <option value="slow">Slow (Low RPM / Heavy Duty)</option>
-                      <option value="medium">Medium (Standard - Default)</option>
-                      <option value="fast">Fast (High RPM / Rapid Flow)</option>
-                    </select>
-                  </div>
-                )}
+                {/* OFF State Motion Config */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-rose-500/5 p-2.5 rounded border border-rose-500/20">
+                  <label className="flex items-center space-x-2 cursor-pointer select-none">
+                    <input 
+                      type="checkbox"
+                      name="rotateOff"
+                      checked={!!formData.rotateOff}
+                      onChange={(e) => setFormData((prev: any) => ({ ...prev, rotateOff: e.target.checked }))}
+                      className="w-4 h-4 accent-rose-500 rounded cursor-pointer"
+                    />
+                    <span className="text-xs text-slate-300 font-bold flex items-center space-x-1">
+                      <i className="fas fa-stop text-rose-400 text-[10px]"></i>
+                      <span>Animate Motion when OFF</span>
+                    </span>
+                  </label>
+
+                  {formData.rotateOff && (
+                    <div className="flex items-center space-x-2">
+                      <label className="text-[11px] text-slate-400 font-semibold shrink-0">OFF Speed:</label>
+                      <select
+                        name="animSpeedOff"
+                        value={formData.animSpeedOff || 'medium'}
+                        onChange={handleChange}
+                        className="w-full bg-slate-900 border border-slate-700 text-xs text-slate-300 font-bold px-2 py-1 rounded outline-none cursor-pointer"
+                      >
+                        <option value="slow">Slow (Low RPM)</option>
+                        <option value="medium">Medium (Standard)</option>
+                        <option value="fast">Fast (High RPM)</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Start / Stop Trigger Condition */}
+              {/* Start / Stop Motion Condition */}
               <div className="space-y-3 pt-2 border-t border-slate-800">
                 <label className="text-xs text-emerald-400 font-bold uppercase tracking-wider block">
-                  Equipment Start / Stop Motion Condition
+                  Equipment Motion Evaluation Trigger
                 </label>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <select
                       name="pipeAnimCondition"
-                      value={formData.pipeAnimCondition || 'always'}
+                      value={formData.pipeAnimCondition || 'on_state'}
                       onChange={(e) => setFormData((prev: any) => ({ ...prev, pipeAnimCondition: e.target.value }))}
                       className="w-full bg-slate-900 text-white rounded-lg p-2 text-xs border border-slate-700 font-semibold"
                     >
-                      <option value="always">⚡ Animate Always (Continuous Running)</option>
-                      <option value="tag_condition">🏷️ Animate when Equipment is RUNNING / Active</option>
+                      <option value="on_state">🟢 Animate when ON / Running (Stop when OFF)</option>
+                      <option value="always">⚡ Animate Always (Continuous Motion)</option>
+                      <option value="tag_condition">🏷️ Animate when Custom Tag Condition matches</option>
                     </select>
                   </div>
 
@@ -1362,6 +1421,87 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {isAlarmLog && (
+            <div className="space-y-4 pt-3 border-t border-[#262626] bg-[#121824] p-4 rounded-xl border border-indigo-500/30">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-indigo-400 font-bold uppercase tracking-wider flex items-center space-x-2">
+                  <i className="fas fa-history text-xs text-indigo-400"></i>
+                  <span>Alarm Historian Element Configuration</span>
+                </label>
+                <span className="text-[10px] text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded font-mono border border-indigo-500/20">
+                  Live & Historian Log
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Configure default display view mode, window scroll behavior, and optimized paging system for this Alarm Historian element.
+              </p>
+
+              {/* Display Mode Selector */}
+              <div>
+                <label className="text-xs text-slate-200 font-bold block mb-1">
+                  Default Display View Mode (Live vs Historian)
+                </label>
+                <select
+                  name="alarmViewMode"
+                  value={formData.alarmViewMode || 'live'}
+                  onChange={handleChange}
+                  className="w-full bg-slate-900 text-white rounded-lg p-2.5 text-xs border border-slate-700 font-bold focus:border-indigo-400 focus:outline-none"
+                >
+                  <option value="live">🔴 Live Active Monitor (Active Unack & Active Ack Only)</option>
+                  <option value="historian">📜 Full Historical Alarm Log (All Active & Resolved Events)</option>
+                </select>
+                <span className="text-[10px] text-slate-400 block mt-1">
+                  Operators can also toggle between Live and Historian modes dynamically on the element view.
+                </span>
+              </div>
+
+              {/* Page Size & Max Display Rows */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                <div>
+                  <label className="text-xs text-slate-200 font-bold block mb-1">
+                    Rows Per Page (Paging System)
+                  </label>
+                  <select
+                    name="pageSize"
+                    value={formData.pageSize ?? 5}
+                    onChange={(e) => setFormData((prev: any) => ({ ...prev, pageSize: Number(e.target.value) }))}
+                    className="w-full bg-slate-900 text-white rounded-lg p-2.5 text-xs border border-slate-700 font-mono focus:border-indigo-400 focus:outline-none"
+                  >
+                    <option value={3}>3 rows per page</option>
+                    <option value={5}>5 rows per page (Default)</option>
+                    <option value={10}>10 rows per page</option>
+                    <option value={15}>15 rows per page</option>
+                    <option value={25}>25 rows per page</option>
+                  </select>
+                  <span className="text-[10px] text-slate-400 block mt-1">
+                    Paging optimizes rendering performance for fast, responsive UI scrolling.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-200 font-bold block mb-1">
+                    Maximum Total Display Limit
+                  </label>
+                  <select
+                    name="maxDisplayRows"
+                    value={formData.maxDisplayRows ?? 100}
+                    onChange={(e) => setFormData((prev: any) => ({ ...prev, maxDisplayRows: Number(e.target.value) }))}
+                    className="w-full bg-slate-900 text-white rounded-lg p-2.5 text-xs border border-slate-700 font-mono focus:border-indigo-400 focus:outline-none"
+                  >
+                    <option value={25}>Latest 25 Events</option>
+                    <option value={50}>Latest 50 Events</option>
+                    <option value={100}>Latest 100 Events (Default)</option>
+                    <option value={250}>Latest 250 Events</option>
+                    <option value={500}>Latest 500 Events</option>
+                  </select>
+                  <span className="text-[10px] text-slate-400 block mt-1">
+                    Maximum total historical entries fetched for this element.
+                  </span>
+                </div>
               </div>
             </div>
           )}
@@ -1641,13 +1781,13 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
           )}
 
           {isLineGraph && (
-            <div className="space-y-4 pt-3 border-t border-[#262626] bg-[#161616] p-4 rounded-xl border border-sky-500/30">
+            <div className="space-y-5 pt-3 border-t border-[#262626] bg-[#161616] p-4 rounded-xl border border-sky-500/30">
               <div className="flex items-center justify-between">
                 <label className="text-xs text-sky-400 font-bold uppercase tracking-wider flex items-center space-x-2">
                   <i className="fas fa-chart-line text-xs text-sky-400"></i>
-                  <span>Line Graph / Trend Chart Settings</span>
+                  <span>Industrial Trend & Multi-Pen Graph Settings</span>
                 </label>
-                <span className="text-[10px] text-sky-300 bg-sky-500/10 px-2 py-0.5 rounded font-mono border border-sky-500/20">Telemetry Visualization</span>
+                <span className="text-[10px] text-sky-300 bg-sky-500/10 px-2 py-0.5 rounded font-mono border border-sky-500/20">TASCTrendz SCADA Engine</span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1657,17 +1797,19 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
                     name="graphType"
                     value={formData.graphType || 'line'}
                     onChange={handleChange}
-                    className="w-full bg-slate-900 border border-slate-700 text-white rounded-lg p-2 text-xs outline-none focus:border-sky-500"
+                    className="w-full bg-slate-900 border border-slate-700 text-white rounded-lg p-2 text-xs outline-none focus:border-sky-500 cursor-pointer"
                   >
-                    <option value="line">Line Graph</option>
-                    <option value="bar">Bar Graph</option>
-                    <option value="hbar">Horizontal Bar Graph (H Graph)</option>
-                    <option value="area">Filled Area Chart</option>
+                    <option value="line">📈 Line — Crisp linear trend</option>
+                    <option value="curve">〰️ Curve — Smooth Bézier spline</option>
+                    <option value="stepped">⬜ Stepped — SCADA digital step</option>
+                    <option value="bar">📊 Bar — Vertical bar chart</option>
+                    <option value="hbar">▬ H-Bar — Horizontal level gauge</option>
+                    <option value="area">🏔 Area — Filled area chart</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="text-xs text-amber-500 font-bold block mb-1">Pen / Chart Color</label>
+                  <label className="text-xs text-amber-500 font-bold block mb-1">Primary Pen Color</label>
                   <div className="flex items-center space-x-2">
                     <input
                       type="color"
@@ -1705,7 +1847,7 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
                   />
                 </div>
 
-                <div className="flex items-center space-x-4 pt-3">
+              <div className="flex flex-wrap items-center gap-4 pt-2">
                   <label className="flex items-center space-x-2 cursor-pointer text-xs text-gray-300 select-none">
                     <input
                       type="checkbox"
@@ -1724,24 +1866,598 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
                       onChange={handleChange}
                       className="w-4 h-4 accent-sky-500 rounded cursor-pointer"
                     />
-                    <span>Area Fill</span>
+                    <span>Area Fill (Filled vs Non-Filled)</span>
+                  </label>
+                  <label className="flex items-center space-x-2 cursor-pointer text-xs text-amber-300 font-semibold select-none" title="Show small dot markers at each data sample point on the trend line">
+                    <input
+                      type="checkbox"
+                      name="showNodeMarkers"
+                      checked={formData.showNodeMarkers === true}
+                      onChange={handleChange}
+                      className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                    />
+                    <span>Show Node Markers (sample dots)</span>
                   </label>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 pt-2">
-                <div className="relative border-b border-gray-700 py-2">
-                  <label className="text-xs text-amber-500 absolute -top-2 font-bold">Y-Axis Min Limit</label>
-                  <input type="number" name="payloadMin" value={formData.payloadMin ?? 0} onChange={handleChange} className="w-full bg-transparent outline-none text-white py-1 font-mono text-xs" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-800">
+                <label className="flex items-center space-x-2 cursor-pointer text-xs text-emerald-300 font-semibold select-none">
+                  <input
+                    type="checkbox"
+                    name="showMonitoringTable"
+                    checked={formData.showMonitoringTable !== false}
+                    onChange={handleChange}
+                    className="w-4 h-4 accent-emerald-500 rounded cursor-pointer"
+                  />
+                  <span>Enable Monitoring Window Table Below Chart</span>
+                </label>
+
+                <label className="flex items-center space-x-2 cursor-pointer text-xs text-sky-300 font-semibold select-none">
+                  <input
+                    type="checkbox"
+                    name="enableDualCursor"
+                    checked={formData.enableDualCursor || false}
+                    onChange={handleChange}
+                    className="w-4 h-4 accent-sky-500 rounded cursor-pointer"
+                  />
+                  <span>Enable Dual Cursors by Default (Δt & Δv)</span>
+                </label>
+              </div>
+
+              {/* Monitoring Window Column Customization */}
+              {formData.showMonitoringTable !== false && (
+                <div className="bg-slate-900/60 rounded-xl p-3 border border-slate-800 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-200 flex items-center space-x-1.5">
+                      <i className="fas fa-table-columns text-emerald-400 text-xs"></i>
+                      <span>Monitoring Table Visible Columns</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400">Toggle columns on/off</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                    {[
+                      { key: 'status', label: 'Signal Status', def: true },
+                      { key: 'lastVal', label: 'Last Value', def: true },
+                      { key: 'lastTime', label: 'Last Time', def: true },
+                      { key: 'c1Val', label: 'C1 Value', def: true },
+                      { key: 'c1Time', label: 'C1 Time', def: true },
+                      { key: 'c2Val', label: 'C2 Value', def: true },
+                      { key: 'c2Time', label: 'C2 Time', def: true },
+                      { key: 'valDiff', label: 'Δv (Value Diff)', def: true },
+                      { key: 'timeDiff', label: 'Δt (Time Diff)', def: true },
+                      { key: 'minVal', label: 'Min (Time Frame)', def: true },
+                      { key: 'maxVal', label: 'Max (Time Frame)', def: true },
+                      { key: 'avgVal', label: 'Avg (Time Frame)', def: true }
+                    ].map(col => {
+                      const isChecked = formData.tableColumns?.[col.key] ?? col.def;
+                      return (
+                        <label key={col.key} className="flex items-center space-x-1.5 cursor-pointer text-slate-300 hover:text-white select-none bg-slate-950/50 p-1.5 rounded border border-slate-800/80">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setFormData((prev: any) => ({
+                                ...prev,
+                                tableColumns: {
+                                  ...(prev.tableColumns || {}),
+                                  [col.key]: checked
+                                }
+                              }));
+                            }}
+                            className="w-3.5 h-3.5 accent-emerald-500 rounded cursor-pointer"
+                          />
+                          <span className="truncate">{col.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="relative border-b border-gray-700 py-2">
-                  <label className="text-xs text-amber-500 absolute -top-2 font-bold">Y-Axis Max Limit</label>
-                  <input type="number" name="payloadMax" value={formData.payloadMax ?? 100} onChange={handleChange} className="w-full bg-transparent outline-none text-white py-1 font-mono text-xs" />
+              )}
+
+              {/* Multi-Pen Configuration List */}
+              <div className="pt-3 border-t border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-200 flex items-center space-x-1.5">
+                    <i className="fas fa-layer-group text-sky-400 text-xs"></i>
+                    <span>Multi-Pen Configuration (TASCTrendz Multi-Topic Pens)</span>
+                  </label>
+                  {(() => {
+                    const isCommunity = appState?.userRole === 'community' || appState?.productEdition === 'community';
+                    const isPenLimitReached = isCommunity && (formData.pens?.length || 0) >= 2;
+                    return (
+                      <button
+                        type="button"
+                        disabled={isPenLimitReached}
+                        onClick={() => {
+                          if (isPenLimitReached) return;
+                          const newPen = {
+                            id: `pen_${Date.now()}`,
+                            name: `Pen ${((formData.pens?.length || 0) + 1)}`,
+                            topic: formData.topic || '',
+                            jsonPath: '',
+                            color: ['#38bdf8', '#f43f5e', '#10b981', '#f59e0b', '#a855f7'][(formData.pens?.length || 0) % 5],
+                            thickness: 2,
+                            unit: formData.unit || '',
+                            showNodeMarkers: false
+                          };
+                          setFormData((prev: any) => ({
+                            ...prev,
+                            pens: [...(prev.pens || []), newPen]
+                          }));
+                        }}
+                        className={`px-2.5 py-1 rounded text-xs font-bold transition-all flex items-center space-x-1 ${
+                          isPenLimitReached
+                            ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-70'
+                            : 'bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 cursor-pointer'
+                        }`}
+                        title={isPenLimitReached ? "Free Demo Limit: Maximum 2 Pens allowed in Community Edition." : "Add a new trend pen"}
+                      >
+                        <i className={isPenLimitReached ? "fas fa-lock text-[10px]" : "fas fa-plus text-[10px]"}></i>
+                        <span>{isPenLimitReached ? 'Max 2 Pens (Free Demo)' : '+ Add Pen'}</span>
+                      </button>
+                    );
+                  })()}
+                </div>
+
+                {(appState?.userRole === 'community' || appState?.productEdition === 'community') && (
+                  <div className="p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-300 text-[11px] font-medium flex items-center space-x-2">
+                    <i className="fas fa-crown text-amber-400 text-xs shrink-0"></i>
+                    <span>Free Demo Active: Maximum <strong>2 Pens</strong> per Trend panel allowed. Upgrade to Engineering Studio for unlimited pens.</span>
+                  </div>
+                )}
+
+                {formData.pens && formData.pens.length > 0 ? (
+                  <div className="space-y-2.5">
+                    {formData.pens.map((pen: any, idx: number) => (
+                      <div key={pen.id || idx} className="bg-slate-900/80 rounded-xl border border-slate-700/60 overflow-hidden">
+                        {/* Pen Header Row */}
+                        <div className="flex items-center gap-2 px-3 py-2">
+                          {/* Color swatch */}
+                          <input
+                            type="color"
+                            value={pen.color || '#38bdf8'}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setFormData((prev: any) => ({
+                                ...prev,
+                                pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, color: val } : p)
+                              }));
+                            }}
+                            className="w-7 h-7 bg-transparent rounded-md border border-slate-600 cursor-pointer shrink-0"
+                            title="Pen Color"
+                          />
+                          {/* Pen name */}
+                          <input
+                            type="text"
+                            value={pen.name || ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setFormData((prev: any) => ({
+                                ...prev,
+                                pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, name: val } : p)
+                              }));
+                            }}
+                            placeholder="Pen Name"
+                            className="w-28 bg-slate-950 border border-slate-700 text-white rounded-lg px-2 py-1.5 text-xs outline-none focus:border-sky-500 font-semibold"
+                          />
+                          {/* MQTT Topic */}
+                          <input
+                            type="text"
+                            value={pen.topic || ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setFormData((prev: any) => ({
+                                ...prev,
+                                pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, topic: val } : p)
+                              }));
+                            }}
+                            placeholder="MQTT Topic (e.g. sensors/tank1/level)"
+                            className="flex-1 bg-slate-950 border border-slate-700 text-white rounded-lg px-2 py-1.5 text-xs outline-none focus:border-sky-500 font-mono"
+                          />
+                          {/* Remove button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFormData((prev: any) => ({
+                                ...prev,
+                                pens: prev.pens.filter((_: any, i: number) => i !== idx)
+                              }));
+                            }}
+                            className="text-rose-400 hover:text-rose-300 p-1.5 rounded-lg hover:bg-rose-500/10 cursor-pointer shrink-0 transition-colors"
+                            title="Remove Pen"
+                          >
+                            <i className="fas fa-trash-can text-xs"></i>
+                          </button>
+                        </div>
+
+                        {/* Per-Pen Advanced Settings Row */}
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 pb-3 border-t border-slate-800/60 pt-2">
+                          {/* JSONPath Query — per pen */}
+                          <div className="flex-1 min-w-[180px]">
+                            <label className="text-[10px] text-sky-400 font-bold block mb-0.5 flex items-center gap-1">
+                              <i className="fas fa-code text-[9px]"></i> JSONPath Query (this pen)
+                            </label>
+                            <input
+                              type="text"
+                              value={pen.jsonPath || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setFormData((prev: any) => ({
+                                  ...prev,
+                                  pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, jsonPath: val } : p)
+                                }));
+                              }}
+                              placeholder="$.d.value or $.sensor[0] (blank = raw)"
+                              className="w-full bg-slate-950 border border-slate-700/80 text-emerald-300 rounded-lg px-2 py-1 text-[11px] font-mono outline-none focus:border-sky-500 placeholder:text-slate-600"
+                            />
+                          </div>
+
+                          {/* Thickness */}
+                          <div className="flex items-center gap-2 shrink-0">
+                            <label className="text-[10px] text-slate-400 font-bold whitespace-nowrap">Thickness</label>
+                            <input
+                              type="range" min="1" max="6" step="1"
+                              value={pen.thickness ?? 2}
+                              onChange={(e) => {
+                                const val = Number(e.target.value);
+                                setFormData((prev: any) => ({
+                                  ...prev,
+                                  pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, thickness: val } : p)
+                                }));
+                              }}
+                              className="w-20 accent-sky-500 cursor-pointer"
+                            />
+                            <span className="text-[10px] text-slate-400 font-mono w-3">{pen.thickness ?? 2}</span>
+                          </div>
+
+                          {/* Unit */}
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <label className="text-[10px] text-slate-400 font-bold">Unit</label>
+                            <input
+                              type="text"
+                              value={pen.unit || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setFormData((prev: any) => ({
+                                  ...prev,
+                                  pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, unit: val } : p)
+                                }));
+                              }}
+                              placeholder="e.g. °C"
+                              className="w-14 bg-slate-950 border border-slate-700 text-white rounded px-1.5 py-1 text-[11px] outline-none focus:border-sky-500 font-mono text-center"
+                            />
+                          </div>
+
+                          {/* Node markers toggle */}
+                          <label className="flex items-center gap-1.5 cursor-pointer text-[10px] text-amber-300 select-none shrink-0">
+                            <input
+                              type="checkbox"
+                              checked={pen.showNodeMarkers === true}
+                              onChange={(e) => {
+                                const val = e.target.checked;
+                                setFormData((prev: any) => ({
+                                  ...prev,
+                                  pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, showNodeMarkers: val } : p)
+                                }));
+                              }}
+                              className="w-3.5 h-3.5 accent-amber-500 cursor-pointer"
+                            />
+                            <span>Show Dots</span>
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2 bg-slate-900/40 border border-slate-800 rounded-lg p-3">
+                    <i className="fas fa-info-circle text-sky-400 text-sm mt-0.5 shrink-0"></i>
+                    <p className="text-[11px] text-slate-400">
+                      Single pen mode — uses the Primary MQTT Topic above. Click <strong className="text-sky-300">+ Add Pen</strong> to chart multiple telemetry tags simultaneously, each with its own MQTT topic and JSONPath query.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-3 pt-2 border-t border-slate-800">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center space-x-2 cursor-pointer text-xs text-sky-300 font-semibold select-none">
+                    <input
+                      type="checkbox"
+                      name="autoScaleY"
+                      checked={formData.autoScaleY || false}
+                      onChange={handleChange}
+                      className="w-4 h-4 accent-sky-500 rounded cursor-pointer"
+                    />
+                    <span>Auto Scale Y-Axis Ticks (Fit to live signal dynamic range)</span>
+                  </label>
+                  {formData.autoScaleY && (
+                    <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+                      Manual limits disabled
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className={`relative border-b py-2 transition-opacity ${formData.autoScaleY ? 'border-gray-800 opacity-40 pointer-events-none' : 'border-gray-700'}`}>
+                    <label className="text-xs text-amber-500 absolute -top-2 font-bold">Y-Axis Min Limit</label>
+                    <input
+                      type="number"
+                      name="payloadMin"
+                      disabled={formData.autoScaleY || false}
+                      value={formData.payloadMin ?? 0}
+                      onChange={handleChange}
+                      className="w-full bg-transparent outline-none text-white py-1 font-mono text-xs disabled:cursor-not-allowed"
+                    />
+                  </div>
+                  <div className={`relative border-b py-2 transition-opacity ${formData.autoScaleY ? 'border-gray-800 opacity-40 pointer-events-none' : 'border-gray-700'}`}>
+                    <label className="text-xs text-amber-500 absolute -top-2 font-bold">Y-Axis Max Limit</label>
+                    <input
+                      type="number"
+                      name="payloadMax"
+                      disabled={formData.autoScaleY || false}
+                      value={formData.payloadMax ?? 100}
+                      onChange={handleChange}
+                      className="w-full bg-transparent outline-none text-white py-1 font-mono text-xs disabled:cursor-not-allowed"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
+          {/* ── Historian Logging Section (LINE_GRAPH only) ── */}
+          {isLineGraph && (
+            <div className="space-y-0 border border-violet-500/40 rounded-xl overflow-hidden bg-[#0e0a1a]">
+              {/* Header / Toggle */}
+              <button
+                type="button"
+                onClick={() => setHistorianSectionOpen(p => !p)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-violet-900/20 hover:bg-violet-900/30 transition-colors cursor-pointer"
+              >
+                <div className="flex items-center space-x-2">
+                  <i className="fas fa-database text-violet-400 text-xs"></i>
+                  <span className="text-xs text-violet-300 font-bold uppercase tracking-wider">📼 Historian & Persistent Trend Logging</span>
+                  {formData.enableHistorianLogging && (
+                    <span className="text-[9px] bg-violet-500 text-white px-1.5 py-0.5 rounded font-bold">ACTIVE</span>
+                  )}
+                </div>
+                <i className={`fas fa-chevron-${historianSectionOpen ? 'up' : 'down'} text-violet-400 text-xs`}></i>
+              </button>
+
+              {historianSectionOpen && (() => {
+                // Live storage estimation
+                const activePenList = formData.pens && formData.pens.length > 0 ? formData.pens.filter((p: any) => p.loggingEnabled !== false) : [];
+                const pensCount = formData.pens && formData.pens.length > 0 ? Math.max(1, activePenList.length) : 1;
+                const intervalSec = formData.logIntervalSeconds ?? 10;
+                const retentionVal = formData.retentionValue ?? 7;
+
+                const retentionUnit = formData.retentionUnit ?? 'DAYS';
+                const isPersisted = getIsStoragePersisted(); // true when Android storage.persist() granted
+                const estimate = estimateStorageFootprint(pensCount, intervalSec, retentionVal, retentionUnit, isPersisted);
+                const oemWarning = detectOEMBrowserWarning();
+                const tierColors = {
+                  safe: { bg: 'bg-emerald-900/30', border: 'border-emerald-500/40', text: 'text-emerald-300', icon: '🟢', label: isPersisted ? 'Safe — Android OS eviction protection active' : 'Safe for mobile & desktop' },
+                  warn: { bg: 'bg-amber-900/30', border: 'border-amber-500/40', text: 'text-amber-300', icon: '🟡', label: 'Warning: May be evicted on iOS Safari (7-day inactivity rule)' },
+                  critical: { bg: 'bg-rose-900/30', border: 'border-rose-500/40', text: 'text-rose-300', icon: '🔴', label: 'Critical: Use on PC/Industrial Panel only' },
+                };
+                const tc = tierColors[estimate.tier];
+
+                return (
+                  <div className="p-4 space-y-4">
+                    {/* Android OEM Browser Warning */}
+                    {oemWarning && (
+                      <div className="flex items-start space-x-2 bg-rose-900/20 border border-rose-500/40 rounded-lg p-2.5">
+                        <span className="text-sm shrink-0">⚠️</span>
+                        <p className="text-[10px] text-rose-300 leading-relaxed">
+                          <strong>Browser Compatibility Warning:</strong> {oemWarning}
+                        </p>
+                      </div>
+                    )}
+                    {/* Enable toggle */}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <label className="text-xs text-violet-200 font-semibold">Enable Persistent Local Historian Logging</label>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Stores telemetry to browser IndexedDB with FIFO auto-archiving</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFormData((p: any) => ({ ...p, enableHistorianLogging: !p.enableHistorianLogging }))}
+                        className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${
+                          formData.enableHistorianLogging ? 'bg-violet-500' : 'bg-slate-700'
+                        }`}
+                      >
+                        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                          formData.enableHistorianLogging ? 'translate-x-5' : 'translate-x-0.5'
+                        }`} />
+                      </button>
+                    </div>
+
+                    {formData.enableHistorianLogging && (<>
+                      {/* Log Sampling Frequency */}
+                      <div className="space-y-2">
+                        <label className="text-[11px] text-violet-300 font-semibold block">Log Sampling Frequency</label>
+                        <div className="flex items-center space-x-2">
+                          <select
+                            value={formData._historianIntervalPreset || '10'}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setHistorianCustomIntervalError(null);
+                              if (val !== 'custom') {
+                                setFormData((p: any) => ({ ...p, _historianIntervalPreset: val, logIntervalSeconds: parseInt(val) }));
+                              } else {
+                                setFormData((p: any) => ({ ...p, _historianIntervalPreset: 'custom' }));
+                              }
+                            }}
+                            className="bg-slate-900 border border-slate-700 text-white rounded px-2 py-1.5 text-xs outline-none focus:border-violet-500"
+                          >
+                            <option value="1">1 Second (High Resolution)</option>
+                            <option value="10">10 Seconds</option>
+                            <option value="60">1 Minute</option>
+                            <option value="300">5 Minutes</option>
+                            <option value="600">10 Minutes (Low Bandwidth)</option>
+                            <option value="custom">Custom Interval...</option>
+                          </select>
+                          {formData._historianIntervalPreset === 'custom' && (
+                            <div className="flex items-center space-x-1">
+                              <input
+                                type="number"
+                                min={1}
+                                placeholder="Seconds"
+                                value={formData.logIntervalSeconds ?? ''}
+                                onChange={(e) => {
+                                  const v = parseInt(e.target.value);
+                                  if (isNaN(v) || v < 1) {
+                                    setHistorianCustomIntervalError('⚠ Minimum 1 second allowed');
+                                    setFormData((p: any) => ({ ...p, logIntervalSeconds: 1 }));
+                                  } else {
+                                    setHistorianCustomIntervalError(null);
+                                    setFormData((p: any) => ({ ...p, logIntervalSeconds: v }));
+                                  }
+                                }}
+                                className="w-20 bg-slate-900 border border-violet-600 text-white rounded px-2 py-1.5 text-xs outline-none focus:border-violet-400 font-mono"
+                              />
+                              <span className="text-[10px] text-slate-400">sec</span>
+                            </div>
+                          )}
+                        </div>
+                        {historianCustomIntervalError && (
+                          <p className="text-[10px] text-rose-400">{historianCustomIntervalError}</p>
+                        )}
+                      </div>
+
+                      {/* Retention Period */}
+                      <div className="space-y-2">
+                        <label className="text-[11px] text-violet-300 font-semibold block">History Retention Period</label>
+                        {(() => {
+                          const isCommunity = appState?.userRole === 'community' || appState?.productEdition === 'community';
+                          const unit = formData.retentionUnit || (isCommunity ? 'HOURS' : 'DAYS');
+                          const maxVal = isCommunity ? (unit === 'MINUTES' ? 60 : 1) : 1000;
+
+                          return (
+                            <div className="space-y-1.5">
+                              <div className="flex items-center space-x-2">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={maxVal}
+                                  value={isCommunity ? Math.min(formData.retentionValue ?? 1, maxVal) : (formData.retentionValue ?? 7)}
+                                  onChange={(e) => {
+                                    const val = Math.max(1, parseInt(e.target.value) || 1);
+                                    const clampedVal = isCommunity ? Math.min(val, maxVal) : val;
+                                    setFormData((p: any) => ({ ...p, retentionValue: clampedVal }));
+                                  }}
+                                  className="w-16 bg-slate-900 border border-slate-700 text-white rounded px-2 py-1.5 text-xs outline-none focus:border-violet-500 font-mono text-center font-bold"
+                                />
+                                <select
+                                  value={unit}
+                                  onChange={(e) => {
+                                    const newUnit = e.target.value;
+                                    let newVal = formData.retentionValue ?? 1;
+                                    if (isCommunity) {
+                                      if (newUnit === 'MINUTES') newVal = Math.min(newVal, 60);
+                                      if (newUnit === 'HOURS') newVal = Math.min(newVal, 1);
+                                    }
+                                    setFormData((p: any) => ({ ...p, retentionUnit: newUnit, retentionValue: newVal }));
+                                  }}
+                                  className="bg-slate-900 border border-slate-700 text-white rounded px-2 py-1.5 text-xs outline-none focus:border-violet-500 font-semibold"
+                                >
+                                  <option value="MINUTES">Minutes</option>
+                                  <option value="HOURS">Hours</option>
+                                  <option value="DAYS" disabled={isCommunity}>Days {isCommunity ? '🔒 (Pro)' : ''}</option>
+                                  <option value="WEEKS" disabled={isCommunity}>Weeks {isCommunity ? '🔒 (Pro)' : ''}</option>
+                                  <option value="MONTHS" disabled={isCommunity}>Months {isCommunity ? '🔒 (Pro)' : ''}</option>
+                                  <option value="YEARS" disabled={isCommunity}>Years {isCommunity ? '🔒 (Pro)' : ''}</option>
+                                </select>
+                                <span className="text-[10px] text-slate-400">of history kept</span>
+                              </div>
+
+                              {isCommunity && (
+                                <div className="p-2 bg-amber-500/10 border border-amber-500/30 rounded text-[10px] text-amber-300 flex items-center space-x-1.5 font-medium">
+                                  <i className="fas fa-crown text-amber-400 text-xs shrink-0"></i>
+                                  <span>Free Demo Active: Retention is limited to <strong>1 Hour max</strong> (e.g. 60 Mins / 1 Hour). Upgrade to Engineering Studio to keep data for Days/Weeks/Months.</span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Per-Pen Logging Toggles */}
+                      {formData.pens && formData.pens.length > 0 && (
+                        <div className="space-y-2">
+                          <label className="text-[11px] text-violet-300 font-semibold block">Per-Pen Logging</label>
+                          <div className="space-y-1.5">
+                            {formData.pens.map((pen: any, idx: number) => (
+                              <label key={pen.id || idx} className="flex items-center space-x-2 cursor-pointer group">
+                                <input
+                                  type="checkbox"
+                                  checked={pen.loggingEnabled !== false}
+                                  onChange={(e) => {
+                                    setFormData((p: any) => ({
+                                      ...p,
+                                      pens: p.pens.map((pp: any, i: number) => i === idx ? { ...pp, loggingEnabled: e.target.checked } : pp)
+                                    }));
+                                  }}
+                                  className="w-3.5 h-3.5 accent-violet-500"
+                                />
+                                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: pen.color || '#38bdf8' }}></span>
+                                <span className="text-[11px] text-slate-300 group-hover:text-white transition-colors">{pen.name || pen.topic || `Pen ${idx + 1}`}</span>
+                                <span className="text-[9px] text-slate-500 font-mono">{pen.topic}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Live Storage Estimator Badge */}
+                      <div className={`rounded-lg p-3 border ${tc.bg} ${tc.border}`}>
+                        <div className="flex items-start space-x-2">
+                          <span className="text-sm leading-none mt-0.5">{tc.icon}</span>
+                          <div className="flex-1">
+                            <div className={`text-xs font-bold ${tc.text} flex items-center gap-2`}>
+                              ⚡ Estimated Local Storage: {estimate.formattedSize}
+                              {isPersisted && (
+                                <span className="text-[9px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-bold">
+                                  🤖 Android Protected
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              {estimate.totalPoints.toLocaleString()} points · {pensCount} pen{pensCount > 1 ? 's' : ''} · {formData.logIntervalSeconds}s interval · {formData.retentionValue} {(formData.retentionUnit || 'DAYS').toLowerCase()}
+                            </div>
+                            <div className={`text-[10px] mt-1 ${tc.text} opacity-80`}>{tc.label}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Mobile Advisory — iOS + Android */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-start space-x-2 bg-slate-900/60 border border-slate-700 rounded-lg p-2.5">
+                          <span className="text-sm shrink-0">📱</span>
+                          <div className="text-[10px] text-slate-400 leading-relaxed space-y-1">
+                            <p>
+                              <strong className="text-slate-300">🍎 iOS Safari:</strong> Data cleared after 7 days inactivity.
+                              Install TASC as PWA for better protection. Use PC for long-term retention.
+                            </p>
+                            <p>
+                              <strong className="text-slate-300">🤖 Android Chrome:</strong> TASC requests OS-level <em>persistent storage</em> protection when logging is enabled.
+                              Install as PWA (Add to Home Screen) to also enable background FIFO pruning sync.
+                              Low-RAM OEM devices (MIUI/Huawei/ColorOS) may aggressively kill background tabs — use Chrome, not OEM browser.
+                            </p>
+                            <p className="text-slate-500">
+                              Sub-second logging (&lt;1s) is disabled on all mobile devices to prevent storage thrashing.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </>)}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
           {isOptionsType && (
             <div className="space-y-4 pt-3 border-t border-[#262626] bg-[#161616] p-4 rounded-xl border border-amber-500/30">
               <div className="flex items-center justify-between">
@@ -2178,8 +2894,9 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
           )}
 
           {/* JSONPath Payload Parser & JSON Publish Pattern */}
-          <div className="space-y-4 pt-4 border-t border-[#262626]">
-            <div className="flex items-center space-x-3">
+          {formData.type !== PanelType.LINE_GRAPH && (
+            <div className="space-y-4 pt-4 border-t border-[#262626]">
+              <div className="flex items-center space-x-3">
               <input 
                 type="checkbox" 
                 id="isJSONPayload"
@@ -2262,6 +2979,7 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
               </div>
             )}
           </div>
+          )}
 
           <div className={`grid grid-cols-1 ${isActionable ? 'sm:grid-cols-2' : ''} gap-4 pt-2 border-t border-[#262626]`}>
             <div className="flex items-center space-x-3">

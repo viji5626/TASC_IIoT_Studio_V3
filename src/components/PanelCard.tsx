@@ -657,20 +657,27 @@ const PanelCard: React.FC<PanelCardProps> = ({
 
       case PanelType.LINE_GRAPH:
         return (
-          <div className="w-full flex flex-col space-y-1 py-0.5">
+          <div className="w-full h-full flex flex-col space-y-1 py-0.5">
             {renderHeader(panel.panelName)}
-            <LineGraph 
-              history={history} 
-              unit={panel.unit} 
-              color={panel.penColor || panel.firstColor || '#38bdf8'} 
-              penThickness={panel.penThickness || 2.5}
-              graphType={panel.graphType || 'line'}
-              showGrid={panel.showGrid !== false}
-              fillArea={panel.fillArea !== false}
-              payloadMin={panel.payloadMin}
-              payloadMax={panel.payloadMax}
-              height={isSlim ? 50 : 75}
-            />
+            <div className="flex-1 w-full h-full overflow-hidden">
+              <LineGraph 
+                panel={panel}
+                history={history} 
+                latestValues={latestValues}
+                unit={panel.unit} 
+                color={panel.penColor || panel.firstColor || '#38bdf8'} 
+                penThickness={panel.penThickness || 2.5}
+                graphType={panel.graphType || 'line'}
+                showGrid={panel.showGrid !== false}
+                fillArea={panel.fillArea !== false}
+                showMonitoringTable={panel.showMonitoringTable !== false}
+                enableDualCursor={panel.enableDualCursor}
+                pens={panel.pens}
+                payloadMin={panel.payloadMin}
+                payloadMax={panel.payloadMax}
+                height={isSlim ? 60 : undefined}
+              />
+            </div>
           </div>
         );
 

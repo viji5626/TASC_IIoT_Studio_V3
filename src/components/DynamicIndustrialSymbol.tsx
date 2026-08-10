@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Panel } from '../types';
 import { getAnimationSpeedClass } from '../utils/iconAnimator';
 import { isPanelTripped } from '../utils/tripHelper';
@@ -26,11 +26,51 @@ export const DynamicIndustrialSymbol: React.FC<DynamicIndustrialSymbolProps> = (
   const numVal = typeof liveValue === 'number' && !isNaN(liveValue) 
     ? liveValue 
     : (liveValue !== undefined && liveValue !== null ? parseFloat(String(liveValue)) : NaN);
-  
+
+  const targetNumValue = isNaN(numVal) ? 0 : numVal;
+  const [displayVal, setDisplayVal] = useState<number>(targetNumValue);
+  const requestRef = useRef<number>();
+
+  useEffect(() => {
+    const startValue = displayVal;
+    const targetValue = targetNumValue;
+    
+    if (Math.abs(startValue - targetValue) < 0.01) {
+      setDisplayVal(targetValue);
+      return;
+    }
+
+    const duration = 500; // 500ms smooth transition duration
+    const startTime = performance.now();
+
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const easeProgress = 1 - Math.pow(1 - progress, 3);
+      const currentValue = startValue + (targetValue - startValue) * easeProgress;
+
+      setDisplayVal(currentValue);
+
+      if (progress < 1) {
+        requestRef.current = requestAnimationFrame(animate);
+      } else {
+        setDisplayVal(targetValue);
+      }
+    };
+
+    requestRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (requestRef.current) {
+        cancelAnimationFrame(requestRef.current);
+      }
+    };
+  }, [targetNumValue]);
+
   const min = panel.payloadMin ?? 0;
   const max = panel.payloadMax ?? 100;
   const range = max - min || 1;
-  const pct = isNaN(numVal) ? 50 : Math.max(0, Math.min(100, ((numVal - min) / range) * 100));
+  const pct = isNaN(numVal) ? 50 : Math.max(0, Math.min(100, ((displayVal - min) / range) * 100));
 
   const lowTh = panel.lowThreshold !== undefined ? panel.lowThreshold : min + range * 0.25;
   const highTh = panel.highThreshold !== undefined ? panel.highThreshold : min + range * 0.75;
@@ -53,16 +93,19 @@ export const DynamicIndustrialSymbol: React.FC<DynamicIndustrialSymbolProps> = (
 
   // Digital On/Off State
   const payloadOnStr = String(panel.payloadOn ?? '1');
+  const payloadOffStr = panel.payloadOff !== undefined ? String(panel.payloadOff) : undefined;
   const liveStr = String(liveValue !== undefined && liveValue !== null ? liveValue : '');
-  const isOn = liveStr === payloadOnStr || liveValue === true || liveValue === 1;
+  
+  const isOn = payloadOffStr !== undefined 
+    ? liveStr !== payloadOffStr 
+    : (liveStr === payloadOnStr || liveValue === true || liveValue === 1);
 
   // If Tripped, override status color with Trip Hazard Color
   const statusColor = isTripped ? tripColor : (isOn ? (panel.iconColorOn || '#10b981') : (panel.iconColorOff || '#ef4444'));
 
   // Animation Condition Evaluation (If TRIPPED, stop animation for safety shutdown!)
   const isSymbolAnimated = !isTripped && (() => {
-    if (panel.rotateOn === false) return false;
-    if (panel.rotateOn === true) return true;
+    // 1. Explicit pipe/symbol anim condition overrides:
     if (panel.pipeAnimCondition === 'always') return true;
     if (panel.pipeAnimCondition === 'tag_condition') {
       const targetVal = String(panel.pipeAnimValue !== undefined ? panel.pipeAnimValue : '1').trim();
@@ -82,7 +125,15 @@ export const DynamicIndustrialSymbol: React.FC<DynamicIndustrialSymbolProps> = (
       if (op === '!=') return liveTrim !== targetVal;
       return liveTrim.toLowerCase() === targetVal.toLowerCase();
     }
-    return isOn || (!isNaN(numVal) && numVal > 0);
+
+    // 2. Standard ON vs OFF state evaluation (same concept as Lamp Icon animation):
+    // When ON (running state): animate if panel.rotateOn is enabled (defaults to true)
+    // When OFF (stopped state): animate ONLY if panel.rotateOff is explicitly enabled (defaults to false)!
+    if (isOn || (!isNaN(numVal) && numVal > 0)) {
+      return panel.rotateOn !== false;
+    } else {
+      return panel.rotateOff === true;
+    }
   })();
 
   const symbolAnimSpeed = isOn ? (panel.animSpeedOn || 'medium') : (panel.animSpeedOff || 'medium');
@@ -174,8 +225,8 @@ export const DynamicIndustrialSymbol: React.FC<DynamicIndustrialSymbolProps> = (
         <rect x="20" y="25" width="60" height="8" rx="2" fill="#0284c7" stroke="#0f172a" strokeWidth="1.5"/>
         
         {/* Dynamic Stem Shaft */}
-        <rect x="47" y={stemY} width="6" height={85 - stemY} fill="#cbd5e1" stroke="#1e293b" strokeWidth="0.8"/>
-        <circle cx="50" cy={stemY + 8} r="3.5" fill={currentLevelColor} stroke="#f8fafc" strokeWidth="1"/>
+        <rect x="47" y={stemY} width="6" height={85 - stemY} fill="#cbd5e1" stroke="#1e293b" strokeWidth="0.8" className="transition-all duration-700 ease-out"/>
+        <circle cx="50" cy={stemY + 8} r="3.5" fill={currentLevelColor} stroke="#f8fafc" strokeWidth="1" className="transition-all duration-700 ease-out"/>
         
         {/* Position Readout Dial */}
         <rect x="62" y="38" width="26" height="14" rx="2" fill="#0f172a" stroke="#38bdf8" strokeWidth="1"/>
@@ -190,8 +241,8 @@ export const DynamicIndustrialSymbol: React.FC<DynamicIndustrialSymbolProps> = (
         <polygon points="82,70 50,85 82,100" fill={`url(#bodyGrad_${panel.panelId})`} stroke="#0f172a" strokeWidth="1.5"/>
         
         {/* Rotating Internal Valve Disc */}
-        <circle cx="50" cy="85" r="8" fill="#0f172a" stroke={currentLevelColor} strokeWidth="1.5"/>
-        <line x1="50" y1="77" x2="50" y2="93" stroke={currentLevelColor} strokeWidth="2.5" transform={`rotate(${valveAngle} 50 85)`}/>
+        <circle cx="50" cy="85" r="8" fill="#0f172a" stroke={currentLevelColor} strokeWidth="1.5" className="transition-colors duration-700"/>
+        <line x1="50" y1="77" x2="50" y2="93" stroke={currentLevelColor} strokeWidth="2.5" transform={`rotate(${valveAngle} 50 85)`} className="transition-all duration-700 ease-out"/>
       </svg>
     );
   }
@@ -208,11 +259,11 @@ export const DynamicIndustrialSymbol: React.FC<DynamicIndustrialSymbolProps> = (
         <text x="50" y="38" fontSize="8" fill="#f8fafc" fontWeight="bold" textAnchor="middle">{isOn ? 'OPEN' : 'CLOSED'}</text>
         
         {/* Valve Body */}
-        <polygon points="15,70 50,85 15,100" fill={isOn ? '#10b981' : '#ef4444'} opacity={isOn ? 0.9 : 0.6} stroke="#0f172a" strokeWidth="1.5"/>
-        <polygon points="85,70 50,85 85,100" fill={isOn ? '#10b981' : '#ef4444'} opacity={isOn ? 0.9 : 0.6} stroke="#0f172a" strokeWidth="1.5"/>
+        <polygon points="15,70 50,85 15,100" fill={isOn ? '#10b981' : '#ef4444'} opacity={isOn ? 0.9 : 0.6} stroke="#0f172a" strokeWidth="1.5" className="transition-all duration-700"/>
+        <polygon points="85,70 50,85 85,100" fill={isOn ? '#10b981' : '#ef4444'} opacity={isOn ? 0.9 : 0.6} stroke="#0f172a" strokeWidth="1.5" className="transition-all duration-700"/>
         <rect x="10" y="70" width="7" height="30" rx="1" fill="#475569"/>
         <rect x="83" y="70" width="7" height="30" rx="1" fill="#475569"/>
-        <circle cx="50" cy="85" r="6" fill="#0f172a" stroke={statusColor} strokeWidth="2"/>
+        <circle cx="50" cy="85" r="6" fill="#0f172a" stroke={statusColor} strokeWidth="2" className="transition-colors duration-700"/>
       </svg>
     );
   }
@@ -232,19 +283,50 @@ export const DynamicIndustrialSymbol: React.FC<DynamicIndustrialSymbolProps> = (
         {/* Main Tank Cylinder */}
         <rect x="15" y="35" width="90" height="110" fill="#1e293b" stroke="#0f172a" strokeWidth="1.5"/>
         
-        {/* Dynamic Fluid Level Fill inside Tank */}
-        <rect x="17" y={liquidY} width="86" height={liquidH} fill={currentLevelColor} opacity="0.45" />
+        {/* Dynamic Fluid Level Fill inside Tank with Smooth Transition */}
+        <rect 
+          x="17" 
+          y={liquidY} 
+          width="86" 
+          height={liquidH} 
+          fill={currentLevelColor} 
+          opacity="0.45" 
+          className="transition-all duration-700 ease-out"
+        />
+
+        {/* Sleek Liquid Surface Meniscus Line (100% clipped inside tank shell) */}
+        {pct > 0 && (
+          <line
+            x1="17"
+            y1={liquidY}
+            x2="103"
+            y2={liquidY}
+            stroke={currentLevelColor}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            opacity="0.95"
+            className="transition-all duration-700 ease-out"
+          />
+        )}
         
         {/* Bottom Dish Head Cap */}
         <path d="M 15 145 Q 60 170, 105 145 Z" fill="#334155" stroke="#0f172a" strokeWidth="1.5"/>
         
         {/* Glass Sight Gauge Level Indicator Bar */}
         <rect x="98" y="45" width="7" height="90" rx="3.5" fill="#0f172a" stroke="#64748b" strokeWidth="1.2"/>
-        <rect x="99.5" y={133 - (pct / 100) * 84} width="4" height={(pct / 100) * 84} rx="2" fill={currentLevelColor} className={isAlarmActive ? 'animate-pulse' : ''}/>
+        <rect 
+          x="99.5" 
+          y={133 - (pct / 100) * 84} 
+          width="4" 
+          height={(pct / 100) * 84} 
+          rx="2" 
+          fill={currentLevelColor} 
+          className={`transition-all duration-700 ease-out ${isAlarmActive ? 'animate-pulse' : ''}`}
+        />
         
         {/* Level Percentage Readout */}
-        <rect x="35" y="70" width="50" height="22" rx="4" fill="#0f172a" opacity="0.9" stroke={currentLevelColor} strokeWidth="1.5"/>
-        <text x="60" y="85" fontSize="11" fill={currentLevelColor} fontFamily="monospace" fontWeight="extrabold" textAnchor="middle">
+        <rect x="35" y="70" width="50" height="22" rx="4" fill="#0f172a" opacity="0.9" stroke={currentLevelColor} strokeWidth="1.5" className="transition-colors duration-700"/>
+        <text x="60" y="85" fontSize="11" fill={currentLevelColor} fontFamily="monospace" fontWeight="extrabold" textAnchor="middle" className="transition-colors duration-700">
           {Math.round(pct)}%
         </text>
 
@@ -267,16 +349,47 @@ export const DynamicIndustrialSymbol: React.FC<DynamicIndustrialSymbolProps> = (
         <path d="M 40 55 L 34 105 L 56 105 L 50 55 Z" fill="#334155" stroke="#0f172a" strokeWidth="1"/>
         <path d="M 140 55 L 134 105 L 156 105 L 150 55 Z" fill="#334155" stroke="#0f172a" strokeWidth="1"/>
         
-        {/* Shell & Liquid Fill */}
+        {/* Shell & Liquid Fill with Smooth Transition */}
         <rect x="35" y="30" width="110" height="55" fill="#1e293b" stroke="#0f172a" strokeWidth="1.5"/>
-        <rect x="37" y="32" width={liquidW} height="51" fill={currentLevelColor} opacity="0.4"/>
+        <rect 
+          x="37" 
+          y="32" 
+          width={liquidW} 
+          height="51" 
+          fill={currentLevelColor} 
+          opacity="0.4" 
+          className="transition-all duration-700 ease-out"
+        />
+
+        {/* Sleek Liquid Surface Line (100% clipped inside tank shell) */}
+        {pct > 0 && (
+          <line
+            x1={37 + liquidW}
+            y1="32"
+            x2={37 + liquidW}
+            y2="83"
+            stroke={currentLevelColor}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            opacity="0.95"
+            className="transition-all duration-700 ease-out"
+          />
+        )}
         
         <path d="M 35 30 C 15 30, 15 85, 35 85 Z" fill="#334155" stroke="#0f172a" strokeWidth="1.5"/>
         <path d="M 145 30 C 165 30, 165 85, 145 85 Z" fill="#334155" stroke="#0f172a" strokeWidth="1.5"/>
         
         {/* Digital Level Strip Bar */}
-        <rect x="45" y="52" width="90" height="12" rx="4" fill="#0f172a" stroke={currentLevelColor} strokeWidth="1.2"/>
-        <rect x="47" y="54" width={(pct / 100) * 86} height="8" rx="2" fill={currentLevelColor} className={isAlarmActive ? 'animate-pulse' : ''}/>
+        <rect x="45" y="52" width="90" height="12" rx="4" fill="#0f172a" stroke={currentLevelColor} strokeWidth="1.2" className="transition-colors duration-700"/>
+        <rect 
+          x="47" 
+          y="54" 
+          width={(pct / 100) * 86} 
+          height="8" 
+          rx="2" 
+          fill={currentLevelColor} 
+          className={`transition-all duration-700 ease-out ${isAlarmActive ? 'animate-pulse' : ''}`}
+        />
         <text x="90" y="62" fontSize="8" fill="#f8fafc" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
           {Math.round(pct)}%
         </text>

@@ -16,19 +16,43 @@ const DEFAULT_CONFIG: HistorianConfig = {
   pruneStrategy: 'FIFO'
 };
 
+export function isCommunityEditionActive(): boolean {
+  try {
+    const role = localStorage.getItem('tasc_user_role');
+    const ed = localStorage.getItem('tasc_product_edition');
+    if (role === 'community' || ed === 'community') return true;
+
+    const rawState = localStorage.getItem('tasc_studio_state');
+    if (rawState) {
+      const parsed = JSON.parse(rawState);
+      if (parsed.userRole === 'community' || parsed.productEdition === 'community') {
+        return true;
+      }
+    }
+  } catch {}
+  return false;
+}
+
 export function getHistorianConfig(): HistorianConfig {
+  let cfg = { ...DEFAULT_CONFIG };
   try {
     const raw = localStorage.getItem('tasc_historian_config');
     if (raw) {
-      return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+      cfg = { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
     }
   } catch {}
-  return DEFAULT_CONFIG;
+  if (isCommunityEditionActive()) {
+    cfg.maxRows = Math.min(cfg.maxRows, 50);
+  }
+  return cfg;
 }
 
 export function saveHistorianConfig(config: Partial<HistorianConfig>): HistorianConfig {
   const current = getHistorianConfig();
   const updated = { ...current, ...config };
+  if (isCommunityEditionActive()) {
+    updated.maxRows = Math.min(updated.maxRows, 50);
+  }
   try {
     localStorage.setItem('tasc_historian_config', JSON.stringify(updated));
   } catch {}

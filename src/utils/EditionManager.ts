@@ -47,10 +47,10 @@ export class EditionManager {
       return { allowed: false, reason: 'Client Runtime is read-only. Modifying screens is disabled.' };
     }
     if (this.IsCommunity()) {
-      if (appState.dashboards.length >= 2) {
+      if (appState.dashboards.length >= 1) {
         return {
           allowed: false,
-          reason: 'Community Edition Limit: Maximum 2 Screens allowed per project. Upgrade to Engineering Studio for unlimited screens.'
+          reason: 'Community Edition (Free) allows maximum 1 HMI Screen. Upgrade to Engineering Studio for unlimited screens.'
         };
       }
     }
@@ -113,6 +113,24 @@ export class EditionManager {
       }
     }
     return { allowed: true };
+  }
+
+  public CanAddTrendPen(currentPenCount: number): AuthorizationCheck {
+    if (this.IsCommunity() && currentPenCount >= 2) {
+      return {
+        allowed: false,
+        reason: 'Free Demo Limit: Maximum 2 Pens allowed per Trend Viewer in Community Edition. Upgrade to Engineering Studio for unlimited pens.'
+      };
+    }
+    return { allowed: true };
+  }
+
+  public GetMaxHistorianRows(): number {
+    return this.IsCommunity() ? 50 : 100000;
+  }
+
+  public GetMaxTrendLoggingSpanMs(): number {
+    return this.IsCommunity() ? 3600000 : 2592000000; // 1 Hour max in Free Demo
   }
 
   public CanEditBroker(): AuthorizationCheck {
@@ -190,8 +208,8 @@ export function sanitizeAppState(state: AppState): AppState {
   // If in community mode, prune to max 1 screen and 10 widgets
   const isCommunity = state.userRole === 'community' || state.productEdition === ProductEdition.COMMUNITY;
   if (isCommunity) {
-    if (dashboards.length > 2) {
-      dashboards = dashboards.slice(0, 2);
+    if (dashboards.length > 1) {
+      dashboards = dashboards.slice(0, 1);
       const allowedIds = new Set(dashboards.map(d => d.dashboardId));
       panels = panels.filter(p => allowedIds.has(p.dashboardId));
     }

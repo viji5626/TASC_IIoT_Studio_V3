@@ -110,6 +110,16 @@ body {
   to { transform: rotate(-360deg); }
 }
 
+@keyframes water-wave {
+  0% { transform: translateX(0px); }
+  50% { transform: translateX(-8px); }
+  100% { transform: translateX(0px); }
+}
+
+.animate-water-wave {
+  animation: water-wave 2.8s ease-in-out infinite;
+}
+
 .animate-icon-wind {
   animation: wind-blowing 1.2s ease-in-out infinite;
 }

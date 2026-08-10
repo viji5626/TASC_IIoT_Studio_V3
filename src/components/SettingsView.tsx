@@ -18,6 +18,7 @@ interface SettingsViewProps {
   userRole?: string;
   productEdition?: ProductEdition;
   onRequestClearAll?: () => void;
+  onSaveRuntimeTimeout?: (minutes: number) => void;
 }
 
 const SettingsView: React.FC<SettingsViewProps> = ({ 
@@ -34,7 +35,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   onOpenTagManager,
   userRole,
   productEdition,
-  onRequestClearAll
+  onRequestClearAll,
+  onSaveRuntimeTimeout
 }) => {
   const [settings, setSettings] = useState({
     darkTheme: true,
@@ -49,6 +51,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const [clearPassInput, setClearPassInput] = useState('');
   const [clearPassError, setClearPassError] = useState('');
   const [showDoneReturnModal, setShowDoneReturnModal] = useState(false);
+  const [showRemovePinConfirm, setShowRemovePinConfirm] = useState(false);
+  const [enteredPinForRemove, setEnteredPinForRemove] = useState('');
+  const [removePinError, setRemovePinError] = useState('');
 
   const fallbackState: AppState = appState || {
     userRole: 'gate',
@@ -109,57 +114,87 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         )}
 
         {/* Security PIN Settings */}
-        {!editionMgr.IsClient() && (
-          <div className="bg-[#121212] p-5 rounded-2xl border border-sky-500/30 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2.5">
-                <i className="fas fa-shield-halved text-sky-400 text-base"></i>
-                <div>
-                  <h3 className="text-sm font-bold text-white">Dashboard Lock Security PIN</h3>
-                  <p className="text-xs text-gray-400">Protect layout editing & panel modifications with a PIN</p>
-                </div>
+        <div className="bg-[#121212] p-5 rounded-2xl border border-sky-500/30 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2.5">
+              <i className="fas fa-shield-halved text-sky-400 text-base shrink-0"></i>
+              <div>
+                <h3 className="text-sm font-bold text-white">Dashboard Lock & Runtime Safeguard Security PIN</h3>
+                <p className="text-xs text-gray-400 leading-relaxed mt-0.5">
+                  This Security PIN will be used in Community Edition, Engineering Edition, and Client Edition for runtime safeguard operation security (such as Value Input, Pushbutton, and Toggle Switch operations) and layout protection.
+                </p>
               </div>
-              {editPin ? (
-                <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-full">
-                  PIN Active
-                </span>
-              ) : (
-                <span className="text-[10px] font-bold uppercase tracking-wider bg-gray-800 text-gray-400 px-2.5 py-1 rounded-full">
-                  Unprotected
-                </span>
-              )}
             </div>
+            {editPin ? (
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-full shrink-0 ml-2">
+                PIN Active
+              </span>
+            ) : (
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-gray-800 text-gray-400 px-2.5 py-1 rounded-full shrink-0 ml-2">
+                Unprotected
+              </span>
+            )}
+          </div>
 
-            <div className="flex items-center justify-between pt-2 border-t border-gray-800">
-              {editPin ? (
-                <div className="flex items-center space-x-2 w-full justify-between">
-                  <button
-                    onClick={() => onRequestSetPin && onRequestSetPin()}
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-sky-400 text-xs font-semibold rounded-lg transition-colors flex items-center space-x-1.5"
-                  >
-                    <i className="fas fa-key text-[11px]"></i>
-                    <span>Change Security PIN</span>
-                  </button>
-                  <button
-                    onClick={() => onSavePin && onSavePin(undefined)}
-                    className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-semibold rounded-lg transition-colors flex items-center space-x-1.5 border border-rose-500/30"
-                  >
-                    <i className="fas fa-unlock text-[11px]"></i>
-                    <span>Remove Security PIN</span>
-                  </button>
-                </div>
-              ) : (
+          <div className="flex items-center justify-between pt-2 border-t border-gray-800">
+            {editPin ? (
+              <div className="flex items-center space-x-2 w-full justify-between">
                 <button
                   onClick={() => onRequestSetPin && onRequestSetPin()}
-                  className="w-full py-2 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 font-bold text-xs rounded-xl transition-all border border-sky-500/40 flex items-center justify-center space-x-2"
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-sky-400 text-xs font-semibold rounded-lg transition-colors flex items-center space-x-1.5 cursor-pointer"
                 >
-                  <i className="fas fa-plus-circle text-xs"></i>
-                  <span>Set Security PIN Credential</span>
+                  <i className="fas fa-key text-[11px]"></i>
+                  <span>Change Security PIN</span>
                 </button>
-              )}
-            </div>
+                <button
+                  onClick={() => {
+                    setEnteredPinForRemove('');
+                    setRemovePinError('');
+                    setShowRemovePinConfirm(true);
+                  }}
+                  className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-semibold rounded-lg transition-colors flex items-center space-x-1.5 border border-rose-500/30 cursor-pointer"
+                >
+                  <i className="fas fa-unlock text-[11px]"></i>
+                  <span>Remove Security PIN</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => onRequestSetPin && onRequestSetPin()}
+                className="w-full py-2 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 font-bold text-xs rounded-xl transition-all border border-sky-500/40 flex items-center justify-center space-x-2 cursor-pointer"
+              >
+                <i className="fas fa-plus-circle text-xs"></i>
+                <span>Set Security PIN Credential</span>
+              </button>
+            )}
           </div>
-        )}
+
+          {/* Runtime Safeguard Timeout Setting */}
+          <div className="pt-3 border-t border-gray-800 flex items-center justify-between">
+            <div className="flex items-center space-x-2.5">
+              <i className="fas fa-clock text-amber-400 text-xs shrink-0"></i>
+              <div>
+                <span className="text-xs font-bold text-slate-200 block">Runtime Safeguard Auto-Lock Timeout</span>
+                <span className="text-[10px] text-slate-400 block">Automatically relock control authorization after idle period</span>
+              </div>
+            </div>
+            <select
+              value={appState?.runtimePinTimeoutMinutes ?? 2}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10);
+                if (onSaveRuntimeTimeout) onSaveRuntimeTimeout(val);
+              }}
+              className="bg-slate-900 border border-slate-700 text-amber-300 font-bold text-xs rounded-lg px-3 py-1.5 outline-none focus:border-amber-400 cursor-pointer shrink-0"
+            >
+              <option value={1}>1 Minute (60s)</option>
+              <option value={2}>2 Minutes (120s - Default)</option>
+              <option value={5}>5 Minutes (300s)</option>
+              <option value={10}>10 Minutes (600s)</option>
+              <option value={15}>15 Minutes (900s)</option>
+              <option value={0}>Never (Manual Lock Only)</option>
+            </select>
+          </div>
+        </div>
 
         {/* Central MQTT Broker Settings */}
         {!editionMgr.IsClient() && onOpenBrokerSettings && (
@@ -482,6 +517,89 @@ const SettingsView: React.FC<SettingsViewProps> = ({
             >
               Go to Home Screen
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Remove Security PIN Confirmation Modal */}
+      {showRemovePinConfirm && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-6 bg-black/80 backdrop-blur-xs">
+          <div className="bg-[#141414] w-full max-w-sm rounded-2xl border border-rose-500/40 p-6 space-y-4 animate-in zoom-in duration-150">
+            <div className="flex items-center space-x-3 text-rose-400">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center shrink-0">
+                <i className="fas fa-unlock text-lg text-rose-400"></i>
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Enter PIN to Remove</h3>
+                <p className="text-xs text-slate-400">Security PIN verification required</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-300 leading-relaxed">
+              Please enter your current Security PIN to confirm removing PIN protection.
+            </p>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                Current Security PIN
+              </label>
+              <input
+                type="password"
+                maxLength={6}
+                value={enteredPinForRemove}
+                onChange={(e) => {
+                  setEnteredPinForRemove(e.target.value);
+                  setRemovePinError('');
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    if (enteredPinForRemove === editPin) {
+                      if (onSavePin) onSavePin(undefined);
+                      setShowRemovePinConfirm(false);
+                    } else {
+                      setRemovePinError('Incorrect Security PIN. Removal aborted.');
+                    }
+                  }
+                }}
+                placeholder="Enter current PIN"
+                className="w-full bg-[#0a0a0a] border border-[#333] focus:border-rose-500 text-white font-mono text-center text-lg tracking-widest px-3 py-2.5 rounded-xl outline-none"
+                autoFocus
+              />
+              {removePinError && (
+                <p className="text-xs text-rose-400 font-semibold mt-1.5 flex items-center space-x-1">
+                  <i className="fas fa-circle-exclamation text-xs"></i>
+                  <span>{removePinError}</span>
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end space-x-3 pt-2 font-bold text-xs uppercase">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRemovePinConfirm(false);
+                  setRemovePinError('');
+                  setEnteredPinForRemove('');
+                }}
+                className="px-4 py-2.5 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (enteredPinForRemove === editPin) {
+                    if (onSavePin) onSavePin(undefined);
+                    setShowRemovePinConfirm(false);
+                  } else {
+                    setRemovePinError('Incorrect Security PIN. Removal aborted.');
+                  }
+                }}
+                className="px-4 py-2.5 bg-rose-500 hover:bg-rose-400 text-white rounded-xl transition-colors cursor-pointer shadow-lg"
+              >
+                Confirm Removal
+              </button>
+            </div>
           </div>
         </div>
       )}

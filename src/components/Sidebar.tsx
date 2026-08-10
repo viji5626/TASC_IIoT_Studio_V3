@@ -55,9 +55,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: AppView.TOPIC_MANAGER, icon: 'fa-sitemap', label: 'MQTT Topic Manager' },
     { id: AppView.TAG_MANAGER, icon: 'fa-tags', label: 'MQTT Tag Manager' },
     { id: AppView.SETTINGS, icon: 'fa-gear', label: 'App Settings' },
-    ...(userRole !== 'community' ? [
-      { id: AppView.BACKUP, icon: 'fa-cloud-arrow-up', label: 'Backup & Restore' },
-    ] : []),
+    { id: AppView.BACKUP, icon: 'fa-cloud-arrow-up', label: 'Backup & Restore', isLocked: userRole === 'community' },
     { id: 'about', icon: 'fa-circle-info', label: 'About TASC IIoT Studio' },
   ];
 
@@ -142,17 +140,28 @@ const Sidebar: React.FC<SidebarProps> = ({
                     if (item.id !== AppView.CONNECTIONS) onClose();
                   }
                 }}
-                className={`w-full flex items-center space-x-3.5 px-4 py-3 text-sm font-semibold transition-all rounded-xl ${
+                className={`w-full flex items-center justify-between px-4 py-3 text-sm font-semibold transition-all rounded-xl cursor-pointer ${
                   currentView === item.id 
                     ? 'bg-slate-800/90 text-white border border-slate-700 shadow-md' 
                     : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
                 }`}
               >
-                <i 
-                  className={`fas ${item.icon} w-5 text-center text-base`}
-                  style={{ color: currentView === item.id ? activeThemeObj.primary : '#94a3b8' }}
-                ></i>
-                <span>{item.label}</span>
+                <div className="flex items-center space-x-3.5 truncate">
+                  <i 
+                    className={`fas ${item.icon} w-5 text-center text-base shrink-0`}
+                    style={{ color: currentView === item.id ? activeThemeObj.primary : '#94a3b8' }}
+                  ></i>
+                  <span className="truncate">{item.label}</span>
+                </div>
+
+                {item.isLocked && (
+                  <div className="flex items-center space-x-1.5 shrink-0 ml-2" title="Unlock with Engineering Edition or Client Package">
+                    <i className="fas fa-lock text-amber-400 text-xs"></i>
+                    <span className="text-[9px] font-mono font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                      Locked
+                    </span>
+                  </div>
+                )}
               </button>
               
               {item.id === AppView.CONNECTIONS && (
@@ -252,7 +261,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           ))}
 
           {/* DEMO & SAMPLE PROJECTS SECTION */}
-          {onLoadHatcheryDemo && (
+          {onLoadHatcheryDemo && userRole !== 'client' && (
             <div className="pt-3 my-2 border-t border-slate-800/80">
               <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block px-2 mb-2 flex items-center space-x-1.5">
                 <i className="fas fa-flask text-xs text-emerald-400"></i>
