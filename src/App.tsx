@@ -33,6 +33,12 @@ import ExitSessionModal from './components/ExitSessionModal';
 import ClearAllModal from './components/ClearAllModal';
 import TopicManagerView from './components/TopicManagerView';
 import TagManagerView from './components/TagManagerView';
+import DriverConnectionsView from './components/DriverConnectionsView';
+import DriverTagManagerView from './components/DriverTagManagerView';
+import OpcUaBrowserView from './components/OpcUaBrowserView';
+import DriverDiagnosticsView from './components/DriverDiagnosticsView';
+import { DriverBridgeClient } from './utils/driverBridgeClient';
+import { getDriverTagById } from './utils/driverTagManager';
 import { registerCustomTag } from './utils/tagManager';
 import AppLogo from './components/AppLogo';
 import EngineeringChoiceModal from './components/EngineeringChoiceModal';
@@ -543,10 +549,19 @@ export function App() {
   const [isSimulated, setIsSimulated] = useState<boolean>(false);
 
   // Real-time MQTT data stores
-  const [latestValues, setLatestValues] = useState<Record<string, { val: any; time: string }>>({});
+  const [latestValues, setLatestValues] = useState<Record<string, { val: any; time: string; timestampMs?: number; quality?: string }>>({});
   const [historyValues, setHistoryValues] = useState<Record<string, { value: number; time: string }[]>>({});
   const [mqttLogs, setMqttLogs] = useState<MqttMessageLog[]>([]);
   const [mqttConnected, setMqttConnected] = useState(false);
+  const [nowMs, setNowMs] = useState<number>(Date.now());
+
+  // 1-Second ticker for live element telemetry timeout & stale detection
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Inbuilt Alarm System State & Haptic/Sound/Popup Toggles
   const [activeAlarms, setActiveAlarms] = useState<ActiveAlarm[]>([]);
@@ -782,6 +797,97 @@ export function App() {
 
   const clientRef = useRef<MqttClient | null>(null);
 
+  // Driver Bridge — parallel to MQTT, does not interact with clientRef
+  const driverBridgeClientRef = useRef<DriverBridgeClient | null>(null);
+
+  const handleDriverConnectionHealth = useCallback((payload: import('./types').DriverConnectionHealthPayload) => {
+    setAppState(prev => {
+      if (!prev.driverConnections) return prev;
+      const updatedConns = prev.driverConnections.map(c => {
+        if (c.connectionId === payload.connectionId) {
+          return {
+            ...c,
+            connected: payload.connectionState === 'connected',
+            connectionState: payload.connectionState,
+            lastConnectedAt: payload.lastConnectedAt || c.lastConnectedAt,
+            lastDisconnectedAt: payload.lastDisconnectedAt || c.lastDisconnectedAt,
+            lastError: payload.lastError,
+            retryCount: payload.retryCount,
+            consecutiveFailureCount: payload.consecutiveFailureCount
+          };
+        }
+        return c;
+      });
+      return { ...prev, driverConnections: updatedConns };
+    });
+  }, []);
+
+  const processDriverTagValue = useCallback((update: import('./types').DriverTagValue) => {
+    const timeStr = new Date().toLocaleTimeString();
+    const now = Date.now();
+    
+    setLatestValues(prev => {
+      const existingPanel = prev[update.panelId];
+      const existingTag = prev[update.tagId];
+      
+      const isBad = update.quality === 'bad';
+      const hasNewValue = update.value !== null && update.value !== undefined;
+      
+      const panelVal = hasNewValue ? update.value : (isBad ? null : existingPanel?.val);
+      const tagVal = hasNewValue ? update.value : (isBad ? null : existingTag?.val);
+      
+      const panelTimestamp = isBad ? (existingPanel?.timestampMs || now) : now;
+      const tagTimestamp = isBad ? (existingTag?.timestampMs || now) : now;
+
+      const lastGoodValue = hasNewValue ? update.value : (update.lastGoodValue ?? existingTag?.lastGoodValue ?? existingPanel?.lastGoodValue);
+      const lastGoodTimestamp = hasNewValue ? (update.timestamp || new Date().toISOString()) : (update.lastGoodTimestamp || existingTag?.lastGoodTimestamp || existingPanel?.lastGoodTimestamp);
+
+      return {
+        ...prev,
+        [update.panelId]: {
+          val: panelVal,
+          time: timeStr,
+          timestampMs: panelTimestamp,
+          quality: update.quality || 'good',
+          lastGoodValue,
+          lastGoodTimestamp
+        },
+        [update.tagId]: {
+          val: tagVal,
+          time: timeStr,
+          timestampMs: tagTimestamp,
+          quality: update.quality || 'good',
+          lastGoodValue,
+          lastGoodTimestamp
+        }
+      };
+    });
+
+    setAppState(prev => {
+      if (!prev.driverTags) return prev;
+      let changed = false;
+      const isBad = update.quality === 'bad';
+      const hasNewValue = update.value !== null && update.value !== undefined;
+
+      const updatedTags = prev.driverTags.map(t => {
+        if (t.tagId === update.tagId || t.tagName === update.tagId) {
+          changed = true;
+          return {
+            ...t,
+            quality: (update.quality || 'good') as any,
+            runtimeState: isBad ? ('bad' as const) : ('healthy' as const),
+            lastValue: hasNewValue ? update.value : (isBad ? null : t.lastValue),
+            lastGoodValue: hasNewValue ? update.value : (update.lastGoodValue ?? t.lastGoodValue),
+            lastGoodTimestamp: hasNewValue ? (update.timestamp || new Date().toISOString()) : (update.lastGoodTimestamp ?? t.lastGoodTimestamp),
+            lastTimestamp: update.timestamp || new Date().toISOString()
+          };
+        }
+        return t;
+      });
+      return changed ? { ...prev, driverTags: updatedTags } : prev;
+    });
+  }, []);
+
   // Active Connection & Dashboard
   const activeConnection = appState.connections.find(c => c.connectionId === activeConnectionId) || appState.connections[0];
   
@@ -941,6 +1047,8 @@ export function App() {
               val: extracted,
               rawPayload: payloadStr,
               time: timeStr,
+              timestampMs: Date.now(),
+              quality: 'good',
               sentTime: existing?.sentTime
             }
           };
@@ -1126,6 +1234,61 @@ export function App() {
     });
   }, [mqttConnected, appState.panels, activeDashboard?.prefixTopic, isSimulated]);
 
+  // Driver Bridge Lifecycle — connects/disconnects independently of MQTT
+  useEffect(() => {
+    // Create the bridge client once
+    if (!driverBridgeClientRef.current) {
+      driverBridgeClientRef.current = new DriverBridgeClient(processDriverTagValue, handleDriverConnectionHealth);
+    }
+    driverBridgeClientRef.current.connect();
+
+    return () => {
+      driverBridgeClientRef.current?.disconnect();
+    };
+  }, [processDriverTagValue, handleDriverConnectionHealth]);
+
+  // Sync driver-mode subscriptions to the bridge whenever panels, tags, or connections change
+  useEffect(() => {
+    const bridge = driverBridgeClientRef.current;
+    if (!bridge) return;
+
+    const enabledConns = (appState.driverConnections || []).filter(c => c.enabled !== false);
+    
+    const isConnEnabled = (connId: string) => {
+      if (!connId && enabledConns.length > 0) return true;
+      return enabledConns.some(c => c.connectionId === connId || c.connectionName === connId);
+    };
+
+    const findConnection = (connId: string) => {
+      if (!connId && enabledConns.length > 0) return enabledConns[0];
+      return enabledConns.find(c => c.connectionId === connId || c.connectionName === connId) || enabledConns[0];
+    };
+
+    const allTagsToPoll = (appState.driverTags || []).filter(t => t.enabled !== false && isConnEnabled(t.connectionId));
+
+    const driverPanels = activePanels.filter(p => p.dataSourceMode === 'driver' && p.driverTagId);
+    const panelMapByTagId = new Map(driverPanels.map(p => [p.driverTagId, p.panelId]));
+
+    const subscriptions = allTagsToPoll.map(tag => {
+      const connection = findConnection(tag.connectionId);
+      const panelId = panelMapByTagId.get(tag.tagId) || `tag_panel_${tag.tagId}`;
+
+      return {
+        tagId: tag.tagId,
+        panelId,
+        connectionId: tag.connectionId || connection?.connectionId || 'drv_default',
+        pollRate: Number(tag.pollRate) || 100,
+        tag,
+        connection
+      };
+    });
+
+    bridge.unsubscribeAll();
+    if (subscriptions.length > 0) {
+      bridge.subscribe(subscriptions);
+    }
+  }, [activePanels, appState.driverTags, appState.driverConnections]);
+
   // Demo Data Simulation Engine
   useEffect(() => {
     if (!isSimulated) return;
@@ -1134,6 +1297,7 @@ export function App() {
       const timeStr = new Date().toLocaleTimeString();
 
       activePanels.forEach(panel => {
+        if (panel.dataSourceMode === 'driver') return;
         let simVal: any;
 
         switch (panel.type) {
@@ -1220,6 +1384,24 @@ export function App() {
     resetRuntimeTimeoutTimer();
     const timeStr = new Date().toLocaleTimeString();
     const payloadStr = String(payload);
+
+    // Driver Tag write path
+    const driverPanel = appState.panels.find(p =>
+      p.dataSourceMode === 'driver' &&
+      (p.driverWriteTagId || p.driverTagId) &&
+      (p.topic === topic || p.publishTopic === topic || !p.topic)
+    );
+
+    if (driverPanel) {
+      const tagId = driverPanel.driverWriteTagId || driverPanel.driverTagId;
+      if (tagId) {
+        const tag = getDriverTagById(appState, tagId);
+        if (tag && driverBridgeClientRef.current) {
+          driverBridgeClientRef.current.writeTag(tag.tagId, tag.connectionId, payload);
+          return; // Don't also publish to MQTT
+        }
+      }
+    }
 
     if (clientRef.current && clientRef.current.connected) {
       clientRef.current.publish(topic, payloadStr);
@@ -1590,12 +1772,18 @@ export function App() {
       confirmLabel: 'Delete Connection',
       confirmVariant: 'danger',
       onConfirm: () => {
-        setAppState(prev => ({
-          ...prev,
-          connections: prev.connections.filter(c => c.connectionId !== connId),
-          dashboards: prev.dashboards.filter(d => d.connectionId !== connId),
-          panels: prev.panels.filter(p => p.connectionId !== connId)
-        }));
+        setAppState(prev => {
+          if (activeConnectionId === connId) {
+            const remaining = appState.connections.filter(c => c.connectionId !== connId);
+            setActiveConnectionId(remaining[0]?.connectionId || '');
+          }
+          return {
+            ...prev,
+            connections: prev.connections.filter(c => c.connectionId !== connId),
+            dashboards: prev.dashboards.filter(d => d.connectionId !== connId),
+            panels: prev.panels.filter(p => p.connectionId !== connId)
+          };
+        });
         setActiveConnMenuId(null);
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
       }
@@ -1651,6 +1839,76 @@ export function App() {
       panels: [...prev.panels, ...newPanels]
     }));
     setActiveConnMenuId(null);
+  };
+
+  const handleAddDriverConnection = (conn: import('./types').DriverConnection) => {
+    setAppState(prev => ({
+      ...prev,
+      driverConnections: [...(prev.driverConnections || []), conn]
+    }));
+  };
+
+  const handleUpdateDriverConnection = (conn: import('./types').DriverConnection) => {
+    setAppState(prev => ({
+      ...prev,
+      driverConnections: (prev.driverConnections || []).map(c =>
+        c.connectionId === conn.connectionId ? conn : c
+      )
+    }));
+  };
+
+  const handleDeleteDriverConnection = (connectionId: string) => {
+    setAppState(prev => ({
+      ...prev,
+      driverConnections: (prev.driverConnections || []).filter(c => c.connectionId !== connectionId)
+    }));
+  };
+
+  const handleAddDriverTag = (tag: import('./types').DriverTag) => {
+    setAppState(prev => ({
+      ...prev,
+      driverTags: [...(prev.driverTags || []), { ...tag, createdAt: new Date().toISOString() }]
+    }));
+  };
+
+  const handleUpdateDriverTag = (tag: import('./types').DriverTag) => {
+    setAppState(prev => ({
+      ...prev,
+      driverTags: (prev.driverTags || []).map(t =>
+        t.tagId === tag.tagId ? { ...tag, updatedAt: new Date().toISOString() } : t
+      )
+    }));
+  };
+
+  const handleDeleteDriverTag = (tagId: string) => {
+    setAppState(prev => ({
+      ...prev,
+      driverTags: (prev.driverTags || []).filter(t => t.tagId !== tagId)
+    }));
+  };
+
+  const handleImportDriverTags = (tags: import('./types').DriverTag[]) => {
+    setAppState(prev => ({
+      ...prev,
+      driverTags: [
+        ...(prev.driverTags || []).filter(t => !tags.some(imported => imported.tagId === t.tagId)),
+        ...tags
+      ]
+    }));
+  };
+
+  // OPC UA Browser import handler — adds a single browsed node as a DriverTag
+  const handleImportOpcUaTag = (tag: import('./types').DriverTag) => {
+    setAppState(prev => {
+      const alreadyExists = (prev.driverTags || []).some(
+        t => t.nodeId === tag.nodeId && t.connectionId === tag.connectionId
+      );
+      if (alreadyExists) return prev;
+      return {
+        ...prev,
+        driverTags: [...(prev.driverTags || []), { ...tag, createdAt: new Date().toISOString() }]
+      };
+    });
   };
 
   const handleDeleteDashboard = (dashId: string) => {
@@ -2625,6 +2883,47 @@ export function App() {
             onUpdateAppState={(newState) => setAppState(newState)}
             userRole={userRole}
             productEdition={productEdition}
+          />
+        )}
+
+        {currentView === AppView.DRIVER_CONNECTIONS && (
+          <DriverConnectionsView
+            onBack={() => setCurrentView(AppView.DASHBOARD)}
+            appState={appState}
+            onNavigate={setCurrentView}
+            onAdd={handleAddDriverConnection}
+            onUpdate={handleUpdateDriverConnection}
+            onDelete={handleDeleteDriverConnection}
+          />
+        )}
+
+        {currentView === AppView.DRIVER_TAG_MANAGER && (
+          <DriverTagManagerView
+            onBack={() => setCurrentView(AppView.DASHBOARD)}
+            appState={appState}
+            latestValues={latestValues}
+            onNavigate={setCurrentView}
+            onAdd={handleAddDriverTag}
+            onUpdate={handleUpdateDriverTag}
+            onDelete={handleDeleteDriverTag}
+            onImport={handleImportDriverTags}
+          />
+        )}
+
+        {currentView === AppView.OPC_UA_BROWSER && (
+          <OpcUaBrowserView
+            onBack={() => setCurrentView(AppView.DASHBOARD)}
+            appState={appState}
+            onNavigate={setCurrentView}
+            onImportTag={handleImportOpcUaTag}
+          />
+        )}
+
+        {currentView === AppView.DRIVER_DIAGNOSTICS && (
+          <DriverDiagnosticsView
+            onBack={() => setCurrentView(AppView.DASHBOARD)}
+            appState={appState}
+            onNavigate={setCurrentView}
           />
         )}
 

@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import { Panel, TrendPen } from '../types';
 import { applyLTTBDecimation, queryHistoricalRange, queryGapRecords } from '../utils/trendHistorianEngine';
 import { isCommunityEditionActive } from '../utils/alarmHistorianEngine';
+import { getPanelTelemetryStatus } from '../utils/staleHelper';
 
 
 export interface DataPoint {
@@ -153,6 +154,7 @@ const LineGraph: React.FC<LineGraphProps> = ({
   panel,
   history = [],
   historyValues = {},
+  latestValues = {},
   unit = '',
   color = '#38bdf8',
   penThickness = 2.5,
@@ -1294,11 +1296,26 @@ const LineGraph: React.FC<LineGraphProps> = ({
                 const minVal = allVals.length > 0 ? Math.min(...allVals) : null;
                 const maxVal = allVals.length > 0 ? Math.max(...allVals) : null;
                 const avgVal = allVals.length > 0 ? allVals.reduce((a, b) => a + b, 0) / allVals.length : null;
+
+                const penTopic = s.pen.topic ? s.pen.topic.trim() : undefined;
+                const livePenVal = penTopic ? (latestValues ? latestValues[penTopic] : undefined) : undefined;
+                const panelStatus = panel ? getPanelTelemetryStatus(panel, latestValues || {}) : { isOffline: false, isBad: false };
+                const penTimestampMs = livePenVal?.timestampMs || (s.coords.length > 0 ? s.coords[s.coords.length - 1].timestampMs : undefined);
+                const timeoutSec = panel?.staleTimeoutSeconds !== undefined ? panel.staleTimeoutSeconds : 10;
+                const isPenStale = (panel?.enableStaleTimeout !== false) && penTimestampMs ? ((Date.now() - penTimestampMs) / 1000 > timeoutSec) : false;
+                const isPenOfflineOrBad = panelStatus.isOffline || isPenStale || livePenVal?.quality === 'bad';
+
                 return (
                   <tr key={s.pen.id} className="hover:bg-slate-900/50">
                     <td className="py-1 px-2 text-center"><input type="checkbox" checked={s.pen.visible} onChange={() => setHiddenPens(prev => ({ ...prev, [s.pen.id]: !prev[s.pen.id] }))} /></td>
                     <td className="py-1 px-2 font-bold text-slate-200" title={s.pen.name}>{s.pen.name}</td>
-                    {showStatusCol && <td className="py-1 px-2 text-center"><span className={`px-1 rounded text-[8px] ${s.coords.length > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{s.coords.length > 0 ? 'Good' : 'Bad'}</span></td>}
+                    {showStatusCol && (
+                      <td className="py-1 px-2 text-center">
+                        <span className={`px-1 rounded text-[8px] font-bold ${isPenOfflineOrBad ? 'text-rose-400 animate-pulse' : (s.coords.length > 0 ? 'text-emerald-400' : 'text-slate-500')}`}>
+                          {isPenOfflineOrBad ? 'Bad' : (s.coords.length > 0 ? 'Good' : 'No Data')}
+                        </span>
+                      </td>
+                    )}
                     {showLastValCol && <td className="py-1 px-2 text-right" style={{ color: s.pen.color || '#38bdf8' }}>{s.lastVal.toFixed(1)}</td>}
                     {showLastTimeCol && <td className="py-1 px-2 text-right text-slate-400">{s.lastTime}</td>}
                     {showC1TimeCol && <td className="py-1 px-2 text-right text-emerald-300">{c1Point ? c1Point.time : '---'}</td>}

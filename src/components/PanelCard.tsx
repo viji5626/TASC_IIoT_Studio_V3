@@ -6,6 +6,7 @@ import { motion } from 'motion/react';
 import { formatPublishPayload, getNormalizedOptions } from '../utils/mqttHelper';
 import { getSmartIconAnimationClass, SmartIcon } from '../utils/iconAnimator';
 import { isPanelTripped } from '../utils/tripHelper';
+import { getPanelTelemetryStatus } from '../utils/staleHelper';
 import { AlarmHistorianWidget } from './AlarmHistorianWidget';
 import { DynamicIndustrialSymbol } from './DynamicIndustrialSymbol';
 
@@ -54,6 +55,10 @@ const PanelCard: React.FC<PanelCardProps> = ({
   // Dedicated Equipment Trip Evaluation
   const tripResult = isPanelTripped(panel, latestValues);
   const isTripped = tripResult.isTripped;
+
+  // Telemetry Timeout / Disconnection Watchdog Evaluation
+  const telemetryStatus = getPanelTelemetryStatus(panel, latestValues);
+  const isOffline = telemetryStatus.isOffline;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -150,6 +155,15 @@ const PanelCard: React.FC<PanelCardProps> = ({
                 <span>TRIP</span>
               </span>
             )}
+            {isOffline && (
+              <span
+                className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/60 animate-pulse flex items-center space-x-1 shrink-0 ml-1"
+                title={telemetryStatus.isBad ? 'Driver bad quality / socket error' : `No telemetry payload received for ${telemetryStatus.secondsSinceUpdate || 10}s`}
+              >
+                <i className="fas fa-plug-circle-xmark text-[9px] text-amber-400"></i>
+                <span>{telemetryStatus.isBad ? 'BAD DATA' : `OFFLINE (${telemetryStatus.secondsSinceUpdate || 10}s)`}</span>
+              </span>
+            )}
           </span>
           {rightBadge}
           {activeAlarmZone && !rightBadge && (
@@ -239,6 +253,7 @@ const PanelCard: React.FC<PanelCardProps> = ({
                 precision={precision}
                 lowThreshold={panel.lowThreshold}
                 highThreshold={panel.highThreshold}
+                fontSize={panel.fontSize}
               />
             </div>
           </div>

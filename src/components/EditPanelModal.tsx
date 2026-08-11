@@ -6,6 +6,7 @@ import TopicAutocompleteInput from './TopicAutocompleteInput';
 import TagAutocompleteInput from './TagAutocompleteInput';
 import { getSmartIconAnimationClass, SmartIcon } from '../utils/iconAnimator';
 import { estimateStorageFootprint, saveHistorianRetentionConfig, getIsStoragePersisted, detectOEMBrowserWarning } from '../utils/trendHistorianEngine';
+import DriverTagSelector from './DriverTagSelector';
 
 interface EditPanelModalProps {
   panel: Partial<Panel>;
@@ -23,9 +24,13 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
   const [optionItems, setOptionItems] = useState<{ label: string; value: string }[]>([]);
   const [historianCustomIntervalError, setHistorianCustomIntervalError] = useState<string | null>(null);
   const [historianSectionOpen, setHistorianSectionOpen] = useState(false);
+  const [dataSourceMode, setDataSourceMode] = useState<'mqtt' | 'driver'>(
+    panel.dataSourceMode ?? 'mqtt'
+  );
 
   useEffect(() => {
     if (isOpen) {
+      setDataSourceMode(panel.dataSourceMode ?? 'mqtt');
       const pMin = Number(panel.payloadMin ?? 0);
       const pMax = Number(panel.payloadMax ?? 100);
       const pRange = pMax - pMin || 100;
@@ -227,7 +232,9 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
   const isButton = formData.type === PanelType.BUTTON;
   const isSlider = formData.type === PanelType.SLIDER;
   const isTextInput = formData.type === PanelType.TEXT_INPUT;
-  const isStaticText = formData.type === PanelType.STATIC_TEXT;
+  const isStaticText = formData.type === PanelType.STATIC_TEXT || (formData.type as string) === 'static_text' || (formData.type as string) === 'label';
+  const isHeaderBanner = (formData.type as string) === 'header_banner' || (formData.type as string) === 'header' || (formData.type as string) === 'banner' || (formData.title && String(formData.title).toLowerCase().includes('header banner')) || (formData.name && String(formData.name).toLowerCase().includes('header banner'));
+  const isStaticOrDecorative = isHeaderBanner || isStaticText;
   const isScreenJump = formData.type === PanelType.SCREEN_JUMP;
   const isImage = formData.type === PanelType.IMAGE || formData.type === 'image';
   const isClock = formData.type === PanelType.CLOCK || (formData.type as string) === 'clock';
@@ -288,8 +295,72 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
             />
           </div>
 
-          {/* Topic Configuration (Hidden for SCREEN_JUMP and STATIC_TEXT) */}
-          {!isScreenJump && !isStaticText && (
+          {/* ─── DATA SOURCE TOGGLE ─────────────────────────────── */}
+          {formData.type !== 'clock' && formData.type !== 'pipe' && formData.type !== 'shape' && formData.type !== 'screen_jump' && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Data Source</label>
+                <div className="flex bg-slate-800 border border-slate-700 rounded-xl p-1 space-x-1">
+                  <button
+                    type="button"
+                    onClick={() => { setDataSourceMode('mqtt'); setFormData((prev: any) => ({ ...prev, dataSourceMode: 'mqtt' })); }}
+                    className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      dataSourceMode === 'mqtt'
+                        ? 'bg-sky-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <i className="fas fa-rss mr-1.5 text-[10px]"></i>MQTT
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setDataSourceMode('driver'); setFormData((prev: any) => ({ ...prev, dataSourceMode: 'driver' })); }}
+                    className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      dataSourceMode === 'driver'
+                        ? 'bg-violet-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <i className="fas fa-microchip mr-1.5 text-[10px]"></i>Driver Tag
+                  </button>
+                </div>
+              </div>
+
+              {/* Driver Tag selectors — only shown when Driver mode is active */}
+              {dataSourceMode === 'driver' && (
+                <div className="space-y-3 bg-violet-500/5 border border-violet-500/20 rounded-xl p-3">
+                  <DriverTagSelector
+                    appState={appState!}
+                    selectedTagId={formData.driverTagId}
+                    onChange={(tagId) => setFormData((prev: any) => ({ ...prev, driverTagId: tagId }))}
+                    label="READ TAG (Data Source)"
+                    placeholder="Select a driver tag..."
+                  />
+                  {/* Write tag — only for control widgets */}
+                  {[
+                    'button', 'switch', 'slider', 'combo_box', 'radio_buttons', 'text_input'
+                  ].includes(formData.type) && (
+                    <DriverTagSelector
+                      appState={appState!}
+                      selectedTagId={formData.driverWriteTagId}
+                      onChange={(tagId) => setFormData((prev: any) => ({ ...prev, driverWriteTagId: tagId }))}
+                      label="WRITE TAG (Command Output)"
+                      placeholder="Select write tag (optional)..."
+                    />
+                  )}
+                  {(!appState?.driverTags || appState.driverTags.length === 0) && (
+                    <p className="text-[10px] text-violet-400/70 text-center">
+                      <i className="fas fa-info-circle mr-1"></i>
+                      Go to <strong>Data Driver Settings → Driver Tag Manager</strong> to configure driver tags first.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Topic Configuration (Hidden for SCREEN_JUMP and STATIC_TEXT, and when Driver mode is active) */}
+          {!isScreenJump && !isStaticText && dataSourceMode === 'mqtt' && (
             <>
               <div className={`grid grid-cols-1 ${isActionable ? 'sm:grid-cols-2' : ''} gap-4`}>
                 <TopicAutocompleteInput
@@ -1220,136 +1291,349 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
             </div>
           )}
 
-          {/* Dedicated Equipment Trip Tag & Fault Alarm Controls */}
-          <div className="space-y-4 pt-3 border-t border-[#262626] bg-[#1a0f12] p-4 rounded-xl border border-red-500/40 shadow-inner">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-red-400 font-bold uppercase tracking-wider flex items-center space-x-2">
-                <i className="fas fa-triangle-exclamation text-red-500 animate-pulse"></i>
-                <span>Equipment Trip Tag & Fault Alarm Settings</span>
-              </span>
-              <label className="flex items-center space-x-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  name="enableTrip"
-                  checked={!!formData.enableTrip}
-                  onChange={handleChange}
-                  className="w-4 h-4 accent-red-600 rounded cursor-pointer"
-                />
-                <span className="text-xs text-red-300 font-bold">Enable Trip Tag & Alarm</span>
-              </label>
-            </div>
-
-            {formData.enableTrip && (
-              <div className="space-y-3 pt-2">
-                {/* Trip Read Tag JSONPath Query & Trigger Payload */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <TagAutocompleteInput
-                      name="tripJsonPath"
-                      label="JSONPath Query (Read Tag for Equipment Trip State)"
-                      tagType="read"
-                      value={formData.tripJsonPath || ''}
-                      onChange={(val) => setFormData((prev: any) => ({ ...prev, tripJsonPath: val }))}
-                      appState={appState}
-                      placeholder="e.g. $.d.pump_trip[0] or $.fault_status"
-                    />
-                    <span className="text-[10px] text-slate-400 block mt-0.5">
-                      Extracts trip/fault value from incoming payload on primary topic
-                    </span>
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-slate-300 font-semibold block mb-1">
-                      Trip Trigger Payload Value
-                    </label>
+          {!isStaticOrDecorative && (
+            <>
+              {/* Dedicated Equipment Trip Tag & Fault Alarm Controls */}
+              <div className="space-y-4 pt-3 border-t border-[#262626] bg-[#1a0f12] p-4 rounded-xl border border-red-500/40 shadow-inner">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-red-400 font-bold uppercase tracking-wider flex items-center space-x-2">
+                    <i className="fas fa-triangle-exclamation text-red-500 animate-pulse"></i>
+                    <span>Equipment Trip Tag & Fault Alarm Settings</span>
+                  </span>
+                  <label className="flex items-center space-x-2 cursor-pointer select-none">
                     <input
-                      type="text"
-                      name="payloadTrip"
-                      value={formData.payloadTrip !== undefined ? formData.payloadTrip : '1'}
+                      type="checkbox"
+                      name="enableTrip"
+                      checked={!!formData.enableTrip}
                       onChange={handleChange}
-                      placeholder="e.g. 1, TRIP, FAULT, TRUE"
-                      className="w-full bg-slate-900 text-white rounded-lg p-2 text-xs border border-red-500/40 font-mono focus:border-red-400 focus:outline-none"
+                      className="w-4 h-4 accent-red-600 rounded cursor-pointer"
                     />
-                    <span className="text-[10px] text-slate-400 block mt-0.5">
-                      Triggers trip when extracted value matches (e.g. 1, TRIP, FAULT)
-                    </span>
-                  </div>
-                </div>
-
-                {/* Optional Separate Topic Override */}
-                <div>
-                  <label className="text-[11px] text-slate-400 font-semibold block mb-1">
-                    Optional Separate Trip Topic (Leave blank to use primary subscribe topic configured at top)
+                    <span className="text-xs text-red-300 font-bold">Enable Trip Tag & Alarm</span>
                   </label>
-                  <input
-                    type="text"
-                    name="tripTopic"
-                    value={formData.tripTopic || ''}
-                    onChange={handleChange}
-                    placeholder={formData.topic ? `Default (Primary Topic): ${formData.topic}` : 'e.g. factory/motor1/trip'}
-                    className="w-full bg-slate-900/80 text-slate-300 rounded-lg p-2 text-xs border border-slate-800 font-mono focus:border-red-400 focus:outline-none"
-                  />
                 </div>
 
-                {/* Trip Alarm Message & Custom Hazard Color */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-slate-300 font-semibold block mb-1">
-                      Trip Alarm Telemetry Message
-                    </label>
-                    <input
-                      type="text"
-                      name="tripMessage"
-                      value={formData.tripMessage || ''}
-                      onChange={handleChange}
-                      placeholder="e.g. MOTOR OVERLOAD TRIP / FAULT"
-                      className="w-full bg-slate-900 text-white rounded-lg p-2 text-xs border border-slate-700 font-sans focus:border-red-400 focus:outline-none"
-                    />
-                  </div>
+                {formData.enableTrip && (
+                  <div className="space-y-3 pt-2">
+                    {/* Trip Read Tag JSONPath Query & Trigger Payload */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <TagAutocompleteInput
+                          name="tripJsonPath"
+                          label="JSONPath Query (Read Tag for Equipment Trip State)"
+                          tagType="read"
+                          value={formData.tripJsonPath || ''}
+                          onChange={(val) => setFormData((prev: any) => ({ ...prev, tripJsonPath: val }))}
+                          appState={appState}
+                          placeholder="e.g. $.d.pump_trip[0] or $.fault_status"
+                        />
+                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                          Extracts trip/fault value from incoming payload on primary topic
+                        </span>
+                      </div>
 
-                  <div>
-                    <label className="text-xs text-slate-300 font-semibold block mb-1">
-                      Trip Hazard Accent Color
-                    </label>
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="color"
-                        name="tripColor"
-                        value={formData.tripColor || '#ef4444'}
-                        onChange={handleChange}
-                        className="w-8 h-8 rounded border border-slate-700 bg-slate-900 cursor-pointer shrink-0"
-                      />
+                      <div>
+                        <label className="text-xs text-slate-300 font-semibold block mb-1">
+                          Trip Trigger Payload Value
+                        </label>
+                        <input
+                          type="text"
+                          name="payloadTrip"
+                          value={formData.payloadTrip !== undefined ? formData.payloadTrip : '1'}
+                          onChange={handleChange}
+                          placeholder="e.g. 1, TRIP, FAULT, TRUE"
+                          className="w-full bg-slate-900 text-white rounded-lg p-2 text-xs border border-red-500/40 font-mono focus:border-red-400 focus:outline-none"
+                        />
+                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                          Triggers trip when extracted value matches (e.g. 1, TRIP, FAULT)
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Optional Separate Topic Override */}
+                    <div>
+                      <label className="text-[11px] text-slate-400 font-semibold block mb-1">
+                        Optional Separate Trip Topic (Leave blank to use primary subscribe topic configured at top)
+                      </label>
                       <input
                         type="text"
-                        name="tripColor"
-                        value={formData.tripColor || '#ef4444'}
+                        name="tripTopic"
+                        value={formData.tripTopic || ''}
                         onChange={handleChange}
-                        className="flex-1 bg-slate-900 text-white rounded-lg p-2 text-xs border border-slate-700 font-mono"
+                        placeholder={formData.topic ? `Default (Primary Topic): ${formData.topic}` : 'e.g. factory/motor1/trip'}
+                        className="w-full bg-slate-900/80 text-slate-300 rounded-lg p-2 text-xs border border-slate-800 font-mono focus:border-red-400 focus:outline-none"
                       />
+                    </div>
+
+                    {/* Trip Alarm Message & Custom Hazard Color */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-slate-300 font-semibold block mb-1">
+                          Trip Alarm Telemetry Message
+                        </label>
+                        <input
+                          type="text"
+                          name="tripMessage"
+                          value={formData.tripMessage || ''}
+                          onChange={handleChange}
+                          placeholder="e.g. MOTOR OVERLOAD TRIP / FAULT"
+                          className="w-full bg-slate-900 text-white rounded-lg p-2 text-xs border border-slate-700 font-sans focus:border-red-400 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs text-slate-300 font-semibold block mb-1">
+                          Trip Hazard Accent Color
+                        </label>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="color"
+                            name="tripColor"
+                            value={formData.tripColor || '#ef4444'}
+                            onChange={handleChange}
+                            className="w-8 h-8 rounded border border-slate-700 bg-slate-900 cursor-pointer shrink-0"
+                          />
+                          <input
+                            type="text"
+                            name="tripColor"
+                            value={formData.tripColor || '#ef4444'}
+                            onChange={handleChange}
+                            className="flex-1 bg-slate-900 text-white rounded-lg p-2 text-xs border border-slate-700 font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Trip Animation Style */}
+                    <div>
+                      <label className="text-xs text-slate-300 font-semibold block mb-1">
+                        Trip Animation & Visual Indicator Style
+                      </label>
+                      <select
+                        name="tripAnimStyle"
+                        value={formData.tripAnimStyle || 'flash_strobe'}
+                        onChange={handleChange}
+                        className="w-full bg-slate-900 text-white rounded-lg p-2 text-xs border border-slate-700 font-semibold focus:border-red-400 focus:outline-none"
+                      >
+                        <option value="flash_strobe">⚡ High-Intensity Strobe Flash + TRIP Badge</option>
+                        <option value="warning_pulse">⚠️ Pulsing Red Warning Glow</option>
+                        <option value="red_hazard_border">🚨 Red Hazard Border Outline</option>
+                        <option value="trip_badge">🏷️ Static TRIP / FAULT Badge Overlay</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {/* Telemetry Stale / Disconnection Watchdog Section */}
+                <div className="space-y-4 pt-3 border-t border-[#262626] bg-[#17141f] p-4 rounded-xl border border-amber-500/40 shadow-inner mt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-amber-400 font-bold uppercase tracking-wider flex items-center space-x-2">
+                      <i className="fas fa-plug-circle-xmark text-amber-400 animate-pulse"></i>
+                      <span>Telemetry Timeout & Disconnection Watchdog</span>
+                    </span>
+                    <label className="flex items-center space-x-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        name="enableStaleTimeout"
+                        checked={formData.enableStaleTimeout !== false}
+                        onChange={(e) => setFormData((prev: any) => ({ ...prev, enableStaleTimeout: e.target.checked }))}
+                        className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                      />
+                      <span className="text-xs text-amber-300 font-bold">
+                        {formData.enableStaleTimeout !== false ? 'Watchdog Active' : 'Watchdog Disabled'}
+                      </span>
+                    </label>
+                  </div>
+
+                  {formData.enableStaleTimeout !== false && (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        <div>
+                          <label className="text-xs text-slate-300 font-semibold block mb-1">
+                            Timeout Interval (Seconds)
+                          </label>
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="number"
+                              min="1"
+                              max="3600"
+                              name="staleTimeoutSeconds"
+                              value={formData.staleTimeoutSeconds ?? 10}
+                              onChange={(e) => setFormData((prev: any) => ({ ...prev, staleTimeoutSeconds: Math.max(1, parseInt(e.target.value) || 10) }))}
+                              className="w-full bg-slate-900 text-white rounded-lg p-2 text-xs border border-amber-500/40 font-mono focus:border-amber-400 focus:outline-none"
+                            />
+                            <span className="text-xs text-slate-400 font-mono shrink-0">Sec</span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 block mt-1">
+                            Displays [OFFLINE / DISCONNECTED] badge if no telemetry payload is received for this interval.
+                          </span>
+                        </div>
+
+                        <div className="flex flex-col justify-center">
+                          <label className="text-xs text-slate-400 font-semibold mb-1">Quick Timeout Presets:</label>
+                          <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                            {[
+                              { label: '3s (Ultra Speed)', val: 3 },
+                              { label: '5s (Fast)', val: 5 },
+                              { label: '10s (Standard)', val: 10 },
+                              { label: '30s (Slow)', val: 30 }
+                            ].map(preset => (
+                              <button
+                                key={preset.val}
+                                type="button"
+                                onClick={() => setFormData((prev: any) => ({ ...prev, staleTimeoutSeconds: preset.val }))}
+                                className={`px-2 py-1 rounded text-[10px] font-mono transition-all cursor-pointer ${
+                                  (formData.staleTimeoutSeconds ?? 10) === preset.val
+                                    ? 'bg-amber-500/30 text-amber-200 border border-amber-500/80 font-bold'
+                                    : 'bg-slate-900 text-slate-400 border border-slate-700 hover:text-slate-200'
+                                }`}
+                              >
+                                {preset.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-amber-500/20">
+                        <label className="flex items-center space-x-2 cursor-pointer select-none bg-slate-900/80 p-2.5 rounded-lg border border-slate-800 hover:border-amber-500/50 transition-colors">
+                          <input
+                            type="checkbox"
+                            name="showOfflineBadge"
+                            checked={formData.showOfflineBadge !== false}
+                            onChange={(e) => setFormData((prev: any) => ({ ...prev, showOfflineBadge: e.target.checked }))}
+                            className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                          />
+                          <div className="flex flex-col">
+                            <span className="text-xs text-slate-200 font-bold flex items-center space-x-1.5">
+                              <i className="fas fa-plug-circle-xmark text-[10px] text-amber-400"></i>
+                              <span>Display OFFLINE Badge on Element</span>
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-mono mt-0.5">
+                              Shows glowing [🔌 OFFLINE (Xs)] badge overlay on Grid and HMI Canvas View
+                            </span>
+                          </div>
+                        </label>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Telemetry Timestamp Badges (Rx & Tx Visuals) Section */}
+                <div className="space-y-3 pt-3 border-t border-[#262626] bg-[#0c1827] p-4 rounded-xl border border-emerald-500/40 shadow-inner mt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-emerald-400 font-bold uppercase tracking-wider flex items-center space-x-2">
+                      <i className="fas fa-clock text-emerald-400"></i>
+                      <span>Telemetry Timestamp Badges (Rx & Tx Visuals)</span>
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <label className="flex items-center space-x-2 cursor-pointer select-none bg-slate-900/80 p-2.5 rounded-lg border border-slate-800 hover:border-emerald-500/50 transition-colors">
+                      <input
+                        type="checkbox"
+                        name="showReceivedTimeStamp"
+                        checked={formData.showReceivedTimeStamp !== false}
+                        onChange={(e) => setFormData((prev: any) => ({ ...prev, showReceivedTimeStamp: e.target.checked }))}
+                        className="w-4 h-4 accent-emerald-500 rounded cursor-pointer"
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-xs text-slate-200 font-bold flex items-center space-x-1.5">
+                          <i className="fas fa-arrow-down text-[10px] text-emerald-400"></i>
+                          <span>Show Received Timestamp (Rx)</span>
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono mt-0.5">
+                          Displays ↓ Rx: 12:14:59 PM badge on element
+                        </span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center space-x-2 cursor-pointer select-none bg-slate-900/80 p-2.5 rounded-lg border border-slate-800 hover:border-amber-500/50 transition-colors">
+                      <input
+                        type="checkbox"
+                        name="showSentTimeStamp"
+                        checked={!!formData.showSentTimeStamp}
+                        onChange={(e) => setFormData((prev: any) => ({ ...prev, showSentTimeStamp: e.target.checked }))}
+                        className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-xs text-slate-200 font-bold flex items-center space-x-1.5">
+                          <i className="fas fa-arrow-up text-[10px] text-amber-400"></i>
+                          <span>Show Sent Timestamp (Tx)</span>
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono mt-0.5">
+                          Displays ↑ Tx: 12:14:59 PM badge on publish
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Process Value Font Size & Typography Control Section */}
+                <div className="space-y-3 pt-3 border-t border-[#262626] bg-[#0d1520] p-4 rounded-xl border border-sky-500/40 shadow-inner mt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-sky-400 font-bold uppercase tracking-wider flex items-center space-x-2">
+                      <i className="fas fa-text-height text-sky-400"></i>
+                      <span>Process Value Font Size & Typography</span>
+                    </span>
+                    <span className="text-xs font-mono text-sky-300 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/30">
+                      {formData.fontSize ?? 18} px
+                    </span>
+                  </div>
+
+                  <div className="flex items-center space-x-3 pt-1">
+                    {/* Stepper Buttons (- / +) */}
+                    <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setFormData((prev: any) => ({ ...prev, fontSize: Math.max(8, (parseInt(String(prev.fontSize ?? 18)) || 18) - 2) }))}
+                        className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-sky-400 font-black text-base flex items-center justify-center transition-colors cursor-pointer"
+                        title="Decrease Font Size (-2px)"
+                      >
+                        <i className="fas fa-minus text-xs"></i>
+                      </button>
+
+                      <input
+                        type="number"
+                        min="8"
+                        max="120"
+                        name="fontSize"
+                        value={formData.fontSize ?? 18}
+                        onChange={(e) => setFormData((prev: any) => ({ ...prev, fontSize: parseInt(e.target.value) || 18 }))}
+                        className="w-14 bg-transparent text-center text-white font-mono font-bold text-xs outline-none"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => setFormData((prev: any) => ({ ...prev, fontSize: Math.min(120, (parseInt(String(prev.fontSize ?? 18)) || 18) + 2) }))}
+                        className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-sky-400 font-black text-base flex items-center justify-center transition-colors cursor-pointer"
+                        title="Increase Font Size (+2px)"
+                      >
+                        <i className="fas fa-plus text-xs"></i>
+                      </button>
+                    </div>
+
+                    {/* Quick Font Size Presets */}
+                    <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                      {[12, 16, 18, 20, 24, 28, 36, 48].map(size => (
+                        <button
+                          key={size}
+                          type="button"
+                          onClick={() => setFormData((prev: any) => ({ ...prev, fontSize: size }))}
+                          className={`px-2 py-1 rounded text-xs font-mono transition-all cursor-pointer ${
+                            (parseInt(String(formData.fontSize ?? 18)) || 18) === size
+                              ? 'bg-sky-500/30 text-sky-200 border border-sky-500/80 font-bold'
+                              : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-slate-200'
+                          }`}
+                        >
+                          {size}px
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
-
-                {/* Trip Animation Style */}
-                <div>
-                  <label className="text-xs text-slate-300 font-semibold block mb-1">
-                    Trip Animation & Visual Indicator Style
-                  </label>
-                  <select
-                    name="tripAnimStyle"
-                    value={formData.tripAnimStyle || 'flash_strobe'}
-                    onChange={handleChange}
-                    className="w-full bg-slate-900 text-white rounded-lg p-2 text-xs border border-slate-700 font-semibold focus:border-red-400 focus:outline-none"
-                  >
-                    <option value="flash_strobe">⚡ High-Intensity Strobe Flash + TRIP Badge</option>
-                    <option value="warning_pulse">⚠️ Pulsing Red Warning Glow</option>
-                    <option value="red_hazard_border">🚨 Red Hazard Border Outline</option>
-                    <option value="trip_badge">🏷️ Static TRIP / FAULT Badge Overlay</option>
-                  </select>
-                </div>
               </div>
-            )}
-          </div>
+            </>
+          )}
 
           {isSetpointInput && (
             <div className="space-y-4 pt-3 border-t border-[#262626] bg-[#161616] p-4 rounded-xl border border-sky-500/30">
@@ -2893,8 +3177,8 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
             </div>
           )}
 
-          {/* JSONPath Payload Parser & JSON Publish Pattern */}
-          {formData.type !== PanelType.LINE_GRAPH && (
+          {/* JSONPath Payload Parser & JSON Publish Pattern — MQTT Mode only */}
+          {formData.type !== PanelType.LINE_GRAPH && dataSourceMode !== 'driver' && (
             <div className="space-y-4 pt-4 border-t border-[#262626]">
               <div className="flex items-center space-x-3">
               <input 

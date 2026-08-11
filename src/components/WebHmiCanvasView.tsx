@@ -9,6 +9,7 @@ import { formatPublishPayload, getNormalizedOptions } from '../utils/mqttHelper'
 import { getSampleProject } from '../utils/sampleProjectPreset';
 import { getSmartIconAnimationClass, SmartIcon } from '../utils/iconAnimator';
 import { isPanelTripped } from '../utils/tripHelper';
+import { getPanelTelemetryStatus } from '../utils/staleHelper';
 import { AlarmHistorianWidget } from './AlarmHistorianWidget';
 import { EditionManager } from '../utils/EditionManager';
 import { ColorBoxPopover } from './ColorBoxPopover';
@@ -275,8 +276,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   const [isEditMode, setIsEditMode] = useState(!isClientMode);
   const [gridSnap, setGridSnap] = useState(true);
 
-  // Canvas zoom state (0.5x to 2.0x)
+  // Canvas zoom & pan state
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
+  const [panPosition, setPanPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const touchStartDistRef = useRef<number | null>(null);
   const touchStartZoomRef = useRef<number>(1.0);
 
@@ -3353,7 +3355,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
             const pos = getPanelPos(panel, idx);
             const isSelected = selectedPanelIds.includes(panel.panelId);
             const isMaster = masterPanelId === panel.panelId;
-            const liveData = latestValues[panel.panelId] || (panel.topic ? latestValues[panel.topic] : undefined);
+            const liveData = latestValues[panel.panelId] || (panel.driverTagId ? latestValues[panel.driverTagId] : undefined) || (panel.topic ? latestValues[panel.topic] : undefined);
             const liveValue = liveData?.val;
             const rawStringValue = liveValue !== undefined && liveValue !== null ? String(liveValue) : '';
 
@@ -3361,12 +3363,21 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
             const tripStatus = isPanelTripped(panel, latestValues);
             const isTripActive = tripStatus.isTripped;
             const tripAnimClass = isTripActive ? `trip-anim-${panel.tripAnimStyle || 'flash_strobe'}` : '';
-
             const isPipePanel = panel.type === PanelType.PIPE || (panel.type as string) === 'pipe' || panel.shapeType === 'pipe';
             const isVectorShape = panel.type === PanelType.SHAPE || (panel.type as string) === 'shape' || isPipePanel;
             const isSymbolOrImagePanel = !!panel.symbolId || !!panel.symbolAnimType || panel.type === PanelType.IMAGE || (panel.type as string) === 'image';
             const hasCustomExplicitBg = !!panel.bgColor && panel.bgColor !== 'transparent' && !panel.bgColor.includes('15, 23, 42') && panel.bgColor !== '#0f172a' && panel.bgColor !== '#1e293b';
             const isPureShapeWithoutBox = isPipePanel || (isSymbolOrImagePanel && !hasCustomExplicitBg) || (isVectorShape && panel.shapeType !== 'rectangle');
+
+            // Telemetry Timeout / Disconnection Watchdog Evaluation
+            const telemetryStatus = getPanelTelemetryStatus(panel, latestValues);
+            const isOffline = telemetryStatus.isOffline;
+
+            // Rx & Tx Telemetry Timestamp Visual Display
+            const lastRxTime = liveData?.time;
+            const lastTxTime = liveData?.sentTime;
+            const showRx = panel.showReceivedTimeStamp !== false && !!lastRxTime && (!!panel.topic || !!panel.driverTagId || !!panel.panelId);
+            const showTx = !!panel.showSentTimeStamp && !!lastTxTime && (!!panel.publishTopic || !!panel.topic);
 
             return (
               <div
@@ -3406,6 +3417,36 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     : undefined
                 }}
               >
+                {/* Telemetry Disconnection / Timeout Badge Overlay (HMI Canvas View) */}
+                {isOffline && panel.showOfflineBadge !== false && (
+                  <div
+                    className="absolute top-1.5 right-1.5 z-40 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-300 border border-amber-500/80 animate-pulse flex items-center space-x-1 shadow-lg backdrop-blur-md pointer-events-none"
+                    title={telemetryStatus.isBad ? 'Driver bad quality / socket error' : `No telemetry payload received for ${telemetryStatus.secondsSinceUpdate || 10}s`}
+                  >
+                    <i className="fas fa-plug-circle-xmark text-[9px] text-amber-400"></i>
+                    <span>OFFLINE ({telemetryStatus.secondsSinceUpdate || 10}s)</span>
+                  </div>
+                )}
+
+                {/* Top-Left Rx Received Timestamp Badge (below header title) */}
+                {showRx && (
+                  <div className="absolute top-[26px] left-1.5 z-30 pointer-events-none">
+                    <span className="text-[9px] font-mono text-slate-300 flex items-center space-x-1 bg-slate-950/90 px-1.5 py-0.5 rounded-md border border-slate-800 shadow-md backdrop-blur-md">
+                      <i className="fas fa-arrow-down text-[8px] text-emerald-400"></i>
+                      <span>Rx: {lastRxTime}</span>
+                    </span>
+                  </div>
+                )}
+
+                {/* Top-Right Tx Sent Timestamp Badge (below header title) */}
+                {showTx && (
+                  <div className="absolute top-[26px] right-1.5 z-30 pointer-events-none">
+                    <span className="text-[9px] font-mono text-amber-300 flex items-center space-x-1 bg-amber-950/90 px-1.5 py-0.5 rounded-md border border-amber-800/80 shadow-md backdrop-blur-md">
+                      <i className="fas fa-arrow-up text-[8px] text-amber-400"></i>
+                      <span>Tx: {lastTxTime}</span>
+                    </span>
+                  </div>
+                )}
                 {/* Element Content Renderers */}
                 {panel.type === PanelType.STATIC_TEXT ? (
                   <div 
@@ -3868,6 +3909,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         precision={panel.decimalPrecision ?? 1}
                         lowThreshold={panel.lowThreshold}
                         highThreshold={panel.highThreshold}
+                        fontSize={panel.fontSize}
                       />
                     </div>
                   </div>

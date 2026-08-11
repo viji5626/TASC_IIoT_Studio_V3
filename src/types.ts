@@ -34,7 +34,11 @@ export enum AppView {
   SETTINGS = 'settings',
   BACKUP = 'backup',
   TOPIC_MANAGER = 'topic_manager',
-  TAG_MANAGER = 'tag_manager'
+  TAG_MANAGER = 'tag_manager',
+  DRIVER_CONNECTIONS = 'driver_connections',
+  DRIVER_TAG_MANAGER = 'driver_tag_manager',
+  OPC_UA_BROWSER = 'opc_ua_browser',
+  DRIVER_DIAGNOSTICS = 'driver_diagnostics'
 }
 
 export interface MqttConnection {
@@ -214,6 +218,10 @@ export interface Panel {
   retentionValue?: number;           // e.g. 7, 30, 6, 1
   retentionUnit?: 'MINUTES' | 'HOURS' | 'DAYS' | 'WEEKS' | 'MONTHS' | 'YEARS'; // Retention window unit
   logStorageCapMb?: number;          // Hard storage quota cap in MB (safety valve)
+  // --- Telemetry Stale / Disconnection Watchdog ---
+  enableStaleTimeout?: boolean;     // Enable/disable element telemetry timeout detection
+  staleTimeoutSeconds?: number;    // Timeout threshold in seconds (default: 10s)
+  showOfflineBadge?: boolean;       // Display glowing OFFLINE badge overlay on element
   buttonPayload?: string; // For Button
   sliderStep?: number; // For Slider
   publishPattern?: string; // JSON pattern for publish, e.g. { "d": { "data_vijay": [<payload>] } }
@@ -262,6 +270,11 @@ export interface Panel {
   alarmViewMode?: 'live' | 'historian';
   pageSize?: number;
   maxDisplayRows?: number;
+
+  // Driver Tag Source Mode (additive — default 'mqtt' when absent)
+  dataSourceMode?: 'mqtt' | 'driver';
+  driverTagId?: string;
+  driverWriteTagId?: string;
 }
 
 export interface MqttMessageLog {
@@ -372,5 +385,148 @@ export interface AppState {
   productEdition?: ProductEdition;
   clientInfo?: ClientSessionInfo;
   customTags?: TagRegistryEntry[];
+
+  // Industrial Driver Support (additive)
+  driverConnections?: DriverConnection[];
+  driverTags?: DriverTag[];
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INDUSTRIAL DRIVER SUPPORT — Phase 0 Type Definitions
+// These are purely additive. Nothing existing is changed.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type DriverProtocol =
+  | 'opcua'
+  | 'opcda'
+  | 'modbus_tcp'
+  | 'modbus_rtu'
+  | 'rs485'
+  | 'usb_serial'
+  | 'tcp_custom'
+  | 'custom';
+
+export type DriverTagSourceType = 'browsed' | 'generated' | 'manual' | 'imported';
+export type DriverAccessType = 'read' | 'write' | 'read-write';
+export type ModbusRegisterType = 'coil' | 'discrete_input' | 'holding_register' | 'input_register';
+export type DriverTagDataType = 'boolean' | 'int16' | 'int32' | 'uint16' | 'uint32' | 'float' | 'double' | 'string';
+export type DriverTagQuality = 'good' | 'bad' | 'uncertain' | 'unknown';
+
+export interface DriverTagScaling {
+  enabled: boolean;
+  rawMin: number;
+  rawMax: number;
+  engMin: number;
+  engMax: number;
+  clamp?: boolean;
+}
+
+export interface DriverConnection {
+  connectionId: string;
+  connectionName: string;
+  protocol: DriverProtocol;
+  enabled: boolean;
+  // OPC UA / OPC DA
+  endpointUrl?: string;
+  securityMode?: 'None' | 'Sign' | 'SignAndEncrypt';
+  securityPolicy?: string;
+  username?: string;
+  password?: string;
+  // TCP / Modbus TCP
+  host?: string;
+  port?: number;
+  unitId?: number;
+  timeout?: number;
+  retryInterval?: number;
+  // Serial / RS-485 / USB
+  portPath?: string;
+  baudRate?: number;
+  dataBits?: 5 | 6 | 7 | 8;
+  parity?: 'none' | 'even' | 'odd' | 'mark' | 'space';
+  stopBits?: 1 | 1.5 | 2;
+  flowControl?: 'none' | 'rts/cts' | 'xon/xoff';
+  // Runtime status (not persisted in snapshot)
+  connected?: boolean;
+  connectionState?: 'connected' | 'reconnecting' | 'disconnected' | 'stale' | 'unavailable' | 'error';
+  lastConnectedAt?: string;
+  lastDisconnectedAt?: string;
+  lastError?: string;
+  retryCount?: number;
+  consecutiveFailureCount?: number;
+}
+
+export interface DriverTag {
+  tagId: string;
+  tagName: string;
+  protocol: DriverProtocol;
+  sourceType: DriverTagSourceType;
+  connectionId: string;
+  // OPC UA
+  nodeId?: string;
+  namespace?: number;
+  browsePath?: string;
+  // OPC DA
+  itemId?: string;
+  // Modbus / TCP / Serial
+  channel?: string;
+  deviceId?: string;
+  slaveId?: number;
+  registerType?: ModbusRegisterType;
+  address?: number;
+  bitOffset?: number;
+  wordCount?: number;
+  // Common
+  dataType: DriverTagDataType;
+  accessType: DriverAccessType;
+  byteSwap?: boolean;
+  wordSwap?: boolean;
+  scaling?: DriverTagScaling;
+  pollRate: number;
+  deadband?: number;
+  unit?: string;
+  description?: string;
+  category?: string;
+  enabled: boolean;
+  // Runtime (not persisted)
+  quality?: DriverTagQuality;
+  runtimeState?: 'healthy' | 'stale' | 'bad' | 'unavailable';
+  lastValue?: any;
+  lastGoodValue?: any;
+  lastGoodTimestamp?: string;
+  lastReadAttemptAt?: string;
+  lastReadSuccessAt?: string;
+  lastErrorAt?: string;
+  staleSince?: string;
+  qualityCode?: string;
+  qualityText?: string;
+  lastTimestamp?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface DriverTagValue {
+  tagId: string;
+  panelId: string;
+  value: any;
+  quality: DriverTagQuality;
+  timestamp: string;
+  // Additive Runtime Health Metadata
+  lastGoodValue?: any;
+  lastGoodTimestamp?: string;
+  connectionState?: 'connected' | 'reconnecting' | 'disconnected' | 'stale' | 'unavailable' | 'error';
+  qualityCode?: string;
+  qualityText?: string;
+}
+
+export interface DriverConnectionHealthPayload {
+  type: 'connection_health';
+  connectionId: string;
+  connectionState: 'connected' | 'reconnecting' | 'disconnected' | 'stale' | 'unavailable' | 'error';
+  lastConnectedAt?: string;
+  lastDisconnectedAt?: string;
+  lastError?: string;
+  retryCount?: number;
+  consecutiveFailureCount?: number;
+}
+
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Panel } from '../types';
 import { getAnimationSpeedClass } from '../utils/iconAnimator';
 import { isPanelTripped } from '../utils/tripHelper';
+import { getPanelTelemetryStatus } from '../utils/staleHelper';
 
 interface DynamicIndustrialSymbolProps {
   symbolId?: string;
@@ -103,8 +104,12 @@ export const DynamicIndustrialSymbol: React.FC<DynamicIndustrialSymbolProps> = (
   // If Tripped, override status color with Trip Hazard Color
   const statusColor = isTripped ? tripColor : (isOn ? (panel.iconColorOn || '#10b981') : (panel.iconColorOff || '#ef4444'));
 
-  // Animation Condition Evaluation (If TRIPPED, stop animation for safety shutdown!)
-  const isSymbolAnimated = !isTripped && (() => {
+  // Telemetry Timeout / Disconnection Watchdog Evaluation
+  const telemetryStatus = getPanelTelemetryStatus(panel, latestValues);
+  const isOffline = telemetryStatus.isOffline;
+
+  // Animation Condition Evaluation (If TRIPPED or OFFLINE, stop animation!)
+  const isSymbolAnimated = !isTripped && !isOffline && (() => {
     // 1. Explicit pipe/symbol anim condition overrides:
     if (panel.pipeAnimCondition === 'always') return true;
     if (panel.pipeAnimCondition === 'tag_condition') {

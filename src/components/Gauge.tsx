@@ -12,6 +12,7 @@ interface GaugeProps {
   lowThreshold?: number;
   highThreshold?: number;
   hideText?: boolean;
+  fontSize?: number | string;
 }
 
 const Gauge: React.FC<GaugeProps> = ({ 
@@ -25,7 +26,8 @@ const Gauge: React.FC<GaugeProps> = ({
   precision = 1,
   lowThreshold,
   highThreshold,
-  hideText = false
+  hideText = false,
+  fontSize
 }) => {
   const radius = 38;
   const strokeWidth = 7;
@@ -179,10 +181,20 @@ const Gauge: React.FC<GaugeProps> = ({
 
       {!hideText && (
         <div className="mt-[-4px] text-center flex items-baseline justify-center space-x-1 shrink-0">
-          <span className="text-base sm:text-lg font-bold tracking-tight text-white digital-font">
+          <span 
+            className="font-bold tracking-tight text-white digital-font"
+            style={{ fontSize: fontSize ? (typeof fontSize === 'number' ? `${fontSize}px` : `${parseInt(String(fontSize))}px`) : undefined }}
+          >
             {displayValue.toFixed(precision)}
           </span>
-          {unit && <span className="text-xs text-sky-400 font-semibold">{unit}</span>}
+          {unit && (
+            <span 
+              className="text-sky-400 font-semibold"
+              style={{ fontSize: fontSize ? `${Math.max(10, Math.round((parseInt(String(fontSize)) || 18) * 0.55))}px` : undefined }}
+            >
+              {unit}
+            </span>
+          )}
         </div>
       )}
     </div>

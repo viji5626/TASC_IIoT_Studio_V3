@@ -129,6 +129,10 @@ export class EditionManager {
     return this.IsCommunity() ? 50 : 100000;
   }
 
+  public GetMaxDriverTags(): number {
+    return this.IsCommunity() ? 5 : Infinity;
+  }
+
   public GetMaxTrendLoggingSpanMs(): number {
     return this.IsCommunity() ? 3600000 : 2592000000; // 1 Hour max in Free Demo
   }
@@ -222,6 +226,8 @@ export function sanitizeAppState(state: AppState): AppState {
     ...state,
     dashboards,
     panels,
-    isLocked: isCommunity ? false : state.isLocked
+    isLocked: isCommunity ? false : state.isLocked,
+    driverConnections: (state.driverConnections || []),
+    driverTags: (state.driverTags || [])
   };
 }

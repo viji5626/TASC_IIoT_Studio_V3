@@ -54,6 +54,10 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: AppView.ADD_CONNECTION, icon: 'fa-server', label: 'MQTT Broker Settings' },
     { id: AppView.TOPIC_MANAGER, icon: 'fa-sitemap', label: 'MQTT Topic Manager' },
     { id: AppView.TAG_MANAGER, icon: 'fa-tags', label: 'MQTT Tag Manager' },
+    { id: AppView.DRIVER_CONNECTIONS, icon: 'fa-plug-circle-bolt', label: 'Driver Connections', isDriverSection: true },
+    { id: AppView.DRIVER_TAG_MANAGER, icon: 'fa-database', label: 'Driver Tag Manager', isDriverSection: true },
+    { id: AppView.OPC_UA_BROWSER, icon: 'fa-sitemap', label: 'OPC UA Browser', isDriverSection: true },
+    { id: AppView.DRIVER_DIAGNOSTICS, icon: 'fa-stethoscope', label: 'Driver Diagnostics', isDriverSection: true },
     { id: AppView.SETTINGS, icon: 'fa-gear', label: 'App Settings' },
     { id: AppView.BACKUP, icon: 'fa-cloud-arrow-up', label: 'Backup & Restore', isLocked: userRole === 'community' },
     { id: 'about', icon: 'fa-circle-info', label: 'About TASC IIoT Studio' },
@@ -130,6 +134,26 @@ const Sidebar: React.FC<SidebarProps> = ({
         <nav className="p-4 space-y-2 flex-grow overflow-y-auto">
           {menuItems.map((item) => (
             <React.Fragment key={item.id}>
+              {(item as any).isDriverSection && menuItems.findIndex(m => (m as any).isDriverSection) === menuItems.indexOf(item) && (
+                <div className="pt-3 mt-2 border-t border-slate-800/60 flex items-center justify-between px-3 mb-1">
+                  <span className="text-[10px] font-bold text-violet-400 uppercase tracking-wider flex items-center space-x-1.5">
+                    <i className="fas fa-microchip text-xs text-violet-400"></i>
+                    <span>Data Driver Settings</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onNavigate(AppView.DASHBOARD);
+                      onClose();
+                    }}
+                    className="text-[10px] font-bold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2 py-0.5 rounded-lg transition-colors flex items-center space-x-1 cursor-pointer"
+                    title="Return to Dashboard"
+                  >
+                    <i className="fas fa-arrow-left text-[9px]"></i>
+                    <span>Back</span>
+                  </button>
+                </div>
+              )}
               <button
                 onClick={() => {
                   if (item.id === 'about') {
