@@ -827,6 +827,7 @@ export function App() {
 
   // Driver Bridge — parallel to MQTT, does not interact with clientRef
   const driverBridgeClientRef = useRef<DriverBridgeClient | null>(null);
+  const lastSubscribedKeyRef = useRef<string>('');
 
   const handleDriverConnectionHealth = useCallback((payload: import('./types').DriverConnectionHealthPayload) => {
     setAppState(prev => {
@@ -1320,6 +1321,10 @@ export function App() {
         connection
       };
     });
+
+    const subKey = JSON.stringify(subscriptions.map(s => `${s.tagId}:${s.panelId}:${s.pollRate}:${s.connection?.host}:${s.connection?.port}:${s.connection?.enabled}:${s.tag?.address}:${s.tag?.registerType}:${s.tag?.enabled}`));
+    if (lastSubscribedKeyRef.current === subKey) return;
+    lastSubscribedKeyRef.current = subKey;
 
     if (subscriptions.length > 0) {
       bridge.subscribe(subscriptions);

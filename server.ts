@@ -127,7 +127,13 @@ interface ModbusClientEntry {
   connected: boolean;
   connecting: boolean;
   connectionId?: string;
+  createdAt: number;  // Date.now() when socket was created — used for forced reconnect
 }
+
+// Force-reconnect Modbus TCP sockets older than this to detect server restarts.
+// On localhost, TCP connections can survive a server stop/start on the same port,
+// causing jsmodbus to return stale cached data from the old server session.
+const MAX_MODBUS_CONNECTION_AGE_MS = 10_000;  // 10 seconds
 
 interface DriverConnectionHealth {
   connectionId: string;
@@ -210,8 +216,19 @@ function getOrCreateModbusClient(rawHost: string, port: number, unitId: number =
   const existing = modbusPool.get(key);
 
   if (existing && existing.connected && existing.client) {
-    if (connectionId) existing.connectionId = connectionId;
-    return Promise.resolve(existing.client);
+    // Check connection age — force reconnect if too old to detect server restarts
+    const age = Date.now() - existing.createdAt;
+    if (age > MAX_MODBUS_CONNECTION_AGE_MS) {
+      console.log(`[ModbusTCP] Connection to ${host}:${port} is ${Math.round(age / 1000)}s old — forcing reconnect for freshness`);
+      // Destroy old socket silently
+      try { existing.socket.destroy(); } catch {}
+      modbusPool.delete(key);
+      modbusQueues.delete(key);
+      // Fall through to create a new connection below
+    } else {
+      if (connectionId) existing.connectionId = connectionId;
+      return Promise.resolve(existing.client);
+    }
   }
 
   // If currently connecting, wait a brief tick to prevent socket collision.
@@ -234,15 +251,21 @@ function getOrCreateModbusClient(rawHost: string, port: number, unitId: number =
   return new Promise((resolve, reject) => {
     try {
       const socket = new net.Socket();
+      socket.setNoDelay(true);
       const client = new jsmodbus.client.TCP(socket, unitId, 5000);
-      const entry: ModbusClientEntry = { socket, client, connected: false, connecting: true, connectionId };
+      const entry: ModbusClientEntry = { socket, client, connected: false, connecting: true, connectionId, createdAt: Date.now() };
       modbusPool.set(key, entry);
 
+      // 5s connect timeout — if we can't reach the server in 5s, give up
       socket.setTimeout(5000);
 
       socket.on('connect', () => {
-        console.log(`[ModbusTCP] Connected to Modbus slave at ${host}:${port} (Unit ID: ${unitId})`);
-        socket.setTimeout(0); // Disable idle socket timeout on connected persistent TCP connection!
+        console.log(`[ModbusTCP] ✓ Connected to Modbus slave at ${host}:${port} (Unit ID: ${unitId})`);
+        // Enable TCP keep-alive to detect half-open connections at OS level
+        socket.setKeepAlive(true, 2000);
+        // No idle timeout on established connection — we rely on read-level Promise.race timeout
+        // and TCP keepalive to detect dead connections
+        socket.setTimeout(0);
         entry.connected = true;
         entry.connecting = false;
         if (connectionId) {
@@ -257,19 +280,24 @@ function getOrCreateModbusClient(rawHost: string, port: number, unitId: number =
       });
 
       socket.on('error', (err) => {
-        console.warn(`[ModbusTCP] Socket error on ${host}:${port} (Unit ID: ${unitId}):`, err.message);
+        console.warn(`[ModbusTCP] ✗ Socket error on ${host}:${port} (Unit ID: ${unitId}):`, err.message);
         invalidateModbusClient(host, port, unitId, connectionId);
         reject(err);
       });
 
       socket.on('timeout', () => {
-        console.warn(`[ModbusTCP] Connection timeout on ${host}:${port}`);
+        console.warn(`[ModbusTCP] ✗ Socket timeout on ${host}:${port} — destroying socket`);
         invalidateModbusClient(host, port, unitId, connectionId);
         reject(new Error(`TCP socket timeout connecting to ${host}:${port}`));
       });
 
-      socket.on('close', () => {
-        console.log(`[ModbusTCP] Connection closed to ${host}:${port}`);
+      socket.on('close', (hadError) => {
+        console.log(`[ModbusTCP] Connection closed to ${host}:${port} (hadError: ${hadError})`);
+        invalidateModbusClient(host, port, unitId, connectionId);
+      });
+
+      socket.on('end', () => {
+        console.log(`[ModbusTCP] Server at ${host}:${port} sent FIN — connection ending`);
         invalidateModbusClient(host, port, unitId, connectionId);
       });
 
@@ -340,21 +368,41 @@ async function readModbusTag(tag: any, connection: any): Promise<any> {
 
     const regType = tag.registerType || 'holding_register';
 
-    let res: any;
-    if (regType === 'holding_register') {
-      res = await client.readHoldingRegisters(registerAddr, count);
-    } else if (regType === 'input_register') {
-      res = await client.readInputRegisters(registerAddr, count);
-    } else if (regType === 'coil') {
-      res = await client.readCoils(registerAddr, count);
-    } else if (regType === 'discrete_input') {
-      res = await client.readDiscreteInputs(registerAddr, count);
-    } else {
-      res = await client.readHoldingRegisters(registerAddr, count);
-    }
+    const timeoutMs = Math.max(500, Number(connection?.timeout) || 2000);
+
+    // Wrap the actual Modbus read in a Promise.race with a strict timeout.
+    // If the TCP socket is half-open (server died but OS hasn't sent RST yet),
+    // the jsmodbus read will hang forever. This timeout catches that.
+    const readPromise = new Promise<any>(async (resolve, reject) => {
+      try {
+        let res: any;
+        if (regType === 'holding_register') {
+          res = await client.readHoldingRegisters(registerAddr, count);
+        } else if (regType === 'input_register') {
+          res = await client.readInputRegisters(registerAddr, count);
+        } else if (regType === 'coil') {
+          res = await client.readCoils(registerAddr, count);
+        } else if (regType === 'discrete_input') {
+          res = await client.readDiscreteInputs(registerAddr, count);
+        } else {
+          res = await client.readHoldingRegisters(registerAddr, count);
+        }
+        resolve(res);
+      } catch (err) {
+        reject(err);
+      }
+    });
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Modbus read timeout after ${timeoutMs}ms for ${host}:${port} addr=${registerAddr}`));
+      }, timeoutMs);
+    });
+
+    const res: any = await Promise.race([readPromise, timeoutPromise]);
 
     if (!res || !res.response) {
-      throw new Error('No response from Modbus slave');
+      throw new Error('No response from Modbus slave — empty response object');
     }
 
     if (connectionId) {
@@ -374,6 +422,9 @@ async function readModbusTag(tag: any, connection: any): Promise<any> {
     let buf: Buffer = res.response.body.valuesAsBuffer;
     if (!buf || buf.length === 0) {
       const rawValues: number[] = res.response.body.values || res.response.body.valuesAsArray || [];
+      if (rawValues.length === 0) {
+        throw new Error(`Modbus response body has no values — raw response: ${JSON.stringify(res.response.body)}`);
+      }
       buf = Buffer.alloc(rawValues.length * 2);
       rawValues.forEach((v, idx) => buf.writeUInt16BE((v || 0) & 0xffff, idx * 2));
     }
@@ -401,11 +452,11 @@ async function readModbusTag(tag: any, connection: any): Promise<any> {
 
     return parsedVal;
   }).catch((err: any) => {
-    console.warn(`[ModbusTCP Diagnostic] Read failed for "${tag.tagName || tag.tagId}":`, err.message);
     // IMPORTANT: If the error is "poll skipped" (socket still connecting), do NOT destroy
     // the pending reconnect socket — just rethrow so the poll fails gracefully.
     const isPollingSkip = typeof err?.message === 'string' && err.message.includes('still in progress');
     if (!isPollingSkip) {
+      console.warn(`[ModbusTCP] Read FAILED for "${tag.tagName || tag.tagId}" (addr ${tag.address}): ${err.message} — invalidating socket`);
       invalidateModbusClient(host, port, unitId, connectionId);
     }
     throw err;
@@ -621,7 +672,13 @@ async function writeOpcUaTag(tag: any, connection: any, value: any): Promise<voi
         const msg = JSON.parse(rawMsg.toString());
 
         if (msg.type === 'subscribe' && Array.isArray(msg.subscriptions)) {
-          console.log(`[DriverBridge] Received subscribe for ${msg.subscriptions.length} tag(s)`);
+          // ─── CRITICAL: Clear ALL existing intervals before creating new ones ────
+          // The client sends a full subscribe list each time anything changes.
+          // Without clearing first, we get duplicate polling intervals.
+          activeIntervals.forEach((timer) => clearInterval(timer));
+          activeIntervals.clear();
+
+          console.log(`[DriverBridge] Received subscribe for ${msg.subscriptions.length} tag(s) (cleared ${activeIntervals.size} old intervals)`);
           msg.subscriptions.forEach((sub: { tagId: string; panelId: string; pollRate: number; tag?: any; connection?: any }) => {
             const proto = sub.connection?.protocol || sub.tag?.protocol || 'UNKNOWN';
             const hostV = sub.connection?.host || 'NONE';
@@ -632,9 +689,6 @@ async function writeOpcUaTag(tag: any, connection: any, value: any): Promise<voi
             const enabledV = sub.connection?.enabled;
             console.log(`  → Tag: "${sub.tag?.tagName || sub.tagId}" | proto=${proto} | ${hostV}:${portV} unitId=${unitIdV} | addr=${addrV} regType=${regTypeV} | enabled=${enabledV} | rate=${sub.pollRate}ms`);
             const key = `${sub.panelId}_${sub.tagId}`;
-            if (activeIntervals.has(key)) {
-              clearInterval(activeIntervals.get(key)!);
-            }
 
             const pollInterval = Math.max(50, Number(sub.pollRate) || 1000);
 
@@ -642,6 +696,7 @@ async function writeOpcUaTag(tag: any, connection: any, value: any): Promise<voi
             let subLastGoodValue: any = undefined;
             let subLastGoodTimestamp: string | undefined = undefined;
             let subConsecutiveFailures = 0;
+            let readCount = 0;
 
             const interval = setInterval(async () => {
               if (ws.readyState !== WebSocket.OPEN) {
@@ -667,9 +722,10 @@ async function writeOpcUaTag(tag: any, connection: any, value: any): Promise<voi
                   val = await readModbusTag(sub.tag, sub.connection);
                   quality = 'good';
                   qualityText = 'Good';
-                  // Log first few reads so we can confirm values are flowing
-                  if (subConsecutiveFailures === 0 && subLastGoodValue === undefined) {
-                    console.log(`[DriverBridge] ✓ First read OK for "${sub.tag?.tagName || sub.tagId}": value=${val}`);
+                  readCount++;
+                  // Log first read and then every 50th read for diagnostics
+                  if (readCount === 1 || readCount % 50 === 0) {
+                    console.log(`[DriverBridge] ✓ Read #${readCount} for "${sub.tag?.tagName || sub.tagId}" addr=${sub.tag?.address}: value=${val}`);
                   }
                   // On success: reset failure counter, update last-good
                   subConsecutiveFailures = 0;
@@ -688,7 +744,9 @@ async function writeOpcUaTag(tag: any, connection: any, value: any): Promise<voi
                   quality = 'bad';
                   val = null;
                   qualityText = err.message?.includes('in progress') ? 'Reconnecting' : 'Read error';
-                  console.warn(`[DriverBridge] Modbus read failed (fail #${subConsecutiveFailures}) for tag "${sub.tag?.tagName || sub.tagId}": ${err.message}`);
+                  if (subConsecutiveFailures <= 5 || subConsecutiveFailures % 20 === 0) {
+                    console.warn(`[DriverBridge] ✗ Modbus read fail #${subConsecutiveFailures} for "${sub.tag?.tagName || sub.tagId}": ${err.message}`);
+                  }
                   // Update connection health with failure count
                   if (connectionId) {
                     const state = subConsecutiveFailures <= 1 ? 'reconnecting' : (subConsecutiveFailures >= 3 ? 'unavailable' : 'disconnected');
@@ -712,7 +770,9 @@ async function writeOpcUaTag(tag: any, connection: any, value: any): Promise<voi
                   quality = 'bad';
                   val = null;
                   qualityText = 'OPC UA read error';
-                  console.warn(`[DriverBridge] OPC UA read failed for tag ${sub.tag?.tagName || sub.tagId}:`, err.message);
+                  if (subConsecutiveFailures <= 3 || subConsecutiveFailures % 20 === 0) {
+                    console.warn(`[DriverBridge] OPC UA read failed for tag ${sub.tag?.tagName || sub.tagId}:`, err.message);
+                  }
                 }
               } else {
                 quality = 'bad';
@@ -720,17 +780,19 @@ async function writeOpcUaTag(tag: any, connection: any, value: any): Promise<voi
                 qualityText = 'Unknown protocol';
               }
 
-              ws.send(JSON.stringify({
-                tagId: sub.tagId,
-                panelId: sub.panelId,
-                value: val,
-                quality,
-                qualityText,
-                // Pass last-good metadata so the client can preserve last known good value
-                lastGoodValue: quality === 'bad' ? subLastGoodValue : val,
-                lastGoodTimestamp: quality === 'bad' ? subLastGoodTimestamp : now,
-                timestamp: now
-              }));
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                  tagId: sub.tagId,
+                  panelId: sub.panelId,
+                  value: val,
+                  quality,
+                  qualityText,
+                  // Pass last-good metadata so the client can preserve last known good value
+                  lastGoodValue: quality === 'bad' ? subLastGoodValue : val,
+                  lastGoodTimestamp: quality === 'bad' ? subLastGoodTimestamp : now,
+                  timestamp: now
+                }));
+              }
             }, pollInterval);
 
             activeIntervals.set(key, interval);

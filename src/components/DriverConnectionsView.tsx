@@ -283,15 +283,28 @@ const DriverConnectionsView: React.FC<DriverConnectionsViewProps> = ({
                     </div>
                   )}
                   {['modbus_tcp', 'modbus_rtu'].includes(editingConn.protocol || '') && (
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">Unit / Slave ID</label>
-                      <input
-                        type="number"
-                        value={editingConn.unitId ?? 1}
-                        onChange={e => setField('unitId', parseInt(e.target.value) || 1)}
-                        min={1} max={247}
-                        className="w-full bg-slate-800 border border-slate-600 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-violet-500"
-                      />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1">Unit / Slave ID</label>
+                        <input
+                          type="number"
+                          value={editingConn.unitId ?? 1}
+                          onChange={e => setField('unitId', parseInt(e.target.value) || 1)}
+                          min={1} max={247}
+                          className="w-full bg-slate-800 border border-slate-600 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-violet-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1">Response Timeout (ms)</label>
+                        <input
+                          type="number"
+                          value={editingConn.timeout ?? 2000}
+                          onChange={e => setField('timeout', parseInt(e.target.value) || 2000)}
+                          min={100} max={30000} step={100}
+                          placeholder="2000"
+                          className="w-full bg-slate-800 border border-slate-600 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-violet-500"
+                        />
+                      </div>
                     </div>
                   )}
                 </>
