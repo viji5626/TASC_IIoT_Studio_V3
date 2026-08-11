@@ -41,7 +41,10 @@ export class DriverBridgeClient {
     this.pendingSubscriptions = subscriptions;
     subscriptions.forEach(s => this.subscribedTagIds.add(s.tagId));
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      console.log('[DriverBridge] Sending subscribe for', subscriptions.length, 'tag(s)');
       this.ws.send(JSON.stringify({ type: 'subscribe', subscriptions }));
+    } else {
+      console.log('[DriverBridge] Queued pending subscriptions for connect:', subscriptions.length, 'tag(s)');
     }
   }
 
@@ -49,6 +52,7 @@ export class DriverBridgeClient {
     this.subscribedTagIds.clear();
     this.pendingSubscriptions = [];
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      console.log('[DriverBridge] Sending unsubscribe_all');
       this.ws.send(JSON.stringify({ type: 'unsubscribe_all' }));
     }
   }

@@ -1321,9 +1321,10 @@ export function App() {
       };
     });
 
-    bridge.unsubscribeAll();
     if (subscriptions.length > 0) {
       bridge.subscribe(subscriptions);
+    } else {
+      bridge.unsubscribeAll();
     }
   }, [activePanels, appState.driverTags, appState.driverConnections]);
 
