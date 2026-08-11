@@ -312,6 +312,18 @@ function executeOnModbusClient<T>(host: string, port: number, unitId: number, co
   return nextPromise;
 }
 
+function translateModbusAddress(address: number | string): number {
+  const rawAddr = Number(address) || 0;
+  if (rawAddr >= 400001 && rawAddr <= 499999) return rawAddr - 400001;
+  if (rawAddr >= 300001 && rawAddr <= 399999) return rawAddr - 300001;
+  if (rawAddr >= 100001 && rawAddr <= 199999) return rawAddr - 100001;
+  if (rawAddr >= 40001 && rawAddr <= 49999) return rawAddr - 40001;
+  if (rawAddr >= 30001 && rawAddr <= 39999) return rawAddr - 30001;
+  if (rawAddr >= 10001 && rawAddr <= 19999) return rawAddr - 10001;
+  if (rawAddr >= 40000 && rawAddr < 40001) return 0;
+  return Math.max(0, rawAddr);
+}
+
 async function readModbusTag(tag: any, connection: any): Promise<any> {
   const host = normalizeHost(connection?.host);
   const port = Number(connection?.port) || 502;
@@ -319,22 +331,7 @@ async function readModbusTag(tag: any, connection: any): Promise<any> {
   const connectionId = connection?.connectionId || tag?.connectionId;
 
   return executeOnModbusClient(host, port, unitId, connectionId, async (client) => {
-    // Address translation (ModScan 40000/40001, 30000/30001, 10000/10001, 00000/00001)
-    let rawAddr = Number(tag.address) || 0;
-    let registerAddr = rawAddr;
-
-    if (registerAddr >= 40000) {
-      registerAddr -= 40000;
-      if (registerAddr > 0 && registerAddr < 10000) registerAddr -= 1;
-    } else if (registerAddr >= 30000) {
-      registerAddr -= 30000;
-      if (registerAddr > 0 && registerAddr < 10000) registerAddr -= 1;
-    } else if (registerAddr >= 10000) {
-      registerAddr -= 10000;
-      if (registerAddr > 0 && registerAddr < 10000) registerAddr -= 1;
-    } else if (registerAddr >= 1) {
-      registerAddr -= 1;
-    }
+    const registerAddr = translateModbusAddress(tag.address);
 
     const dataType = (tag.dataType || 'int16').toLowerCase();
     let count = Number(tag.wordCount) || 1;
@@ -422,21 +419,7 @@ async function writeModbusTag(tag: any, connection: any, value: any): Promise<vo
   const connectionId = connection?.connectionId || tag?.connectionId;
 
   return executeOnModbusClient(host, port, unitId, connectionId, async (client) => {
-    let rawAddr = Number(tag.address) || 0;
-    let registerAddr = rawAddr;
-
-    if (registerAddr >= 40000) {
-      registerAddr -= 40000;
-      if (registerAddr > 0 && registerAddr < 10000) registerAddr -= 1;
-    } else if (registerAddr >= 30000) {
-      registerAddr -= 30000;
-      if (registerAddr > 0 && registerAddr < 10000) registerAddr -= 1;
-    } else if (registerAddr >= 10000) {
-      registerAddr -= 10000;
-      if (registerAddr > 0 && registerAddr < 10000) registerAddr -= 1;
-    } else if (registerAddr >= 1) {
-      registerAddr -= 1;
-    }
+    const registerAddr = translateModbusAddress(tag.address);
 
     const regType = tag.registerType || 'holding_register';
 
