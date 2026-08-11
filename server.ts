@@ -181,7 +181,9 @@ function getOrCreateModbusClient(rawHost: string, port: number, unitId: number =
     return Promise.resolve(existing.client);
   }
 
-  // If currently connecting, wait a brief tick to prevent socket collision
+  // If currently connecting, wait a brief tick to prevent socket collision.
+  // IMPORTANT: Do NOT call invalidateModbusClient here — the in-progress socket must be
+  // allowed to complete its 5-second connect attempt. Only the current poll is rejected.
   if (existing && existing.connecting) {
     return new Promise((resolve, reject) => {
       setTimeout(() => {
@@ -189,8 +191,8 @@ function getOrCreateModbusClient(rawHost: string, port: number, unitId: number =
         if (retryEntry && retryEntry.connected) {
           resolve(retryEntry.client);
         } else {
-          invalidateModbusClient(host, port, unitId, connectionId);
-          reject(new Error(`Modbus client to ${host}:${port} connection attempt timed out.`));
+          // Reject this poll attempt only — do NOT destroy the pending socket.
+          reject(new Error(`Modbus TCP: connection to ${host}:${port} still in progress, poll skipped.`));
         }
       }, 250);
     });
@@ -369,7 +371,12 @@ async function readModbusTag(tag: any, connection: any): Promise<any> {
     return parsedVal;
   }).catch((err: any) => {
     console.warn(`[ModbusTCP Diagnostic] Read failed for "${tag.tagName || tag.tagId}":`, err.message);
-    invalidateModbusClient(host, port, unitId, connectionId);
+    // IMPORTANT: If the error is "poll skipped" (socket still connecting), do NOT destroy
+    // the pending reconnect socket — just rethrow so the poll fails gracefully.
+    const isPollingSkip = typeof err?.message === 'string' && err.message.includes('still in progress');
+    if (!isPollingSkip) {
+      invalidateModbusClient(host, port, unitId, connectionId);
+    }
     throw err;
   });
 }
@@ -605,6 +612,11 @@ async function writeOpcUaTag(tag: any, connection: any, value: any): Promise<voi
 
             const pollInterval = Math.max(50, Number(sub.pollRate) || 1000);
 
+            // ─── Per-subscription last-good tracking for stale/disconnect detection ────
+            let subLastGoodValue: any = undefined;
+            let subLastGoodTimestamp: string | undefined = undefined;
+            let subConsecutiveFailures = 0;
+
             const interval = setInterval(async () => {
               if (ws.readyState !== WebSocket.OPEN) {
                 clearInterval(interval);
@@ -613,34 +625,69 @@ async function writeOpcUaTag(tag: any, connection: any, value: any): Promise<voi
               }
 
               let val: any = null;
-              let quality = 'good';
+              let quality: 'good' | 'bad' = 'good';
+              let qualityText: string | undefined;
+              const now = new Date().toISOString();
 
               const protocol = (sub.connection?.protocol || sub.tag?.protocol || '').toLowerCase();
+              const connectionId = sub.connection?.connectionId || sub.tag?.connectionId;
 
               if (sub.connection && sub.connection.enabled === false) {
                 quality = 'bad';
                 val = null;
+                qualityText = 'Source disabled';
               } else if (protocol === 'modbus_tcp' || protocol === 'modbus_rtu') {
                 try {
                   val = await readModbusTag(sub.tag, sub.connection);
                   quality = 'good';
+                  qualityText = 'Good';
+                  // On success: reset failure counter, update last-good
+                  subConsecutiveFailures = 0;
+                  subLastGoodValue = val;
+                  subLastGoodTimestamp = now;
+                  // Ensure connection health reflects connected state
+                  if (connectionId) {
+                    updateConnectionHealth(connectionId, {
+                      connectionState: 'connected',
+                      consecutiveFailureCount: 0,
+                      lastError: undefined
+                    });
+                  }
                 } catch (err: any) {
-                  console.warn(`[DriverBridge] Modbus read failed for tag ${sub.tag?.tagName || sub.tagId}:`, err.message);
+                  subConsecutiveFailures++;
                   quality = 'bad';
                   val = null;
+                  qualityText = err.message?.includes('in progress') ? 'Reconnecting' : 'Read error';
+                  console.warn(`[DriverBridge] Modbus read failed (fail #${subConsecutiveFailures}) for tag "${sub.tag?.tagName || sub.tagId}": ${err.message}`);
+                  // Update connection health with failure count
+                  if (connectionId) {
+                    const state = subConsecutiveFailures <= 1 ? 'reconnecting' : (subConsecutiveFailures >= 3 ? 'unavailable' : 'disconnected');
+                    updateConnectionHealth(connectionId, {
+                      connectionState: state,
+                      consecutiveFailureCount: subConsecutiveFailures,
+                      lastError: err.message
+                    });
+                  }
                 }
               } else if (protocol === 'opcua') {
                 try {
                   val = await readOpcUaTag(sub.tag, sub.connection);
                   quality = 'good';
+                  qualityText = 'Good';
+                  subConsecutiveFailures = 0;
+                  subLastGoodValue = val;
+                  subLastGoodTimestamp = now;
                 } catch (err: any) {
-                  console.warn(`[DriverBridge] OPC UA read failed for tag ${sub.tag?.tagName || sub.tagId}:`, err.message);
+                  subConsecutiveFailures++;
                   quality = 'bad';
                   val = null;
+                  qualityText = 'OPC UA read error';
+                  console.warn(`[DriverBridge] OPC UA read failed for tag ${sub.tag?.tagName || sub.tagId}:`, err.message);
                 }
               } else {
                 quality = 'bad';
                 val = null;
+                qualityText = 'Unknown protocol';
               }
 
               ws.send(JSON.stringify({
@@ -648,7 +695,11 @@ async function writeOpcUaTag(tag: any, connection: any, value: any): Promise<voi
                 panelId: sub.panelId,
                 value: val,
                 quality,
-                timestamp: new Date().toISOString()
+                qualityText,
+                // Pass last-good metadata so the client can preserve last known good value
+                lastGoodValue: quality === 'bad' ? subLastGoodValue : val,
+                lastGoodTimestamp: quality === 'bad' ? subLastGoodTimestamp : now,
+                timestamp: now
               }));
             }, pollInterval);
 

@@ -836,8 +836,8 @@ export function App() {
       const panelVal = hasNewValue ? update.value : (isBad ? null : existingPanel?.val);
       const tagVal = hasNewValue ? update.value : (isBad ? null : existingTag?.val);
       
-      const panelTimestamp = isBad ? (existingPanel?.timestampMs || now) : now;
-      const tagTimestamp = isBad ? (existingTag?.timestampMs || now) : now;
+      const panelTimestamp = now;
+      const tagTimestamp = now;
 
       const lastGoodValue = hasNewValue ? update.value : (update.lastGoodValue ?? existingTag?.lastGoodValue ?? existingPanel?.lastGoodValue);
       const lastGoodTimestamp = hasNewValue ? (update.timestamp || new Date().toISOString()) : (update.lastGoodTimestamp || existingTag?.lastGoodTimestamp || existingPanel?.lastGoodTimestamp);
