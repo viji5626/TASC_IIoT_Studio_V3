@@ -77,7 +77,35 @@ const INITIAL_STATE: AppState = {
     }
   ],
   dashboards: sampleInitial.dashboards,
-  panels: sampleInitial.panels
+  panels: sampleInitial.panels,
+  driverConnections: [
+    {
+      connectionId: 'conn_modbus_local',
+      connectionName: 'Local Modbus TCP Server',
+      protocol: 'modbus_tcp',
+      host: '127.0.0.1',
+      port: 502,
+      unitId: 1,
+      enabled: true,
+      connected: false
+    }
+  ],
+  driverTags: [
+    {
+      tagId: 'tag_modbus_reg0',
+      tagName: 'Modbus_Holding_Reg_0',
+      protocol: 'modbus_tcp',
+      sourceType: 'manual',
+      connectionId: 'conn_modbus_local',
+      registerType: 'holding_register',
+      address: 0,
+      dataType: 'int16',
+      accessType: 'read',
+      pollRate: 100,
+      enabled: true,
+      unit: ''
+    }
+  ]
 };
 
 export function App() {
@@ -1255,13 +1283,23 @@ export function App() {
     const enabledConns = (appState.driverConnections || []).filter(c => c.enabled !== false);
     
     const isConnEnabled = (connId: string) => {
-      if (!connId && enabledConns.length > 0) return true;
-      return enabledConns.some(c => c.connectionId === connId || c.connectionName === connId);
+      return true; // Allow polling for all enabled driver tags (using matched or fallback connection)
     };
 
     const findConnection = (connId: string) => {
-      if (!connId && enabledConns.length > 0) return enabledConns[0];
-      return enabledConns.find(c => c.connectionId === connId || c.connectionName === connId) || enabledConns[0];
+      const match = enabledConns.find(c => c.connectionId === connId || c.connectionName === connId);
+      if (match) return match;
+      if (enabledConns.length > 0) return enabledConns[0];
+      // Virtual default connection fallback for 127.0.0.1:502 Modbus TCP
+      return {
+        connectionId: connId || 'conn_default_modbus',
+        connectionName: 'Local Modbus TCP',
+        protocol: 'modbus_tcp' as const,
+        host: '127.0.0.1',
+        port: 502,
+        unitId: 1,
+        enabled: true
+      };
     };
 
     const allTagsToPoll = (appState.driverTags || []).filter(t => t.enabled !== false && isConnEnabled(t.connectionId));

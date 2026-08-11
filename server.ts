@@ -33,6 +33,39 @@ async function startServer() {
     });
   });
 
+  // ─── Modbus Diagnostic Test Endpoint ─────────────────────────────────────────
+  // Usage: GET /api/modbus/test?host=127.0.0.1&port=502&unitId=1&address=0&registerType=holding_register
+  app.get('/api/modbus/test', async (req, res) => {
+    const host = (req.query.host as string) || '127.0.0.1';
+    const port = parseInt((req.query.port as string) || '502', 10);
+    const unitId = parseInt((req.query.unitId as string) || '1', 10);
+    const address = parseInt((req.query.address as string) || '0', 10);
+    const registerType = (req.query.registerType as string) || 'holding_register';
+    const dataType = (req.query.dataType as string) || 'int16';
+
+    try {
+      const fakeTag = { address, registerType, dataType, tagName: 'diagnostic_test', slaveId: unitId };
+      const fakeConn = { host, port, unitId, connectionId: 'diagnostic_test', protocol: 'modbus_tcp' };
+      const value = await readModbusTag(fakeTag, fakeConn);
+      res.json({ success: true, host, port, unitId, address, registerType, dataType, value });
+    } catch (err: any) {
+      res.status(500).json({ success: false, host, port, unitId, address, registerType, dataType, error: err.message });
+    }
+  });
+
+  // ─── Driver Connection Pool Status Endpoint ───────────────────────────────────
+  app.get('/api/driver/status', (req, res) => {
+    const poolEntries: any[] = [];
+    modbusPool.forEach((entry, key) => {
+      poolEntries.push({ key, connected: entry.connected, connecting: entry.connecting, connectionId: entry.connectionId });
+    });
+    const healthEntries: any[] = [];
+    connectionHealthMap.forEach((health, key) => {
+      healthEntries.push(health);
+    });
+    res.json({ modbusPool: poolEntries, connectionHealth: healthEntries });
+  });
+
   // Test TCP connectivity to an MQTT broker
   app.get('/api/mqtt/test-tcp', (req, res) => {
     const host = (req.query.host as string) || 'broker.hivemq.com';
@@ -341,10 +374,11 @@ async function readModbusTag(tag: any, connection: any): Promise<any> {
       return valArray[0] === true || valArray[0] === 1;
     }
 
-    const buf: Buffer = res.response.body.valuesAsBuffer;
+    let buf: Buffer = res.response.body.valuesAsBuffer;
     if (!buf || buf.length === 0) {
-      const arr = res.response.body.valuesAsArray || [];
-      return arr[0] ?? 0;
+      const rawValues: number[] = res.response.body.values || res.response.body.valuesAsArray || [];
+      buf = Buffer.alloc(rawValues.length * 2);
+      rawValues.forEach((v, idx) => buf.writeUInt16BE((v || 0) & 0xffff, idx * 2));
     }
 
     let parsedVal: any;
@@ -604,7 +638,16 @@ async function writeOpcUaTag(tag: any, connection: any, value: any): Promise<voi
         const msg = JSON.parse(rawMsg.toString());
 
         if (msg.type === 'subscribe' && Array.isArray(msg.subscriptions)) {
+          console.log(`[DriverBridge] Received subscribe for ${msg.subscriptions.length} tag(s)`);
           msg.subscriptions.forEach((sub: { tagId: string; panelId: string; pollRate: number; tag?: any; connection?: any }) => {
+            const proto = sub.connection?.protocol || sub.tag?.protocol || 'UNKNOWN';
+            const hostV = sub.connection?.host || 'NONE';
+            const portV = sub.connection?.port || 'NONE';
+            const unitIdV = sub.tag?.slaveId ?? sub.connection?.unitId ?? 'NONE';
+            const addrV = sub.tag?.address ?? 'NONE';
+            const regTypeV = sub.tag?.registerType || 'NONE';
+            const enabledV = sub.connection?.enabled;
+            console.log(`  → Tag: "${sub.tag?.tagName || sub.tagId}" | proto=${proto} | ${hostV}:${portV} unitId=${unitIdV} | addr=${addrV} regType=${regTypeV} | enabled=${enabledV} | rate=${sub.pollRate}ms`);
             const key = `${sub.panelId}_${sub.tagId}`;
             if (activeIntervals.has(key)) {
               clearInterval(activeIntervals.get(key)!);
@@ -641,6 +684,10 @@ async function writeOpcUaTag(tag: any, connection: any, value: any): Promise<voi
                   val = await readModbusTag(sub.tag, sub.connection);
                   quality = 'good';
                   qualityText = 'Good';
+                  // Log first few reads so we can confirm values are flowing
+                  if (subConsecutiveFailures === 0 && subLastGoodValue === undefined) {
+                    console.log(`[DriverBridge] ✓ First read OK for "${sub.tag?.tagName || sub.tagId}": value=${val}`);
+                  }
                   // On success: reset failure counter, update last-good
                   subConsecutiveFailures = 0;
                   subLastGoodValue = val;
