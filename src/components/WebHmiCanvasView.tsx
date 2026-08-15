@@ -3369,15 +3369,25 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
             const hasCustomExplicitBg = !!panel.bgColor && panel.bgColor !== 'transparent' && !panel.bgColor.includes('15, 23, 42') && panel.bgColor !== '#0f172a' && panel.bgColor !== '#1e293b';
             const isPureShapeWithoutBox = isPipePanel || (isSymbolOrImagePanel && !hasCustomExplicitBg) || (isVectorShape && panel.shapeType !== 'rectangle');
 
+            // Check if element is purely static/decorative/non-telemetry
+            const isStaticOrDecorative =
+              panel.type === PanelType.STATIC_TEXT ||
+              (panel.type as string) === 'static_text' ||
+              (panel.type as string) === 'label' ||
+              panel.type === PanelType.CLOCK ||
+              panel.type === PanelType.SHAPE ||
+              panel.type === PanelType.SCREEN_JUMP ||
+              (!panel.topic?.trim() && !panel.driverTagId);
+
             // Telemetry Timeout / Disconnection Watchdog Evaluation
             const telemetryStatus = getPanelTelemetryStatus(panel, latestValues);
-            const isOffline = telemetryStatus.isOffline;
+            const isOffline = !isStaticOrDecorative && telemetryStatus.isOffline;
 
             // Rx & Tx Telemetry Timestamp Visual Display
             const lastRxTime = liveData?.time;
             const lastTxTime = liveData?.sentTime;
-            const showRx = panel.showReceivedTimeStamp !== false && !!lastRxTime && (!!panel.topic || !!panel.driverTagId || !!panel.panelId);
-            const showTx = !!panel.showSentTimeStamp && !!lastTxTime && (!!panel.publishTopic || !!panel.topic);
+            const showRx = !isStaticOrDecorative && panel.showReceivedTimeStamp !== false && !!lastRxTime && (!!panel.topic || !!panel.driverTagId);
+            const showTx = !isStaticOrDecorative && !!panel.showSentTimeStamp && !!lastTxTime && (!!panel.publishTopic || !!panel.topic);
 
             return (
               <div

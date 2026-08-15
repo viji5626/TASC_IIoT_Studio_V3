@@ -19,6 +19,7 @@ const PROTOCOL_BADGES: Record<DriverProtocol, { label: string; color: string }> 
   modbus_tcp: { label: 'Modbus',   color: 'bg-amber-500/15 text-amber-300 border-amber-500/25' },
   modbus_rtu: { label: 'Modbus',   color: 'bg-amber-500/15 text-amber-300 border-amber-500/25' },
   rs485:      { label: 'RS-485',   color: 'bg-orange-500/15 text-orange-300 border-orange-500/25' },
+  rs232:      { label: 'RS-232',   color: 'bg-amber-600/15 text-amber-300 border-amber-500/25' },
   usb_serial: { label: 'USB',      color: 'bg-green-500/15 text-green-300 border-green-500/25' },
   tcp_custom: { label: 'TCP',      color: 'bg-slate-500/15 text-slate-300 border-slate-500/25' },
   custom:     { label: 'Custom',   color: 'bg-slate-500/15 text-slate-300 border-slate-500/25' }
@@ -305,6 +306,7 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
           <option value="opcua">OPC UA</option>
           <option value="opcda">OPC DA</option>
           <option value="rs485">RS-485</option>
+          <option value="rs232">RS-232</option>
           <option value="usb_serial">USB Serial</option>
         </select>
         <select
@@ -360,9 +362,11 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
               {filteredTags.map(tag => {
                 const badge = PROTOCOL_BADGES[tag.protocol] || { label: tag.protocol, color: 'bg-slate-700 text-slate-300' };
                 const liveReading = latestValues ? (latestValues[tag.tagId] || latestValues[tag.tagName]) : null;
+                const conn = connections.find(c => c.connectionId === tag.connectionId || c.connectionName === tag.connectionId);
+                const isConnDisconnected = !conn || conn.enabled === false || conn.connectionState === 'disconnected' || conn.connectionState === 'unavailable' || conn.connectionState === 'error';
                 const tagTimeoutSec = 10;
                 const isStale = liveReading?.timestampMs ? ((Date.now() - liveReading.timestampMs) / 1000 > tagTimeoutSec) : false;
-                const isBadQuality = liveReading?.quality === 'bad' || isStale;
+                const isBadQuality = liveReading?.quality === 'bad' || isStale || isConnDisconnected;
                 const hasValue = liveReading && liveReading.val !== undefined && liveReading.val !== null && !isBadQuality;
                 const liveValueDisplay = hasValue ? String(liveReading.val) : (isBadQuality ? 'BAD DATA' : '--');
                 const isGood = hasValue && !isBadQuality;
@@ -378,7 +382,17 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
                         {badge.label}
                       </span>
                     </td>
-                    <td className="p-3.5 text-slate-400">{getConnectionName(tag.connectionId)}</td>
+                    <td className="p-3.5 text-slate-400">
+                      <div className="flex items-center space-x-1.5">
+                        <span className={`w-2 h-2 rounded-full ${
+                          conn?.enabled === false ? 'bg-slate-600' :
+                          conn?.connectionState === 'connected' ? 'bg-emerald-400' :
+                          conn?.connectionState === 'reconnecting' ? 'bg-amber-400 animate-pulse' :
+                          'bg-rose-500'
+                        }`} />
+                        <span>{getConnectionName(tag.connectionId)}</span>
+                      </div>
+                    </td>
                     <td className="p-3.5 font-mono text-slate-300">{getAddressDisplay(tag)}</td>
                     
                     <td className="p-3.5 font-mono font-bold">

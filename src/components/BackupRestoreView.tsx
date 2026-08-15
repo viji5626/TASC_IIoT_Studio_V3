@@ -133,17 +133,20 @@ const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
           </div>
         )}
 
-        {/* Warning Card */}
+        {/* Warning & Cross-Device Portability Card */}
         <div className="bg-[#121212] rounded-2xl p-6 border border-[#262626] space-y-4">
-          <div className="flex items-center space-x-3 text-amber-500">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
-              <i className="fas fa-triangle-exclamation text-xl"></i>
+          <div className="flex items-center space-x-3 text-sky-400">
+            <div className="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center">
+              <i className="fas fa-laptop-mobile text-xl"></i>
             </div>
-            <h2 className="text-base font-bold text-white">Backup Security Note</h2>
+            <div>
+              <h2 className="text-base font-bold text-white">Cross-Device Portability & Local Historian</h2>
+              <span className="text-[11px] text-emerald-400 font-semibold">Zero Data Redundancy Guarantee</span>
+            </div>
           </div>
           <p className="text-xs text-gray-400 leading-relaxed">
-            Backup exports your MQTT connections, dashboards, and panel layout parameters into a JSON configuration file. 
-            You can restore this backup anytime or share it across multiple devices.
+            Backup exports your entire SCADA architecture (MQTT connections, driver tags, dashboards, and panel configurations) into a portable JSON file.
+            Historian database records reside strictly in each device's local IndexedDB. If you setup everything on your PC/Laptop (5-Year Historian) and import the backup onto a Mobile device, the mobile device will automatically adapt its local logging to safe mobile parameters (≤ 30 Days) without cross-device redundancy.
           </p>
         </div>
 

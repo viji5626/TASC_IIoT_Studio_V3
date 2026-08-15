@@ -48,6 +48,14 @@ import { applyThemeToDocument, getAppTheme } from './utils/theme';
 import { EditionManager, sanitizeAppState } from './utils/EditionManager';
 import { getSampleProject } from './utils/sampleProjectPreset';
 import { ConfirmModal } from './components/ConfirmModal';
+import {
+  saveCommunityState,
+  saveCommercialState,
+  getCommunitySavedPackage,
+  getCommercialSavedPackage,
+  COMMERCIAL_SAVED_FLAG,
+  LEGACY_SAVED_FLAG
+} from './utils/editionStorage';
 import { isPanelTripped } from './utils/tripHelper';
 import { recordAlarmTriggerEvent, recordAlarmAckEvent, recordAlarmResolvedEvent } from './utils/alarmHistorianEngine';
 import { AlarmHistorianModal } from './components/AlarmHistorianModal';
@@ -58,6 +66,10 @@ import {
   getHistorianRetentionConfig,
   getIsPrivateBrowsing
 } from './utils/trendHistorianEngine';
+import { AiAssistantView } from './components/AiAssistantView';
+import { AiChatFab } from './components/AiChatFab';
+import { AiChatDrawer } from './components/AiChatDrawer';
+import { AiErrorBoundary } from './components/AiErrorBoundary';
 
 const sampleInitial = getSampleProject('conn_demo', undefined, undefined, true);
 
@@ -167,6 +179,7 @@ export function App() {
   const [communityLimitNotice, setCommunityLimitNotice] = useState<string | null>(null);
   const [isExitSessionModalOpen, setIsExitSessionModalOpen] = useState(false);
   const [isClearAllModalOpen, setIsClearAllModalOpen] = useState(false);
+  const [isAiDrawerOpen, setIsAiDrawerOpen] = useState(false);
   // Historian private browsing mode warning banner
   const [isHistorianPrivateBrowsing, setIsHistorianPrivateBrowsing] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
@@ -221,11 +234,21 @@ export function App() {
   };
 
   const handleSaveAndExitSession = () => {
-    try {
-      localStorage.setItem('tasc_client_setup_saved', 'true');
-      localStorage.setItem('mqtt_dash_pro_state', JSON.stringify(appState));
-    } catch {}
-    setIsClientSetupSaved(true);
+    const isCommunity = 
+      appState.packageOrigin === 'community' ||
+      userRole === 'community' || 
+      productEdition === ProductEdition.COMMUNITY ||
+      appState.clientInfo?.clientName === 'Community Edition Save' ||
+      (!appState.clientInfo?.isSignedPackage && userRole !== 'admin');
+
+    if (isCommunity) {
+      // Save solely to the Community isolated slot with Community signature
+      saveCommunityState(appState);
+    } else {
+      // Save to Commercial / Client Runtime / Engineering slot
+      saveCommercialState(appState);
+      setIsClientSetupSaved(true);
+    }
     setIsExitSessionModalOpen(false);
     setUserRole('gate');
     setProductEdition(ProductEdition.LANDING);
@@ -240,7 +263,7 @@ export function App() {
   // Client setup persistence acknowledgement state
   const [isClientSetupSaved, setIsClientSetupSaved] = useState<boolean>(() => {
     try {
-      return localStorage.getItem('tasc_client_setup_saved') === 'true';
+      return !!getCommercialSavedPackage();
     } catch {
       return false;
     }
@@ -358,36 +381,83 @@ export function App() {
 
   const handleLoadSavedClientSetup = () => {
     try {
-      const saved = localStorage.getItem('mqtt_dash_pro_state');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.connections && parsed.dashboards) {
-          const sanitized = sanitizeAppState(parsed);
+      const savedPkg = getCommercialSavedPackage();
+      if (savedPkg && savedPkg.state) {
+        const sanitized = sanitizeAppState(savedPkg.state);
+        const newAppState: AppState = {
+          ...sanitized,
+          userRole: 'client',
+          productEdition: ProductEdition.CLIENT_RUNTIME,
+          packageOrigin: 'commercial',
+          isLockedPackage: true
+        };
+        setAppState(newAppState);
+        setUserRole('client');
+        setProductEdition(ProductEdition.CLIENT_RUNTIME);
+        if (sanitized.clientInfo) {
+          setClientInfo(sanitized.clientInfo);
+        }
+        if (sanitized.dashboards[0]) {
+          setActiveDashboardId(sanitized.dashboards[0].dashboardId);
+        }
+        if (sanitized.connections[0]) {
+          setActiveConnectionId(sanitized.connections[0].connectionId);
+        }
+        setIsClientSetupSaved(true);
+        setCurrentView(AppView.DASHBOARD);
+        return;
+      }
+    } catch (err) {
+      console.error('Failed to load saved client setup:', err);
+    }
+  };
+
+  const handleLoadSavedCommunitySetup = (asClientMode = false) => {
+    try {
+      const savedPkg = getCommunitySavedPackage();
+      if (savedPkg && savedPkg.state) {
+        const sanitized = sanitizeAppState(savedPkg.state);
+        if (asClientMode) {
+          // Open community save in Client Edition runtime (operator locked mode)
           const newAppState: AppState = {
             ...sanitized,
             userRole: 'client',
             productEdition: ProductEdition.CLIENT_RUNTIME,
-            isLockedPackage: true
+            packageOrigin: 'community',
+            isLockedPackage: true,
+            clientInfo: {
+              clientName: 'Community Edition Save',
+              isSignedPackage: false
+            }
           };
           setAppState(newAppState);
           setUserRole('client');
           setProductEdition(ProductEdition.CLIENT_RUNTIME);
-          if (sanitized.clientInfo) {
-            setClientInfo(sanitized.clientInfo);
-          }
-          if (sanitized.dashboards[0]) {
-            setActiveDashboardId(sanitized.dashboards[0].dashboardId);
-          }
-          if (sanitized.connections[0]) {
-            setActiveConnectionId(sanitized.connections[0].connectionId);
-          }
-          setIsClientSetupSaved(true);
-          setCurrentView(AppView.DASHBOARD);
-          return;
+        } else {
+          // Resume Community Edition (full editing unlocked, 1-screen & 10-widget limits)
+          const newAppState: AppState = {
+            ...sanitized,
+            userRole: 'community',
+            productEdition: ProductEdition.COMMUNITY,
+            packageOrigin: 'community',
+            isLockedPackage: false
+          };
+          setAppState(newAppState);
+          setUserRole('community');
+          setProductEdition(ProductEdition.COMMUNITY);
         }
+
+        if (sanitized.dashboards[0]) {
+          setActiveDashboardId(sanitized.dashboards[0].dashboardId);
+        }
+        if (sanitized.connections[0]) {
+          setActiveConnectionId(sanitized.connections[0].connectionId);
+        }
+        setCurrentView(AppView.DASHBOARD);
+        return;
       }
     } catch (err) {
-      console.error('Failed to load saved client setup:', err);
+      console.error('Failed to load saved community setup:', err);
     }
   };
 
@@ -915,6 +985,40 @@ export function App() {
       });
       return changed ? { ...prev, driverTags: updatedTags } : prev;
     });
+
+    // Record driver tag values into historyValues and Historian Engine
+    const numVal = typeof update.value === 'number' ? update.value : parseFloat(String(update.value ?? ''));
+    if (!isNaN(numVal) && update.value !== null && update.value !== undefined) {
+      setHistoryValues(prev => {
+        const tagHist = prev[update.tagId] || [];
+        const newPt = { value: numVal, time: timeStr, timestampMs: now };
+        const updated: Record<string, { value: number; time: string; timestampMs?: number }[]> = {
+          ...prev,
+          [update.tagId]: [...tagHist, newPt].slice(-3600),
+          [update.panelId]: [...(prev[update.panelId] || []), newPt].slice(-3600)
+        };
+
+        (appStateRef.current.panels || []).forEach(p => {
+          if (p.pens && p.pens.length > 0) {
+            p.pens.forEach(pen => {
+              if (pen.driverTagId === update.tagId || pen.topic === update.tagId) {
+                const penHist = prev[pen.id] || [];
+                updated[pen.id] = [...penHist, newPt].slice(-3600);
+                if (p.type === PanelType.LINE_GRAPH && p.enableHistorianLogging && p.logIntervalSeconds && pen.loggingEnabled !== false) {
+                  enqueueTelemetryPoint(p.panelId, pen.id || pen.topic || update.tagId, numVal, p.logIntervalSeconds, pen.id);
+                }
+              }
+            });
+          } else if (p.dataSourceMode === 'driver' && (p.driverTagId === update.tagId || p.topic === update.tagId)) {
+            if (p.type === PanelType.LINE_GRAPH && p.enableHistorianLogging && p.logIntervalSeconds) {
+              enqueueTelemetryPoint(p.panelId, update.tagId, numVal, p.logIntervalSeconds);
+            }
+          }
+        });
+
+        return updated;
+      });
+    }
   }, []);
 
   // Active Connection & Dashboard
@@ -2094,6 +2198,7 @@ export function App() {
         appState={appState}
         hasSavedClientSetup={isClientSetupSaved}
         onLoadSavedClientSetup={handleLoadSavedClientSetup}
+        onLoadSavedCommunitySetup={handleLoadSavedCommunitySetup}
         onSelectCommunityMode={() => {
           setUserRole('community');
           setProductEdition(ProductEdition.COMMUNITY);
@@ -2101,6 +2206,7 @@ export function App() {
             ...prev,
             userRole: 'community',
             productEdition: ProductEdition.COMMUNITY,
+            packageOrigin: 'community',
             isLockedPackage: false
           }));
           setIsEngineeringChoiceOpen(true);
@@ -2113,18 +2219,26 @@ export function App() {
             ...prev,
             userRole: 'admin',
             productEdition: ProductEdition.ENGINEERING,
+            packageOrigin: 'engineering',
             isLockedPackage: false
           }));
           setIsEngineeringChoiceOpen(true);
           setCurrentView(AppView.DASHBOARD);
         }}
         onImportClientPackage={(newAppState, clientName, expiresAt, preferredWorkstationMode) => {
-          setAppState({
+          const finalState: AppState = {
             ...newAppState,
             userRole: 'client',
             productEdition: ProductEdition.CLIENT_RUNTIME,
-            isLockedPackage: true
-          });
+            packageOrigin: 'commercial',
+            isLockedPackage: true,
+            clientInfo: {
+              clientName,
+              expiresAt,
+              isSignedPackage: true
+            }
+          };
+          setAppState(finalState);
           setUserRole('client');
           setProductEdition(ProductEdition.CLIENT_RUNTIME);
           setClientInfo({ clientName, expiresAt, isSignedPackage: true });
@@ -2137,10 +2251,9 @@ export function App() {
           if (newAppState.connections[0]) {
             setActiveConnectionId(newAppState.connections[0].connectionId);
           }
-          try {
-            localStorage.removeItem('tasc_client_setup_saved');
-          } catch {}
-          setIsClientSetupSaved(false);
+          // Save imported commercial client package to isolated commercial slot
+          saveCommercialState(finalState);
+          setIsClientSetupSaved(true);
           setCurrentView(AppView.DASHBOARD);
         }}
         accentColor={activeThemeObj.primary}
@@ -2987,6 +3100,17 @@ export function App() {
             onRequestExportClientPackage={userRole === 'admin' ? () => setIsExportClientPackageOpen(true) : undefined}
           />
         )}
+
+        {currentView === AppView.AI_ASSISTANT && (
+          <AiErrorBoundary>
+            <AiAssistantView
+              onBack={() => setCurrentView(AppView.DASHBOARD)}
+              latestValues={latestValues}
+              appState={appState}
+              activeAlarms={activeAlarms}
+            />
+          </AiErrorBoundary>
+        )}
       </main>
 
 
@@ -3205,15 +3329,41 @@ export function App() {
         isCommunity={userRole === 'community' || productEdition === ProductEdition.COMMUNITY}
       />
 
+      {/* AI Copilot FAB — shown on Dashboard and Web HMI only, never for client role */}
+      {userRole !== 'client' &&
+       (currentView === AppView.DASHBOARD || currentView === AppView.WEB_HMI) && (
+        <AiChatFab onClick={() => setIsAiDrawerOpen(true)} />
+      )}
+
+      {/* AI Copilot Slide-in Drawer */}
+      {userRole !== 'client' && (
+        <AiChatDrawer
+          isOpen={isAiDrawerOpen}
+          onClose={() => setIsAiDrawerOpen(false)}
+          latestValues={latestValues}
+          appState={appState}
+          activeAlarms={activeAlarms}
+        />
+      )}
+
       {/* Session Exit Confirmation Modal */}
       <ExitSessionModal
         isOpen={isExitSessionModalOpen}
         onClose={() => setIsExitSessionModalOpen(false)}
         onSaveAndExit={handleSaveAndExitSession}
         onExitWithoutSave={handleExitSessionWithoutSave}
+        isCommunitySave={
+          appState.packageOrigin === 'community' ||
+          userRole === 'community' ||
+          productEdition === ProductEdition.COMMUNITY ||
+          appState.clientInfo?.clientName === 'Community Edition Save' ||
+          (!appState.clientInfo?.isSignedPackage && userRole !== 'admin')
+        }
         editionName={
           userRole === 'community' || productEdition === ProductEdition.COMMUNITY
             ? 'Community Edition'
+            : appState.packageOrigin === 'community' || appState.clientInfo?.clientName === 'Community Edition Save'
+            ? 'Client Edition (Community Demo Save)'
             : userRole === 'client' || productEdition === ProductEdition.CLIENT_RUNTIME
             ? 'Client Edition'
             : 'Engineering Studio'

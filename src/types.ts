@@ -38,7 +38,8 @@ export enum AppView {
   DRIVER_CONNECTIONS = 'driver_connections',
   DRIVER_TAG_MANAGER = 'driver_tag_manager',
   OPC_UA_BROWSER = 'opc_ua_browser',
-  DRIVER_DIAGNOSTICS = 'driver_diagnostics'
+  DRIVER_DIAGNOSTICS = 'driver_diagnostics',
+  AI_ASSISTANT = 'ai_assistant'
 }
 
 export interface MqttConnection {
@@ -80,6 +81,7 @@ export interface TrendPen {
   name: string;
   topic: string;
   jsonPath?: string;        // Per-pen JSONPath query (e.g. $.d.value[0]) for JSON payload extraction
+  driverTagId?: string;     // Per-pen driver tag ID when Data Source is Driver Tag
   color: string;
   thickness?: number;
   unit?: string;
@@ -119,6 +121,58 @@ export interface HistorianGapRecord extends TrendLogPoint {
   gapEndMs: number;
 }
 
+/**
+ * A pre-aggregated rollup data point stored in IndexedDB (1-min, 1-hour, 1-day tiers).
+ * Preserves Min/Max envelope so peaks, valleys, and averages across 5+ years are never lost.
+ */
+export interface HistorianRollupPoint {
+  id: string;        // `${pen}_${timestampMs}`
+  pen: string;       // Pen or topic identifier
+  t: number;         // Start timestamp of the rollup bucket (ms)
+  min: number;       // Minimum value in bucket
+  max: number;       // Maximum value in bucket
+  avg: number;       // Time-weighted or arithmetic average value
+  first?: number;    // First sample value in bucket
+  last?: number;     // Last sample value in bucket
+  count: number;     // Number of raw samples aggregated
+  total?: number;    // Integral/sum for totalizers (energy, flow, etc.)
+}
+
+/** Archive Cluster partition chunk duration */
+export type ArchiveClusterDuration = '1_DAY' | '1_WEEK' | '1_MONTH' | '2_MONTHS';
+
+/**
+ * A compressed partition archive chunk stored in IndexedDB (`telemetry_archives`).
+ * Holds lossless stream-compressed raw 1-second telemetry for a specific cluster window.
+ */
+export interface HistorianArchiveChunk {
+  id: string; // `${pen}_${startMs}`
+  pen: string;
+  startMs: number;
+  endMs: number;
+  clusterDuration: ArchiveClusterDuration;
+  pointCount: number;
+  minVal?: number;
+  maxVal?: number;
+  avgVal?: number;
+  compressedBlob: Uint8Array | ArrayBuffer | string;
+  format: 'deflate-raw' | 'gzip' | 'json-packed';
+  createdAt: number;
+}
+
+/** Dynamic cluster file size calculation for UI estimator */
+export interface ClusterFileSizeEstimate {
+  clusterDuration: ArchiveClusterDuration;
+  clusterDurationLabel: string;
+  pointsPerFile: number;
+  uncompressedBytesPerFile: number;
+  compressedBytesPerFile: number;
+  formattedFileSize: string;
+  totalArchiveFiles: number;
+  totalArchiveCompressedBytes: number;
+  formattedTotalArchiveSize: string;
+}
+
 /** Storage tier for live estimator badge in configuration UI */
 export type HistorianStorageTier = 'safe' | 'warn' | 'critical';
 
@@ -128,6 +182,12 @@ export interface HistorianStorageEstimate {
   estimatedMb: number;
   formattedSize: string;
   tier: HistorianStorageTier;
+  isPC?: boolean;
+  effectiveRetentionLabel?: string;
+  isClampedForMobile?: boolean;
+  clusterEstimate?: ClusterFileSizeEstimate;
+  uncompressedHotMb?: number;
+  compressedArchiveMb?: number;
 }
 
 export interface Panel {
@@ -218,6 +278,8 @@ export interface Panel {
   retentionValue?: number;           // e.g. 7, 30, 6, 1
   retentionUnit?: 'MINUTES' | 'HOURS' | 'DAYS' | 'WEEKS' | 'MONTHS' | 'YEARS'; // Retention window unit
   logStorageCapMb?: number;          // Hard storage quota cap in MB (safety valve)
+  archiveAfterMonths?: number;       // Start archiving after X months (e.g. 1, 2, 3, 6, 12; 0 = never)
+  archiveClusterDuration?: ArchiveClusterDuration; // '1_DAY' | '1_WEEK' | '1_MONTH' | '2_MONTHS'
   // --- Telemetry Stale / Disconnection Watchdog ---
   enableStaleTimeout?: boolean;     // Enable/disable element telemetry timeout detection
   staleTimeoutSeconds?: number;    // Timeout threshold in seconds (default: 10s)
@@ -385,6 +447,7 @@ export interface AppState {
   productEdition?: ProductEdition;
   clientInfo?: ClientSessionInfo;
   customTags?: TagRegistryEntry[];
+  packageOrigin?: 'community' | 'commercial' | 'engineering';
 
   // Industrial Driver Support (additive)
   driverConnections?: DriverConnection[];
@@ -402,6 +465,7 @@ export type DriverProtocol =
   | 'modbus_tcp'
   | 'modbus_rtu'
   | 'rs485'
+  | 'rs232'
   | 'usb_serial'
   | 'tcp_custom'
   | 'custom';
@@ -432,19 +496,34 @@ export interface DriverConnection {
   securityPolicy?: string;
   username?: string;
   password?: string;
-  // TCP / Modbus TCP
+  // TCP / Modbus TCP Channel Settings
   host?: string;
   port?: number;
   unitId?: number;
   timeout?: number;
   retryInterval?: number;
-  // Serial / RS-485 / USB
+  tcpSockets?: number;
+  reopenSockets?: boolean;
+  sendTimeoutMs?: number;
+  recvTimeoutMs?: number;
+  sendRecvDelayMs?: number;
+  frameRetryCount?: number;
+  // Addressing & Swapping Options
+  zeroBasedAddressing?: boolean;
+  zeroBasedBitAddressing?: boolean;
+  byteSwap?: boolean;
+  wordSwap?: boolean;
+  dwordSwap?: boolean;
+  useSingleCoilWrite?: boolean;
+  useSingleRegisterWrite?: boolean;
+  // Serial / RS-485 / RS-232 / USB / Modbus RTU
   portPath?: string;
   baudRate?: number;
   dataBits?: 5 | 6 | 7 | 8;
   parity?: 'none' | 'even' | 'odd' | 'mark' | 'space';
   stopBits?: 1 | 1.5 | 2;
   flowControl?: 'none' | 'rts/cts' | 'xon/xoff';
+  rtsToggle?: boolean;
   // Runtime status (not persisted in snapshot)
   connected?: boolean;
   connectionState?: 'connected' | 'reconnecting' | 'disconnected' | 'stale' | 'unavailable' | 'error';

@@ -1,6 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { AppState, ProductEdition } from '../types';
 import { verifyClientPackage, DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_PASSWORD } from '../utils/clientSecurity';
+import { getCommercialSavedPackage, getCommunitySavedPackage, SavedPackageInfo } from '../utils/editionStorage';
 import AppLogo from './AppLogo';
 
 interface LandingPageProps {
@@ -9,6 +10,7 @@ interface LandingPageProps {
   onLoginAdmin: () => void;
   onImportClientPackage: (packageState: AppState, clientName: string, expiresAt?: string, preferredWorkstationMode?: 'hmi' | 'grid') => void;
   onLoadSavedClientSetup?: () => void;
+  onLoadSavedCommunitySetup?: (asClientMode?: boolean) => void;
   hasSavedClientSetup?: boolean;
   accentColor?: string;
 }
@@ -19,6 +21,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
   onLoginAdmin,
   onImportClientPackage,
   onLoadSavedClientSetup,
+  onLoadSavedCommunitySetup,
   hasSavedClientSetup,
   accentColor = '#0ea5e9'
 }) => {
@@ -31,10 +34,19 @@ const LandingPage: React.FC<LandingPageProps> = ({
   const [isVerifying, setIsVerifying] = useState(false);
   const [dragActive, setDragActive] = useState(false);
 
+  // Live detection of both Commercial and Community browser saves
+  const [commercialPackage, setCommercialPackage] = useState<SavedPackageInfo | null>(() => getCommercialSavedPackage());
+  const [communityPackage, setCommunityPackage] = useState<SavedPackageInfo | null>(() => getCommunitySavedPackage());
+
+  useEffect(() => {
+    setCommercialPackage(getCommercialSavedPackage());
+    setCommunityPackage(getCommunitySavedPackage());
+  }, [hasSavedClientSetup]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isSavedInBrowser = typeof window !== 'undefined' && localStorage.getItem('tasc_client_setup_saved') === 'true' && !!localStorage.getItem('mqtt_dash_pro_state');
-  const savedSetupAvailable = !!(hasSavedClientSetup || isSavedInBrowser);
+  const hasCommercialSaved = !!commercialPackage;
+  const hasCommunitySaved = !!communityPackage;
 
   const handleAdminSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -231,14 +243,38 @@ const LandingPage: React.FC<LandingPageProps> = ({
             </div>
 
             <div className="pt-4 mt-auto">
-              <button
-                type="button"
-                onClick={onSelectCommunityMode}
-                className="w-full py-2.5 px-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/20 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer"
-              >
-                <span>Start Community Edition</span>
-                <i className="fas fa-arrow-right text-xs"></i>
-              </button>
+              {hasCommunitySaved && communityPackage ? (
+                <div className="space-y-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onLoadSavedCommunitySetup) onLoadSavedCommunitySetup(false);
+                      else onSelectCommunityMode();
+                    }}
+                    className="w-full py-2.5 px-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/20 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer"
+                  >
+                    <i className="fas fa-rotate-left text-xs"></i>
+                    <span>Resume Community Demo ({communityPackage.meta.panelsCount} Wdgt)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onSelectCommunityMode}
+                    className="w-full py-1 px-2 text-emerald-400 hover:text-emerald-300 font-semibold text-[10px] flex items-center justify-center space-x-1 transition-colors cursor-pointer"
+                  >
+                    <i className="fas fa-plus text-[10px]"></i>
+                    <span>Start Fresh Community Session</span>
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onSelectCommunityMode}
+                  className="w-full py-2.5 px-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/20 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer"
+                >
+                  <span>Start Community Edition</span>
+                  <i className="fas fa-arrow-right text-xs"></i>
+                </button>
+              )}
             </div>
           </div>
 
@@ -289,7 +325,76 @@ const LandingPage: React.FC<LandingPageProps> = ({
               </div>
             </div>
 
-            {savedSetupAvailable ? (
+            {/* Client Edition Backup Loading Actions */}
+            {hasCommercialSaved && hasCommunitySaved ? (
+              /* DUAL BACKUP DETECTION: Both Commercial and Community saves available */
+              <div className="pt-3 mt-auto space-y-2">
+                <div className="text-[10px] font-bold text-sky-300 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <i className="fas fa-layer-group text-xs text-sky-400"></i>
+                    <span>2 Saved Setups Detected</span>
+                  </span>
+                  <span className="text-[9px] text-slate-400 font-mono">Browser Memory</span>
+                </div>
+
+                {/* 1. Commercial Setup Option */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onLoadSavedClientSetup) onLoadSavedClientSetup();
+                    else setShowImportModal(true);
+                  }}
+                  className="w-full p-2.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-slate-950 rounded-xl shadow-lg shadow-sky-500/20 active:scale-98 transition-all flex items-center justify-between cursor-pointer text-left group"
+                >
+                  <div>
+                    <div className="text-xs font-black uppercase tracking-wide flex items-center gap-1.5">
+                      <i className="fas fa-file-shield text-xs"></i>
+                      <span>Commercial Setup</span>
+                      {commercialPackage?.meta.isSignedPackage && (
+                        <span className="text-[8px] bg-slate-950/80 text-sky-300 px-1.5 py-0.2 rounded font-mono font-bold">SIGNED</span>
+                      )}
+                    </div>
+                    <div className="text-[10px] opacity-85 font-medium mt-0.5">
+                      {commercialPackage?.meta.dashboardsCount || 1} Screens • {commercialPackage?.meta.panelsCount || 0} Widgets {commercialPackage?.meta.clientName ? `• ${commercialPackage.meta.clientName}` : ''}
+                    </div>
+                  </div>
+                  <i className="fas fa-arrow-right text-xs group-hover:translate-x-0.5 transition-transform"></i>
+                </button>
+
+                {/* 2. Community Variant Option */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onLoadSavedCommunitySetup) onLoadSavedCommunitySetup(true);
+                    else if (onLoadSavedClientSetup) onLoadSavedClientSetup();
+                  }}
+                  className="w-full p-2 bg-slate-950/90 hover:bg-slate-900 border border-emerald-500/40 hover:border-emerald-400 text-slate-200 rounded-xl active:scale-98 transition-all flex items-center justify-between cursor-pointer text-left group"
+                >
+                  <div>
+                    <div className="text-[11px] font-bold text-emerald-300 flex items-center gap-1.5">
+                      <i className="fas fa-cube text-[10px] text-emerald-400"></i>
+                      <span>Community Edition Save</span>
+                      <span className="text-[8px] bg-emerald-500/20 text-emerald-300 px-1 py-0.2 rounded font-bold border border-emerald-500/30">DEMO</span>
+                    </div>
+                    <div className="text-[9px] text-slate-400 mt-0.5">
+                      1 Screen • {communityPackage?.meta.panelsCount || 0} Widgets (Community constraints)
+                    </div>
+                  </div>
+                  <i className="fas fa-chevron-right text-[10px] text-slate-400 group-hover:text-emerald-300 group-hover:translate-x-0.5 transition-all"></i>
+                </button>
+
+                {/* 3. Upload New Package */}
+                <button
+                  type="button"
+                  onClick={() => setShowImportModal(true)}
+                  className="w-full py-1 px-2 text-sky-400 hover:text-sky-300 font-semibold text-[10px] flex items-center justify-center space-x-1 transition-colors cursor-pointer"
+                >
+                  <i className="fas fa-cloud-arrow-up text-[10px]"></i>
+                  <span>Upload New Package (.tasc / .json)</span>
+                </button>
+              </div>
+            ) : hasCommercialSaved ? (
+              /* Single Commercial Setup Available */
               <div className="pt-3 mt-auto space-y-1.5">
                 <button
                   type="button"
@@ -303,7 +408,30 @@ const LandingPage: React.FC<LandingPageProps> = ({
                   className="w-full py-2.5 px-3 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-sky-500/20 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer"
                 >
                   <i className="fas fa-floppy-disk text-xs"></i>
-                  <span>Load Client Edition (Saved Setup)</span>
+                  <span>Load Commercial Setup ({commercialPackage?.meta.dashboardsCount || 1} Scrn • {commercialPackage?.meta.panelsCount || 0} Wdgt)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowImportModal(true)}
+                  className="w-full py-1 px-2 text-sky-400 hover:text-sky-300 font-semibold text-[10px] flex items-center justify-center space-x-1 transition-colors cursor-pointer"
+                >
+                  <i className="fas fa-cloud-arrow-up text-[10px]"></i>
+                  <span>Upload New Package (.tasc / .json)</span>
+                </button>
+              </div>
+            ) : hasCommunitySaved ? (
+              /* Single Community Save Available */
+              <div className="pt-3 mt-auto space-y-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onLoadSavedCommunitySetup) onLoadSavedCommunitySetup(true);
+                    else if (onLoadSavedClientSetup) onLoadSavedClientSetup();
+                  }}
+                  className="w-full py-2.5 px-3 bg-slate-900 hover:bg-slate-800 border border-emerald-500/40 text-emerald-300 font-bold text-xs uppercase tracking-wider rounded-xl shadow-md active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer"
+                >
+                  <i className="fas fa-cube text-xs text-emerald-400"></i>
+                  <span>Load Community Save in Client Mode</span>
                 </button>
                 <button
                   type="button"
@@ -315,6 +443,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
                 </button>
               </div>
             ) : (
+              /* No Browser Saves Available */
               <div className="pt-4 mt-auto">
                 <button
                   type="button"
@@ -424,13 +553,13 @@ const LandingPage: React.FC<LandingPageProps> = ({
               </button>
             </div>
 
-            {savedSetupAvailable && (
+            {hasCommercialSaved && (
               <div className="bg-sky-500/10 border border-sky-500/30 rounded-2xl p-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
                 <div className="flex items-center space-x-2.5 text-sky-300">
                   <i className="fas fa-floppy-disk text-base text-sky-400 shrink-0"></i>
                   <div>
                     <span className="font-bold block text-white">Saved Setup Found in Browser</span>
-                    <span className="text-[11px] text-slate-400">Loads saved client project directly without re-uploading.</span>
+                    <span className="text-[11px] text-slate-400">Loads saved commercial project directly without re-uploading.</span>
                   </div>
                 </div>
                 <button

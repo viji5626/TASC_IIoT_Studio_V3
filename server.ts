@@ -2,6 +2,8 @@ import express from 'express';
 import http from 'http';
 import net from 'net';
 import path from 'path';
+import os from 'os';
+import { exec } from 'child_process';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createViteServer } from 'vite';
 import {
@@ -18,6 +20,83 @@ import jsmodbus from 'jsmodbus';
 
 const PORT = 3000;
 
+function detectSerialPorts(): Promise<Array<{ port: string; name: string; description?: string }>> {
+  return new Promise((resolve) => {
+    const platform = os.platform();
+    if (platform === 'win32') {
+      // 1. Check Windows Registry for hardware SERIALCOMM ports
+      exec('reg query "HKLM\\HARDWARE\\DEVICEMAP\\SERIALCOMM"', (regErr, regOut) => {
+        const ports: Array<{ port: string; name: string; description?: string }> = [];
+        if (!regErr && regOut) {
+          const lines = regOut.split(/\r?\n/);
+          for (const line of lines) {
+            const match = line.trim().match(/REG_SZ\s+(COM\d+)/i);
+            if (match) {
+              const port = match[1].toUpperCase();
+              if (!ports.some(p => p.port === port)) {
+                ports.push({ port, name: port, description: 'Hardware Serial Port' });
+              }
+            }
+          }
+        }
+
+        // 2. Query PowerShell for friendly device captions (e.g. USB-SERIAL CH340, FTDI, CP210x)
+        exec('powershell -NoProfile -Command "Get-CimInstance Win32_PnPEntity | Where-Object { $_.PNPClass -eq \'Ports\' } | Select-Object -Property Caption, Name, DeviceID | ConvertTo-Json"', (psErr, psOut) => {
+          if (!psErr && psOut && psOut.trim()) {
+            try {
+              const parsed = JSON.parse(psOut);
+              const list = Array.isArray(parsed) ? parsed : [parsed];
+              for (const item of list) {
+                const text = item.Caption || item.Name || '';
+                const match = text.match(/(COM\d+)/i);
+                if (match) {
+                  const port = match[1].toUpperCase();
+                  const existing = ports.find(p => p.port === port);
+                  if (existing) {
+                    existing.name = text;
+                    existing.description = item.DeviceID || text;
+                  } else {
+                    ports.push({ port, name: text, description: item.DeviceID || text });
+                  }
+                }
+              }
+            } catch (e) {}
+          }
+
+          if (ports.length === 0) {
+            ['COM1', 'COM2', 'COM3', 'COM4'].forEach(p => {
+              ports.push({ port: p, name: p, description: 'Virtual / Standard Port' });
+            });
+          }
+
+          ports.sort((a, b) => {
+            const numA = parseInt(a.port.replace(/\D/g, ''), 10) || 0;
+            const numB = parseInt(b.port.replace(/\D/g, ''), 10) || 0;
+            return numA - numB;
+          });
+
+          resolve(ports);
+        });
+      });
+    } else {
+      exec('ls /dev/ttyUSB* /dev/ttyACM* /dev/ttyS* /dev/tty.* 2>/dev/null', (err, stdout) => {
+        const ports: Array<{ port: string; name: string; description?: string }> = [];
+        if (!err && stdout) {
+          stdout.split(/\s+/).filter(Boolean).forEach(p => {
+            ports.push({ port: p, name: p, description: 'Serial Device' });
+          });
+        }
+        if (ports.length === 0) {
+          ['/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyS0'].forEach(p => {
+            ports.push({ port: p, name: p, description: 'Standard Serial Device' });
+          });
+        }
+        resolve(ports);
+      });
+    }
+  });
+}
+
 async function startServer() {
   const app = express();
   const server = http.createServer(app);
@@ -31,6 +110,16 @@ async function startServer() {
       service: 'TASC MQTT Dash Pro Server & TCP Bridge',
       timestamp: new Date().toISOString()
     });
+  });
+
+  // ─── Serial / COM Port Auto-Detection Endpoint ──────────────────────────────
+  app.get('/api/serial-ports', async (req, res) => {
+    try {
+      const ports = await detectSerialPorts();
+      res.json({ success: true, ports, count: ports.length });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message, ports: [] });
+    }
   });
 
   // ─── Modbus Diagnostic Test Endpoint ─────────────────────────────────────────
@@ -210,30 +299,23 @@ function invalidateModbusClient(rawHost: string, port: number, unitId: number = 
   modbusQueues.delete(key);
 }
 
-function getOrCreateModbusClient(rawHost: string, port: number, unitId: number = 1, connectionId?: string): Promise<any> {
+function getOrCreateModbusClient(rawHost: string, port: number, unitId: number = 1, connectionId?: string, connConfig?: any): Promise<any> {
   const host = normalizeHost(rawHost);
   const key = `${host}:${port}:${unitId}`;
   const existing = modbusPool.get(key);
 
   if (existing && existing.connected && existing.client) {
-    // Check connection age — force reconnect if too old to detect server restarts
-    const age = Date.now() - existing.createdAt;
-    if (age > MAX_MODBUS_CONNECTION_AGE_MS) {
-      console.log(`[ModbusTCP] Connection to ${host}:${port} is ${Math.round(age / 1000)}s old — forcing reconnect for freshness`);
-      // Destroy old socket silently
-      try { existing.socket.destroy(); } catch {}
-      modbusPool.delete(key);
-      modbusQueues.delete(key);
-      // Fall through to create a new connection below
-    } else {
+    // Check if underlying socket was destroyed or closed by OS/network
+    if (existing.socket && !existing.socket.destroyed && existing.socket.writable) {
       if (connectionId) existing.connectionId = connectionId;
       return Promise.resolve(existing.client);
+    } else {
+      // Socket was closed or destroyed by OS, invalidate immediately
+      invalidateModbusClient(host, port, unitId, connectionId);
     }
   }
 
   // If currently connecting, wait a brief tick to prevent socket collision.
-  // IMPORTANT: Do NOT call invalidateModbusClient here — the in-progress socket must be
-  // allowed to complete its 5-second connect attempt. Only the current poll is rejected.
   if (existing && existing.connecting) {
     return new Promise((resolve, reject) => {
       setTimeout(() => {
@@ -248,23 +330,22 @@ function getOrCreateModbusClient(rawHost: string, port: number, unitId: number =
     });
   }
 
+  const sendTimeout = Math.max(300, Number(connConfig?.sendTimeoutMs) || 1000);
+
   return new Promise((resolve, reject) => {
     try {
       const socket = new net.Socket();
       socket.setNoDelay(true);
-      const client = new jsmodbus.client.TCP(socket, unitId, 5000);
+      const client = new jsmodbus.client.TCP(socket, unitId, sendTimeout);
       const entry: ModbusClientEntry = { socket, client, connected: false, connecting: true, connectionId, createdAt: Date.now() };
       modbusPool.set(key, entry);
 
-      // 5s connect timeout — if we can't reach the server in 5s, give up
-      socket.setTimeout(5000);
+      // Connect timeout
+      socket.setTimeout(sendTimeout);
 
       socket.on('connect', () => {
         console.log(`[ModbusTCP] ✓ Connected to Modbus slave at ${host}:${port} (Unit ID: ${unitId})`);
-        // Enable TCP keep-alive to detect half-open connections at OS level
-        socket.setKeepAlive(true, 2000);
-        // No idle timeout on established connection — we rely on read-level Promise.race timeout
-        // and TCP keepalive to detect dead connections
+        socket.setKeepAlive(true, 1000);
         socket.setTimeout(0);
         entry.connected = true;
         entry.connecting = false;
@@ -319,7 +400,7 @@ function getOrCreateModbusClient(rawHost: string, port: number, unitId: number =
 
 const modbusQueues = new Map<string, Promise<any>>();
 
-function executeOnModbusClient<T>(host: string, port: number, unitId: number, connectionId: string | undefined, task: (client: any) => Promise<T>): Promise<T> {
+function executeOnModbusClient<T>(host: string, port: number, unitId: number, connectionId: string | undefined, task: (client: any) => Promise<T>, connConfig?: any): Promise<T> {
   const key = `${normalizeHost(host)}:${port}:${unitId}`;
 
   const entry = modbusPool.get(key);
@@ -332,7 +413,7 @@ function executeOnModbusClient<T>(host: string, port: number, unitId: number, co
   const nextPromise = previousPromise
     .catch(() => {}) // Don't block queue if previous request errored!
     .then(async () => {
-      const client = await getOrCreateModbusClient(host, port, unitId, connectionId);
+      const client = await getOrCreateModbusClient(host, port, unitId, connectionId, connConfig);
       return await task(client);
     });
 
@@ -340,7 +421,7 @@ function executeOnModbusClient<T>(host: string, port: number, unitId: number, co
   return nextPromise;
 }
 
-function translateModbusAddress(address: number | string): number {
+function translateModbusAddress(address: number | string, zeroBased: boolean = true): number {
   const rawAddr = Number(address) || 0;
   if (rawAddr >= 400001 && rawAddr <= 499999) return rawAddr - 400001;
   if (rawAddr >= 300001 && rawAddr <= 399999) return rawAddr - 300001;
@@ -349,7 +430,133 @@ function translateModbusAddress(address: number | string): number {
   if (rawAddr >= 30001 && rawAddr <= 39999) return rawAddr - 30001;
   if (rawAddr >= 10001 && rawAddr <= 19999) return rawAddr - 10001;
   if (rawAddr >= 40000 && rawAddr < 40001) return 0;
+  
+  if (!zeroBased && rawAddr > 0) {
+    return rawAddr - 1;
+  }
   return Math.max(0, rawAddr);
+}
+
+function applyModbusSwaps(
+  buf: Buffer,
+  dataType: string,
+  byteSwap: boolean = false,
+  wordSwap: boolean = false,
+  dwordSwap: boolean = false
+): any {
+  const data = Buffer.from(buf);
+
+  // 1. Byte swap: swap bytes in each 16-bit word
+  if (byteSwap) {
+    for (let i = 0; i < data.length - 1; i += 2) {
+      const temp = data[i];
+      data[i] = data[i + 1];
+      data[i + 1] = temp;
+    }
+  }
+
+  // 2. Word swap: swap 16-bit words inside 32-bit dwords
+  if (wordSwap && data.length >= 4) {
+    for (let i = 0; i < data.length - 3; i += 4) {
+      const w0_0 = data[i];
+      const w0_1 = data[i + 1];
+      data[i] = data[i + 2];
+      data[i + 1] = data[i + 3];
+      data[i + 2] = w0_0;
+      data[i + 3] = w0_1;
+    }
+  }
+
+  // 3. Dword swap: swap 32-bit dwords inside 64-bit qwords
+  if (dwordSwap && data.length >= 8) {
+    for (let i = 0; i < data.length - 7; i += 8) {
+      for (let b = 0; b < 4; b++) {
+        const temp = data[i + b];
+        data[i + b] = data[i + 4 + b];
+        data[i + 4 + b] = temp;
+      }
+    }
+  }
+
+  if (dataType === 'boolean') {
+    return data.readUInt16BE(0) !== 0;
+  } else if (dataType === 'int16') {
+    return data.readInt16BE(0);
+  } else if (dataType === 'uint16') {
+    return data.readUInt16BE(0);
+  } else if (dataType === 'int32') {
+    return data.readInt32BE(0);
+  } else if (dataType === 'uint32') {
+    return data.readUInt32BE(0);
+  } else if (dataType === 'float') {
+    const val = data.readFloatBE(0);
+    return isNaN(val) ? 0 : Math.round(val * 100) / 100;
+  } else if (dataType === 'double') {
+    const val = data.readDoubleBE(0);
+    return isNaN(val) ? 0 : Math.round(val * 1000) / 1000;
+  } else {
+    return data.toString('utf8').replace(/\0/g, '');
+  }
+}
+
+function prepareModbusWriteBuffer(
+  numVal: number,
+  dataType: string,
+  byteSwap: boolean = false,
+  wordSwap: boolean = false,
+  dwordSwap: boolean = false
+): Buffer {
+  let buf: Buffer;
+  if (dataType === 'float') {
+    buf = Buffer.alloc(4);
+    buf.writeFloatBE(numVal, 0);
+  } else if (dataType === 'int32') {
+    buf = Buffer.alloc(4);
+    buf.writeInt32BE(numVal, 0);
+  } else if (dataType === 'uint32') {
+    buf = Buffer.alloc(4);
+    buf.writeUInt32BE(numVal, 0);
+  } else if (dataType === 'double') {
+    buf = Buffer.alloc(8);
+    buf.writeDoubleBE(numVal, 0);
+  } else if (dataType === 'int16') {
+    buf = Buffer.alloc(2);
+    buf.writeInt16BE(numVal, 0);
+  } else {
+    buf = Buffer.alloc(2);
+    buf.writeUInt16BE(numVal & 0xffff, 0);
+  }
+
+  if (dwordSwap && buf.length >= 8) {
+    for (let i = 0; i < buf.length - 7; i += 8) {
+      for (let b = 0; b < 4; b++) {
+        const temp = buf[i + b];
+        buf[i + b] = buf[i + 4 + b];
+        buf[i + 4 + b] = temp;
+      }
+    }
+  }
+
+  if (wordSwap && buf.length >= 4) {
+    for (let i = 0; i < buf.length - 3; i += 4) {
+      const w0_0 = buf[i];
+      const w0_1 = buf[i + 1];
+      buf[i] = buf[i + 2];
+      buf[i + 1] = buf[i + 3];
+      buf[i + 2] = w0_0;
+      buf[i + 3] = w0_1;
+    }
+  }
+
+  if (byteSwap) {
+    for (let i = 0; i < buf.length - 1; i += 2) {
+      const temp = buf[i];
+      buf[i] = buf[i + 1];
+      buf[i + 1] = temp;
+    }
+  }
+
+  return buf;
 }
 
 async function readModbusTag(tag: any, connection: any): Promise<any> {
@@ -357,110 +564,115 @@ async function readModbusTag(tag: any, connection: any): Promise<any> {
   const port = Number(connection?.port) || 502;
   const unitId = Number((tag?.slaveId !== undefined && tag?.slaveId !== null && tag?.slaveId !== 0) ? tag.slaveId : (connection?.unitId || 1));
   const connectionId = connection?.connectionId || tag?.connectionId;
+  const zeroBased = tag?.zeroBasedAddressing !== undefined ? tag.zeroBasedAddressing : (connection?.zeroBasedAddressing !== false);
 
-  return executeOnModbusClient(host, port, unitId, connectionId, async (client) => {
-    const registerAddr = translateModbusAddress(tag.address);
+  const byteSwap = tag?.byteSwap !== undefined ? tag.byteSwap : (connection?.byteSwap || false);
+  const wordSwap = tag?.wordSwap !== undefined ? tag.wordSwap : (connection?.wordSwap || false);
+  const dwordSwap = tag?.dwordSwap !== undefined ? tag.dwordSwap : (connection?.dwordSwap || false);
+  const recvTimeoutMs = Math.max(300, Number(connection?.recvTimeoutMs || connection?.timeout) || 1000);
+  const sendRecvDelayMs = Number(connection?.sendRecvDelayMs) || 0;
+  const maxRetries = Math.max(0, Number(connection?.frameRetryCount) || 0);
 
-    const dataType = (tag.dataType || 'int16').toLowerCase();
-    let count = Number(tag.wordCount) || 1;
-    if (dataType === 'int32' || dataType === 'uint32' || dataType === 'float') count = 2;
-    if (dataType === 'double') count = 4;
+  if (sendRecvDelayMs > 0) {
+    await new Promise(r => setTimeout(r, sendRecvDelayMs));
+  }
 
-    const regType = tag.registerType || 'holding_register';
+  let attempt = 0;
+  let lastErr: any = null;
 
-    const timeoutMs = Math.max(500, Number(connection?.timeout) || 2000);
+  while (attempt <= maxRetries) {
+    try {
+      return await executeOnModbusClient(host, port, unitId, connectionId, async (client) => {
+        const registerAddr = translateModbusAddress(tag.address, zeroBased);
 
-    // Wrap the actual Modbus read in a Promise.race with a strict timeout.
-    // If the TCP socket is half-open (server died but OS hasn't sent RST yet),
-    // the jsmodbus read will hang forever. This timeout catches that.
-    const readPromise = new Promise<any>(async (resolve, reject) => {
-      try {
-        let res: any;
-        if (regType === 'holding_register') {
-          res = await client.readHoldingRegisters(registerAddr, count);
-        } else if (regType === 'input_register') {
-          res = await client.readInputRegisters(registerAddr, count);
-        } else if (regType === 'coil') {
-          res = await client.readCoils(registerAddr, count);
-        } else if (regType === 'discrete_input') {
-          res = await client.readDiscreteInputs(registerAddr, count);
-        } else {
-          res = await client.readHoldingRegisters(registerAddr, count);
+        const dataType = (tag.dataType || 'int16').toLowerCase();
+        let count = Number(tag.wordCount) || 1;
+        if (dataType === 'int32' || dataType === 'uint32' || dataType === 'float') count = 2;
+        if (dataType === 'double') count = 4;
+
+        const regType = tag.registerType || 'holding_register';
+
+        const readPromise = new Promise<any>(async (resolve, reject) => {
+          try {
+            let res: any;
+            if (regType === 'holding_register') {
+              res = await client.readHoldingRegisters(registerAddr, count);
+            } else if (regType === 'input_register') {
+              res = await client.readInputRegisters(registerAddr, count);
+            } else if (regType === 'coil') {
+              res = await client.readCoils(registerAddr, count);
+            } else if (regType === 'discrete_input') {
+              res = await client.readDiscreteInputs(registerAddr, count);
+            } else {
+              res = await client.readHoldingRegisters(registerAddr, count);
+            }
+            resolve(res);
+          } catch (err) {
+            reject(err);
+          }
+        });
+
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error(`Modbus read timeout after ${recvTimeoutMs}ms for ${host}:${port} addr=${registerAddr}`));
+          }, recvTimeoutMs);
+        });
+
+        const res: any = await Promise.race([readPromise, timeoutPromise]);
+
+        if (!res || !res.response) {
+          throw new Error('No response from Modbus slave — empty response object');
         }
-        resolve(res);
-      } catch (err) {
-        reject(err);
+
+        if (connectionId) {
+          updateConnectionHealth(connectionId, {
+            connectionState: 'connected',
+            lastConnectedAt: new Date().toISOString(),
+            consecutiveFailureCount: 0,
+            lastError: undefined
+          });
+        }
+
+        if (regType === 'coil' || regType === 'discrete_input') {
+          const valArray = res.response.body.valuesAsArray || res.response.body.values;
+          return valArray[0] === true || valArray[0] === 1;
+        }
+
+        let buf: Buffer = res.response.body.valuesAsBuffer;
+        if (!buf || buf.length === 0) {
+          const rawValues: number[] = res.response.body.values || res.response.body.valuesAsArray || [];
+          if (rawValues.length === 0) {
+            throw new Error(`Modbus response body has no values — raw response: ${JSON.stringify(res.response.body)}`);
+          }
+          buf = Buffer.alloc(rawValues.length * 2);
+          rawValues.forEach((v, idx) => buf.writeUInt16BE((v || 0) & 0xffff, idx * 2));
+        }
+
+        const parsed = applyModbusSwaps(buf, dataType, byteSwap, wordSwap, dwordSwap);
+
+        // When reopenSockets is true (default for single-socket channels & simulators),
+        // release the socket after read pass so server stop/start is detected instantly
+        if (connection?.reopenSockets !== false) {
+          invalidateModbusClient(host, port, unitId, connectionId);
+        }
+
+        return parsed;
+      }, connection);
+    } catch (err: any) {
+      lastErr = err;
+      attempt++;
+      const isPollingSkip = typeof err?.message === 'string' && err.message.includes('still in progress');
+      if (!isPollingSkip) {
+        console.warn(`[ModbusTCP] Read FAILED for "${tag.tagName || tag.tagId}" (addr ${tag.address}, attempt ${attempt}/${maxRetries + 1}): ${err.message} — invalidating socket`);
+        invalidateModbusClient(host, port, unitId, connectionId);
       }
-    });
-
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => {
-        reject(new Error(`Modbus read timeout after ${timeoutMs}ms for ${host}:${port} addr=${registerAddr}`));
-      }, timeoutMs);
-    });
-
-    const res: any = await Promise.race([readPromise, timeoutPromise]);
-
-    if (!res || !res.response) {
-      throw new Error('No response from Modbus slave — empty response object');
-    }
-
-    if (connectionId) {
-      updateConnectionHealth(connectionId, {
-        connectionState: 'connected',
-        lastConnectedAt: new Date().toISOString(),
-        consecutiveFailureCount: 0,
-        lastError: undefined
-      });
-    }
-
-    if (regType === 'coil' || regType === 'discrete_input') {
-      const valArray = res.response.body.valuesAsArray || res.response.body.values;
-      return valArray[0] === true || valArray[0] === 1;
-    }
-
-    let buf: Buffer = res.response.body.valuesAsBuffer;
-    if (!buf || buf.length === 0) {
-      const rawValues: number[] = res.response.body.values || res.response.body.valuesAsArray || [];
-      if (rawValues.length === 0) {
-        throw new Error(`Modbus response body has no values — raw response: ${JSON.stringify(res.response.body)}`);
+      if (attempt <= maxRetries) {
+        await new Promise(r => setTimeout(r, 50));
       }
-      buf = Buffer.alloc(rawValues.length * 2);
-      rawValues.forEach((v, idx) => buf.writeUInt16BE((v || 0) & 0xffff, idx * 2));
     }
+  }
 
-    let parsedVal: any;
-    if (dataType === 'boolean') {
-      parsedVal = buf.readUInt16BE(0) !== 0;
-    } else if (dataType === 'int16') {
-      parsedVal = tag.byteSwap ? buf.readInt16LE(0) : buf.readInt16BE(0);
-    } else if (dataType === 'uint16') {
-      parsedVal = tag.byteSwap ? buf.readUInt16LE(0) : buf.readUInt16BE(0);
-    } else if (dataType === 'int32') {
-      parsedVal = tag.byteSwap ? buf.readInt32LE(0) : buf.readInt32BE(0);
-    } else if (dataType === 'uint32') {
-      parsedVal = tag.byteSwap ? buf.readUInt32LE(0) : buf.readUInt32BE(0);
-    } else if (dataType === 'float') {
-      const val = tag.byteSwap ? buf.readFloatLE(0) : buf.readFloatBE(0);
-      parsedVal = Math.round(val * 100) / 100;
-    } else if (dataType === 'double') {
-      const val = tag.byteSwap ? buf.readDoubleLE(0) : buf.readDoubleBE(0);
-      parsedVal = Math.round(val * 1000) / 1000;
-    } else {
-      parsedVal = buf.toString('utf8').replace(/\0/g, '');
-    }
-
-    return parsedVal;
-  }).catch((err: any) => {
-    // IMPORTANT: If the error is "poll skipped" (socket still connecting), do NOT destroy
-    // the pending reconnect socket — just rethrow so the poll fails gracefully.
-    const isPollingSkip = typeof err?.message === 'string' && err.message.includes('still in progress');
-    if (!isPollingSkip) {
-      console.warn(`[ModbusTCP] Read FAILED for "${tag.tagName || tag.tagId}" (addr ${tag.address}): ${err.message} — invalidating socket`);
-      invalidateModbusClient(host, port, unitId, connectionId);
-    }
-    throw err;
-  });
+  throw lastErr;
 }
 
 async function writeModbusTag(tag: any, connection: any, value: any): Promise<void> {
@@ -468,28 +680,38 @@ async function writeModbusTag(tag: any, connection: any, value: any): Promise<vo
   const port = Number(connection?.port) || 502;
   const unitId = Number((tag?.slaveId !== undefined && tag?.slaveId !== null && tag?.slaveId !== 0) ? tag.slaveId : (connection?.unitId || 1));
   const connectionId = connection?.connectionId || tag?.connectionId;
+  const zeroBased = tag?.zeroBasedAddressing !== undefined ? tag.zeroBasedAddressing : (connection?.zeroBasedAddressing !== false);
+  const byteSwap = tag?.byteSwap !== undefined ? tag.byteSwap : (connection?.byteSwap || false);
+  const wordSwap = tag?.wordSwap !== undefined ? tag.wordSwap : (connection?.wordSwap || false);
+  const dwordSwap = tag?.dwordSwap !== undefined ? tag.dwordSwap : (connection?.dwordSwap || false);
+  const useSingleCoil = connection?.useSingleCoilWrite !== false;
+  const useSingleReg = connection?.useSingleRegisterWrite !== false;
 
   return executeOnModbusClient(host, port, unitId, connectionId, async (client) => {
-    const registerAddr = translateModbusAddress(tag.address);
-
+    const registerAddr = translateModbusAddress(tag.address, zeroBased);
     const regType = tag.registerType || 'holding_register';
 
     if (regType === 'coil') {
-      await client.writeSingleCoil(registerAddr, Boolean(value));
+      if (useSingleCoil) {
+        await client.writeSingleCoil(registerAddr, Boolean(value));
+      } else {
+        await client.writeMultipleCoils(registerAddr, [Boolean(value)]);
+      }
     } else {
       const numVal = Number(value) || 0;
       const dataType = (tag.dataType || 'int16').toLowerCase();
-      if (dataType === 'int32' || dataType === 'uint32' || dataType === 'float') {
-        const buf = Buffer.alloc(4);
-        if (dataType === 'float') buf.writeFloatBE(numVal, 0);
-        else if (dataType === 'int32') buf.writeInt32BE(numVal, 0);
-        else buf.writeUInt32BE(numVal, 0);
+      const isMultiWord = dataType === 'int32' || dataType === 'uint32' || dataType === 'float' || dataType === 'double';
+
+      if (isMultiWord || !useSingleReg) {
+        const buf = prepareModbusWriteBuffer(numVal, dataType, byteSwap, wordSwap, dwordSwap);
         await client.writeMultipleRegisters(registerAddr, buf);
       } else {
-        await client.writeSingleRegister(registerAddr, numVal);
+        const buf = prepareModbusWriteBuffer(numVal, dataType, byteSwap, wordSwap, dwordSwap);
+        const singleVal = buf.readUInt16BE(0);
+        await client.writeSingleRegister(registerAddr, singleVal);
       }
     }
-  }).catch((err: any) => {
+  }, connection).catch((err: any) => {
     console.error(`[ModbusTCP Diagnostic] Write failed for "${tag.tagName || tag.tagId}":`, err.message);
     invalidateModbusClient(host, port, unitId, connectionId);
     throw err;
@@ -697,104 +919,121 @@ async function writeOpcUaTag(tag: any, connection: any, value: any): Promise<voi
             let subLastGoodTimestamp: string | undefined = undefined;
             let subConsecutiveFailures = 0;
             let readCount = 0;
+            let isPolling = false;
 
-            const interval = setInterval(async () => {
+            const pollFn = async () => {
               if (ws.readyState !== WebSocket.OPEN) {
-                clearInterval(interval);
-                activeIntervals.delete(key);
+                const timer = activeIntervals.get(key);
+                if (timer) {
+                  clearInterval(timer);
+                  activeIntervals.delete(key);
+                }
                 return;
               }
 
-              let val: any = null;
-              let quality: 'good' | 'bad' = 'good';
-              let qualityText: string | undefined;
-              const now = new Date().toISOString();
+              // Skip if a previous read is still awaiting network timeout/response
+              if (isPolling) {
+                return;
+              }
+              isPolling = true;
 
-              const protocol = (sub.connection?.protocol || sub.tag?.protocol || '').toLowerCase();
-              const connectionId = sub.connection?.connectionId || sub.tag?.connectionId;
+              try {
+                let val: any = null;
+                let quality: 'good' | 'bad' = 'good';
+                let qualityText: string | undefined;
+                const now = new Date().toISOString();
 
-              if (sub.connection && sub.connection.enabled === false) {
-                quality = 'bad';
-                val = null;
-                qualityText = 'Source disabled';
-              } else if (protocol === 'modbus_tcp' || protocol === 'modbus_rtu') {
-                try {
-                  val = await readModbusTag(sub.tag, sub.connection);
-                  quality = 'good';
-                  qualityText = 'Good';
-                  readCount++;
-                  // Log first read and then every 50th read for diagnostics
-                  if (readCount === 1 || readCount % 50 === 0) {
-                    console.log(`[DriverBridge] ✓ Read #${readCount} for "${sub.tag?.tagName || sub.tagId}" addr=${sub.tag?.address}: value=${val}`);
-                  }
-                  // On success: reset failure counter, update last-good
-                  subConsecutiveFailures = 0;
-                  subLastGoodValue = val;
-                  subLastGoodTimestamp = now;
-                  // Ensure connection health reflects connected state
-                  if (connectionId) {
-                    updateConnectionHealth(connectionId, {
-                      connectionState: 'connected',
-                      consecutiveFailureCount: 0,
-                      lastError: undefined
-                    });
-                  }
-                } catch (err: any) {
-                  subConsecutiveFailures++;
+                const protocol = (sub.connection?.protocol || sub.tag?.protocol || '').toLowerCase();
+                const connectionId = sub.connection?.connectionId || sub.tag?.connectionId;
+
+                if (sub.connection && sub.connection.enabled === false) {
                   quality = 'bad';
                   val = null;
-                  qualityText = err.message?.includes('in progress') ? 'Reconnecting' : 'Read error';
-                  if (subConsecutiveFailures <= 5 || subConsecutiveFailures % 20 === 0) {
-                    console.warn(`[DriverBridge] ✗ Modbus read fail #${subConsecutiveFailures} for "${sub.tag?.tagName || sub.tagId}": ${err.message}`);
+                  qualityText = 'Source disabled';
+                } else if (protocol === 'modbus_tcp' || protocol === 'modbus_rtu') {
+                  try {
+                    val = await readModbusTag(sub.tag, sub.connection);
+                    quality = 'good';
+                    qualityText = 'Good';
+                    readCount++;
+                    // Log first read and then every 50th read for diagnostics
+                    if (readCount === 1 || readCount % 50 === 0) {
+                      console.log(`[DriverBridge] ✓ Read #${readCount} for "${sub.tag?.tagName || sub.tagId}" addr=${sub.tag?.address}: value=${val}`);
+                    }
+                    // On success: reset failure counter, update last-good
+                    subConsecutiveFailures = 0;
+                    subLastGoodValue = val;
+                    subLastGoodTimestamp = now;
+                    // Ensure connection health reflects connected state
+                    if (connectionId) {
+                      updateConnectionHealth(connectionId, {
+                        connectionState: 'connected',
+                        consecutiveFailureCount: 0,
+                        lastError: undefined
+                      });
+                    }
+                  } catch (err: any) {
+                    subConsecutiveFailures++;
+                    quality = 'bad';
+                    val = null;
+                    qualityText = err.message?.includes('in progress') ? 'Reconnecting' : 'Read error';
+                    if (subConsecutiveFailures <= 5 || subConsecutiveFailures % 20 === 0) {
+                      console.warn(`[DriverBridge] ✗ Modbus read fail #${subConsecutiveFailures} for "${sub.tag?.tagName || sub.tagId}": ${err.message}`);
+                    }
+                    // Update connection health immediately to disconnected
+                    if (connectionId) {
+                      updateConnectionHealth(connectionId, {
+                        connectionState: 'disconnected',
+                        consecutiveFailureCount: subConsecutiveFailures,
+                        lastError: err.message
+                      });
+                    }
                   }
-                  // Update connection health with failure count
-                  if (connectionId) {
-                    const state = subConsecutiveFailures <= 1 ? 'reconnecting' : (subConsecutiveFailures >= 3 ? 'unavailable' : 'disconnected');
-                    updateConnectionHealth(connectionId, {
-                      connectionState: state,
-                      consecutiveFailureCount: subConsecutiveFailures,
-                      lastError: err.message
-                    });
+                } else if (protocol === 'opcua') {
+                  try {
+                    val = await readOpcUaTag(sub.tag, sub.connection);
+                    quality = 'good';
+                    qualityText = 'Good';
+                    subConsecutiveFailures = 0;
+                    subLastGoodValue = val;
+                    subLastGoodTimestamp = now;
+                  } catch (err: any) {
+                    subConsecutiveFailures++;
+                    quality = 'bad';
+                    val = null;
+                    qualityText = 'OPC UA read error';
+                    if (subConsecutiveFailures <= 3 || subConsecutiveFailures % 20 === 0) {
+                      console.warn(`[DriverBridge] OPC UA read failed for tag ${sub.tag?.tagName || sub.tagId}:`, err.message);
+                    }
                   }
-                }
-              } else if (protocol === 'opcua') {
-                try {
-                  val = await readOpcUaTag(sub.tag, sub.connection);
-                  quality = 'good';
-                  qualityText = 'Good';
-                  subConsecutiveFailures = 0;
-                  subLastGoodValue = val;
-                  subLastGoodTimestamp = now;
-                } catch (err: any) {
-                  subConsecutiveFailures++;
+                } else {
                   quality = 'bad';
                   val = null;
-                  qualityText = 'OPC UA read error';
-                  if (subConsecutiveFailures <= 3 || subConsecutiveFailures % 20 === 0) {
-                    console.warn(`[DriverBridge] OPC UA read failed for tag ${sub.tag?.tagName || sub.tagId}:`, err.message);
-                  }
+                  qualityText = 'Unknown protocol';
                 }
-              } else {
-                quality = 'bad';
-                val = null;
-                qualityText = 'Unknown protocol';
-              }
 
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                  tagId: sub.tagId,
-                  panelId: sub.panelId,
-                  value: val,
-                  quality,
-                  qualityText,
-                  // Pass last-good metadata so the client can preserve last known good value
-                  lastGoodValue: quality === 'bad' ? subLastGoodValue : val,
-                  lastGoodTimestamp: quality === 'bad' ? subLastGoodTimestamp : now,
-                  timestamp: now
-                }));
+                if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({
+                    tagId: sub.tagId,
+                    panelId: sub.panelId,
+                    value: val,
+                    quality,
+                    qualityText,
+                    // Pass last-good metadata so the client can preserve last known good value
+                    lastGoodValue: quality === 'bad' ? subLastGoodValue : val,
+                    lastGoodTimestamp: quality === 'bad' ? subLastGoodTimestamp : now,
+                    timestamp: now
+                  }));
+                }
+              } finally {
+                isPolling = false;
               }
-            }, pollInterval);
+            };
 
+            // Trigger immediate read on subscribe (instant data on browser connect / refresh)
+            pollFn();
+
+            const interval = setInterval(pollFn, pollInterval);
             activeIntervals.set(key, interval);
           });
         }

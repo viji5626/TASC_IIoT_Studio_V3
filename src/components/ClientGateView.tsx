@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { AppState } from '../types';
 import { verifyClientPackage, DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_PASSWORD } from '../utils/clientSecurity';
+import { getCommercialSavedPackage, getCommunitySavedPackage } from '../utils/editionStorage';
 import AppLogo from './AppLogo';
 
 interface ClientGateViewProps {
@@ -173,26 +174,31 @@ const ClientGateView: React.FC<ClientGateViewProps> = ({
         {/* TAB 1: CLIENT EDITION */}
         {activeTab === 'client' && (
           <div className="space-y-4 animate-in fade-in duration-150">
-            {((hasSavedClientSetup || (typeof window !== 'undefined' && localStorage.getItem('tasc_client_setup_saved') === 'true' && !!localStorage.getItem('mqtt_dash_pro_state')))) && (
-              <div className="bg-sky-500/10 border border-sky-500/30 rounded-2xl p-4 space-y-2 text-center">
-                <div className="flex items-center justify-center space-x-2 text-sky-400 font-bold text-xs">
-                  <i className="fas fa-floppy-disk text-sm"></i>
-                  <span>Saved Client Setup Available</span>
+            {(() => {
+              const commPkg = getCommercialSavedPackage();
+              const hasComm = !!commPkg;
+              if (!hasComm) return null;
+              return (
+                <div className="bg-sky-500/10 border border-sky-500/30 rounded-2xl p-4 space-y-2 text-center">
+                  <div className="flex items-center justify-center space-x-2 text-sky-400 font-bold text-xs">
+                    <i className="fas fa-floppy-disk text-sm"></i>
+                    <span>Saved Commercial Setup Available</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300">
+                    {commPkg ? `${commPkg.meta.dashboardsCount} Screens • ${commPkg.meta.panelsCount} Widgets saved in browser memory.` : 'You have a previously saved setup in your browser memory.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onLoadSavedClientSetup) onLoadSavedClientSetup();
+                    }}
+                    className="w-full py-2.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer"
+                  >
+                    Load Project From Browser Memory
+                  </button>
                 </div>
-                <p className="text-[11px] text-slate-300">
-                  You have a previously saved setup in your browser memory.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (onLoadSavedClientSetup) onLoadSavedClientSetup();
-                  }}
-                  className="w-full py-2.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer"
-                >
-                  Load Project From Browser Memory
-                </button>
-              </div>
-            )}
+              );
+            })()}
 
             <div className="bg-slate-950/60 p-4 rounded-2xl border border-slate-800 space-y-2">
               <div className="flex items-center space-x-2.5 text-sky-400 font-semibold text-xs">

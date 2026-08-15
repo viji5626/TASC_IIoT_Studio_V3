@@ -109,6 +109,8 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
         retentionValue: (appState?.userRole === 'community' || appState?.productEdition === 'community') ? 1 : (panel.retentionValue ?? 7),
         retentionUnit: (appState?.userRole === 'community' || appState?.productEdition === 'community') ? 'HOURS' : (panel.retentionUnit ?? 'DAYS'),
         logStorageCapMb: panel.logStorageCapMb ?? 500,
+        archiveAfterMonths: panel.archiveAfterMonths ?? 1,
+        archiveClusterDuration: panel.archiveClusterDuration ?? '1_WEEK',
         // Historian interval preset (separate from actual logIntervalSeconds for custom entry)
         _historianIntervalPreset: (() => {
           const v = panel.logIntervalSeconds ?? 10;
@@ -296,7 +298,7 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
           </div>
 
           {/* ─── DATA SOURCE TOGGLE ─────────────────────────────── */}
-          {formData.type !== 'clock' && formData.type !== 'pipe' && formData.type !== 'shape' && formData.type !== 'screen_jump' && (
+          {!isStaticText && !isImage && !isClock && !isPipe && !isShape && !isScreenJump && (
             <div className="space-y-3">
               <div>
                 <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Data Source</label>
@@ -326,8 +328,8 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
                 </div>
               </div>
 
-              {/* Driver Tag selectors — only shown when Driver mode is active */}
-              {dataSourceMode === 'driver' && (
+              {/* Driver Tag selectors — only shown when Driver mode is active and NOT for line_graph */}
+              {dataSourceMode === 'driver' && !isLineGraph && (
                 <div className="space-y-3 bg-violet-500/5 border border-violet-500/20 rounded-xl p-3">
                   <DriverTagSelector
                     appState={appState!}
@@ -2256,14 +2258,16 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
                         disabled={isPenLimitReached}
                         onClick={() => {
                           if (isPenLimitReached) return;
+                          const firstDriverTag = appState?.driverTags?.[0];
                           const newPen = {
                             id: `pen_${Date.now()}`,
                             name: `Pen ${((formData.pens?.length || 0) + 1)}`,
-                            topic: formData.topic || '',
+                            topic: dataSourceMode === 'driver' ? (firstDriverTag?.tagId || '') : (formData.topic || ''),
+                            driverTagId: dataSourceMode === 'driver' ? (firstDriverTag?.tagId || '') : undefined,
                             jsonPath: '',
                             color: ['#38bdf8', '#f43f5e', '#10b981', '#f59e0b', '#a855f7'][(formData.pens?.length || 0) % 5],
                             thickness: 2,
-                            unit: formData.unit || '',
+                            unit: dataSourceMode === 'driver' ? (firstDriverTag?.unit || formData.unit || '') : (formData.unit || ''),
                             showNodeMarkers: false
                           };
                           setFormData((prev: any) => ({
@@ -2293,9 +2297,9 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
                 )}
 
                 {formData.pens && formData.pens.length > 0 ? (
-                  <div className="space-y-2.5">
+                  <div className="space-y-3">
                     {formData.pens.map((pen: any, idx: number) => (
-                      <div key={pen.id || idx} className="bg-slate-900/80 rounded-xl border border-slate-700/60 overflow-hidden">
+                      <div key={pen.id || idx} className="bg-slate-900/80 rounded-xl border border-slate-700/60 relative" style={{ zIndex: 30 - idx }}>
                         {/* Pen Header Row */}
                         <div className="flex items-center gap-2 px-3 py-2">
                           {/* Color swatch */}
@@ -2326,20 +2330,38 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
                             placeholder="Pen Name"
                             className="w-28 bg-slate-950 border border-slate-700 text-white rounded-lg px-2 py-1.5 text-xs outline-none focus:border-sky-500 font-semibold"
                           />
-                          {/* MQTT Topic */}
-                          <input
-                            type="text"
-                            value={pen.topic || ''}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setFormData((prev: any) => ({
-                                ...prev,
-                                pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, topic: val } : p)
-                              }));
-                            }}
-                            placeholder="MQTT Topic (e.g. sensors/tank1/level)"
-                            className="flex-1 bg-slate-950 border border-slate-700 text-white rounded-lg px-2 py-1.5 text-xs outline-none focus:border-sky-500 font-mono"
-                          />
+                          {/* MQTT Topic or Driver Tag summary badge */}
+                          {dataSourceMode === 'mqtt' ? (
+                            <input
+                              type="text"
+                              value={pen.topic || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setFormData((prev: any) => ({
+                                  ...prev,
+                                  pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, topic: val } : p)
+                                }));
+                              }}
+                              placeholder="MQTT Topic (e.g. sensors/tank1/level)"
+                              className="flex-1 bg-slate-950 border border-slate-700 text-white rounded-lg px-2 py-1.5 text-xs outline-none focus:border-sky-500 font-mono"
+                            />
+                          ) : (
+                            <div className="flex-1 flex items-center justify-between px-2.5 py-1.5 bg-slate-950/70 border border-slate-800 rounded-lg text-xs">
+                              <span className="text-[11px] text-violet-300 font-semibold flex items-center gap-1.5 truncate">
+                                <i className="fas fa-microchip text-[10px] text-violet-400"></i>
+                                <span className="truncate">{(() => {
+                                  const matched = appState?.driverTags?.find(t => t.tagId === pen.driverTagId || t.tagName === pen.driverTagId);
+                                  return matched ? `${matched.tagName} (${matched.driverType || 'Driver'})` : (pen.driverTagId ? `Tag: ${pen.driverTagId}` : 'Select Driver Tag below');
+                                })()}</span>
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-mono shrink-0 ml-2">
+                                {(() => {
+                                  const matched = appState?.driverTags?.find(t => t.tagId === pen.driverTagId || t.tagName === pen.driverTagId);
+                                  return matched ? `Addr: ${matched.address}` : 'Browse Tag';
+                                })()}
+                              </span>
+                            </div>
+                          )}
                           {/* Remove button */}
                           <button
                             type="button"
@@ -2357,79 +2379,108 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
                         </div>
 
                         {/* Per-Pen Advanced Settings Row */}
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 pb-3 border-t border-slate-800/60 pt-2">
-                          {/* JSONPath Query — per pen */}
-                          <div className="flex-1 min-w-[180px]">
-                            <label className="text-[10px] text-sky-400 font-bold block mb-0.5 flex items-center gap-1">
-                              <i className="fas fa-code text-[9px]"></i> JSONPath Query (this pen)
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center px-3 pb-3 border-t border-slate-800/60 pt-2.5">
+                          {/* JSONPath Query (MQTT mode) vs Tag Browser Dropdown (Driver mode) */}
+                          <div className="sm:col-span-6 relative z-30">
+                            {dataSourceMode === 'mqtt' ? (
+                              <div>
+                                <label className="text-[10px] text-sky-400 font-bold block mb-1 flex items-center gap-1">
+                                  <i className="fas fa-code text-[9px]"></i> JSONPath Query (this pen)
+                                </label>
+                                <input
+                                  type="text"
+                                  value={pen.jsonPath || ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setFormData((prev: any) => ({
+                                      ...prev,
+                                      pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, jsonPath: val } : p)
+                                    }));
+                                  }}
+                                  placeholder="$.d.value or $.sensor[0] (blank = raw)"
+                                  className="w-full bg-slate-950 border border-slate-700/80 text-emerald-300 rounded-lg px-2.5 py-1.5 text-xs font-mono outline-none focus:border-sky-500 placeholder:text-slate-600"
+                                />
+                              </div>
+                            ) : (
+                              <div>
+                                <DriverTagSelector
+                                  appState={appState!}
+                                  selectedTagId={pen.driverTagId}
+                                  compact={true}
+                                  onChange={(tagId) => {
+                                    const matchedTag = appState?.driverTags?.find(t => t.tagId === tagId || t.tagName === tagId);
+                                    setFormData((prev: any) => ({
+                                      ...prev,
+                                      pens: prev.pens.map((p: any, i: number) => i === idx ? {
+                                        ...p,
+                                        driverTagId: tagId,
+                                        topic: tagId,
+                                        unit: p.unit || matchedTag?.unit || ''
+                                      } : p)
+                                    }));
+                                  }}
+                                  label="Tag Browser (Driver Tag)"
+                                  placeholder="Select Driver Tag..."
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Right Controls: Thickness, Unit, Show Dots */}
+                          <div className="sm:col-span-6 flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-1 sm:pt-0">
+                            {/* Thickness */}
+                            <div className="flex items-center gap-1.5">
+                              <label className="text-[10px] text-slate-400 font-bold">Thickness</label>
+                              <input
+                                type="range" min="1" max="6" step="1"
+                                value={pen.thickness ?? 2}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value);
+                                  setFormData((prev: any) => ({
+                                    ...prev,
+                                    pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, thickness: val } : p)
+                                  }));
+                                }}
+                                className="w-16 accent-sky-500 cursor-pointer"
+                              />
+                              <span className="text-[10px] text-slate-400 font-mono w-2.5">{pen.thickness ?? 2}</span>
+                            </div>
+
+                            {/* Unit */}
+                            <div className="flex items-center gap-1">
+                              <label className="text-[10px] text-slate-400 font-bold">Unit</label>
+                              <input
+                                type="text"
+                                value={pen.unit || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setFormData((prev: any) => ({
+                                    ...prev,
+                                    pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, unit: val } : p)
+                                  }));
+                                }}
+                                placeholder="e.g. °C"
+                                className="w-14 bg-slate-950 border border-slate-700 text-white rounded px-1.5 py-1 text-xs outline-none focus:border-sky-500 font-mono text-center"
+                              />
+                            </div>
+
+                            {/* Node markers toggle */}
+                            <label className="flex items-center gap-1.5 cursor-pointer text-[10px] text-amber-300 select-none whitespace-nowrap">
+                              <input
+                                type="checkbox"
+                                checked={pen.showNodeMarkers === true}
+                                onChange={(e) => {
+                                  const val = e.target.checked;
+                                  setFormData((prev: any) => ({
+                                    ...prev,
+                                    pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, showNodeMarkers: val } : p)
+                                  }));
+                                }}
+                                className="w-3.5 h-3.5 accent-amber-500 cursor-pointer"
+                              />
+                              <span>Show Dots</span>
                             </label>
-                            <input
-                              type="text"
-                              value={pen.jsonPath || ''}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setFormData((prev: any) => ({
-                                  ...prev,
-                                  pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, jsonPath: val } : p)
-                                }));
-                              }}
-                              placeholder="$.d.value or $.sensor[0] (blank = raw)"
-                              className="w-full bg-slate-950 border border-slate-700/80 text-emerald-300 rounded-lg px-2 py-1 text-[11px] font-mono outline-none focus:border-sky-500 placeholder:text-slate-600"
-                            />
                           </div>
-
-                          {/* Thickness */}
-                          <div className="flex items-center gap-2 shrink-0">
-                            <label className="text-[10px] text-slate-400 font-bold whitespace-nowrap">Thickness</label>
-                            <input
-                              type="range" min="1" max="6" step="1"
-                              value={pen.thickness ?? 2}
-                              onChange={(e) => {
-                                const val = Number(e.target.value);
-                                setFormData((prev: any) => ({
-                                  ...prev,
-                                  pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, thickness: val } : p)
-                                }));
-                              }}
-                              className="w-20 accent-sky-500 cursor-pointer"
-                            />
-                            <span className="text-[10px] text-slate-400 font-mono w-3">{pen.thickness ?? 2}</span>
-                          </div>
-
-                          {/* Unit */}
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <label className="text-[10px] text-slate-400 font-bold">Unit</label>
-                            <input
-                              type="text"
-                              value={pen.unit || ''}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setFormData((prev: any) => ({
-                                  ...prev,
-                                  pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, unit: val } : p)
-                                }));
-                              }}
-                              placeholder="e.g. °C"
-                              className="w-14 bg-slate-950 border border-slate-700 text-white rounded px-1.5 py-1 text-[11px] outline-none focus:border-sky-500 font-mono text-center"
-                            />
-                          </div>
-
-                          {/* Node markers toggle */}
-                          <label className="flex items-center gap-1.5 cursor-pointer text-[10px] text-amber-300 select-none shrink-0">
-                            <input
-                              type="checkbox"
-                              checked={pen.showNodeMarkers === true}
-                              onChange={(e) => {
-                                const val = e.target.checked;
-                                setFormData((prev: any) => ({
-                                  ...prev,
-                                  pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, showNodeMarkers: val } : p)
-                                }));
-                              }}
-                              className="w-3.5 h-3.5 accent-amber-500 cursor-pointer"
-                            />
-                            <span>Show Dots</span>
-                          </label>
                         </div>
                       </div>
                     ))}
@@ -2438,7 +2489,10 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
                   <div className="flex items-start gap-2 bg-slate-900/40 border border-slate-800 rounded-lg p-3">
                     <i className="fas fa-info-circle text-sky-400 text-sm mt-0.5 shrink-0"></i>
                     <p className="text-[11px] text-slate-400">
-                      Single pen mode — uses the Primary MQTT Topic above. Click <strong className="text-sky-300">+ Add Pen</strong> to chart multiple telemetry tags simultaneously, each with its own MQTT topic and JSONPath query.
+                      {dataSourceMode === 'driver'
+                        ? <>Single pen mode — click <strong className="text-violet-300">+ Add Pen</strong> to chart multiple Driver Tags (Modbus, OPC UA, etc.) simultaneously, each with its own Tag Browser selector.</>
+                        : <>Single pen mode — uses the Primary MQTT Topic above. Click <strong className="text-sky-300">+ Add Pen</strong> to chart multiple telemetry tags simultaneously, each with its own MQTT topic and JSONPath query.</>
+                      }
                     </p>
                   </div>
                 )}
@@ -2518,18 +2572,35 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
                 const retentionVal = formData.retentionValue ?? 7;
 
                 const retentionUnit = formData.retentionUnit ?? 'DAYS';
+                const archiveAfterMonths = formData.archiveAfterMonths ?? 1;
+                const archiveClusterDuration = formData.archiveClusterDuration ?? '1_WEEK';
                 const isPersisted = getIsStoragePersisted(); // true when Android storage.persist() granted
-                const estimate = estimateStorageFootprint(pensCount, intervalSec, retentionVal, retentionUnit, isPersisted);
+                const estimate = estimateStorageFootprint(pensCount, intervalSec, retentionVal, retentionUnit, isPersisted, archiveAfterMonths, archiveClusterDuration);
                 const oemWarning = detectOEMBrowserWarning();
                 const tierColors = {
-                  safe: { bg: 'bg-emerald-900/30', border: 'border-emerald-500/40', text: 'text-emerald-300', icon: '🟢', label: isPersisted ? 'Safe — Android OS eviction protection active' : 'Safe for mobile & desktop' },
-                  warn: { bg: 'bg-amber-900/30', border: 'border-amber-500/40', text: 'text-amber-300', icon: '🟡', label: 'Warning: May be evicted on iOS Safari (7-day inactivity rule)' },
-                  critical: { bg: 'bg-rose-900/30', border: 'border-rose-500/40', text: 'text-rose-300', icon: '🔴', label: 'Critical: Use on PC/Industrial Panel only' },
+                  safe: { bg: 'bg-emerald-900/30', border: 'border-emerald-500/40', text: 'text-emerald-300', icon: '🟢', label: estimate.isPC ? 'Safe — Clustered Partition Archiving active on PC' : (isPersisted ? 'Safe — Android OS eviction protection active' : 'Safe for mobile & desktop') },
+                  warn: { bg: 'bg-amber-900/30', border: 'border-amber-500/40', text: 'text-amber-300', icon: '🟡', label: estimate.isPC ? 'High retention: ensure sufficient disk space' : 'Warning: May be evicted on iOS Safari (7-day inactivity rule)' },
+                  critical: { bg: 'bg-rose-900/30', border: 'border-rose-500/40', text: 'text-rose-300', icon: '🔴', label: 'Critical: Recommended on PC / Laptop only' },
                 };
                 const tc = tierColors[estimate.tier];
 
                 return (
                   <div className="p-4 space-y-4">
+                    {/* Device Mode Status Header */}
+                    <div className={`p-2.5 rounded-lg border text-xs font-semibold flex items-center justify-between ${
+                      estimate.isPC 
+                        ? 'bg-sky-950/40 border-sky-500/40 text-sky-300' 
+                        : 'bg-violet-950/40 border-violet-500/40 text-violet-300'
+                    }`}>
+                      <div className="flex items-center space-x-2">
+                        <span>{estimate.isPC ? '💻' : '📱'}</span>
+                        <span>{estimate.isPC ? 'Laptop / PC Workstation Mode' : 'Mobile / Tablet Device Mode'}</span>
+                      </div>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-900/80 border border-slate-700 font-mono">
+                        {estimate.isPC ? 'Lossless Clustered Archiving' : 'Auto-Clamped ≤30D'}
+                      </span>
+                    </div>
+
                     {/* Android OEM Browser Warning */}
                     {oemWarning && (
                       <div className="flex items-start space-x-2 bg-rose-900/20 border border-rose-500/40 rounded-lg p-2.5">
@@ -2543,7 +2614,7 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
                     <div className="flex items-center justify-between">
                       <div>
                         <label className="text-xs text-violet-200 font-semibold">Enable Persistent Local Historian Logging</label>
-                        <p className="text-[10px] text-slate-400 mt-0.5">Stores telemetry to browser IndexedDB with FIFO auto-archiving</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Stores telemetry to browser IndexedDB with clustered lossless archiving</p>
                       </div>
                       <button
                         type="button"
@@ -2617,7 +2688,7 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
                         {(() => {
                           const isCommunity = appState?.userRole === 'community' || appState?.productEdition === 'community';
                           const unit = formData.retentionUnit || (isCommunity ? 'HOURS' : 'DAYS');
-                          const maxVal = isCommunity ? (unit === 'MINUTES' ? 60 : 1) : 1000;
+                          const maxVal = isCommunity ? (unit === 'MINUTES' ? 60 : 1) : (unit === 'YEARS' ? 10 : 1000);
 
                           return (
                             <div className="space-y-1.5">
@@ -2660,12 +2731,107 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
                               {isCommunity && (
                                 <div className="p-2 bg-amber-500/10 border border-amber-500/30 rounded text-[10px] text-amber-300 flex items-center space-x-1.5 font-medium">
                                   <i className="fas fa-crown text-amber-400 text-xs shrink-0"></i>
-                                  <span>Free Demo Active: Retention is limited to <strong>1 Hour max</strong> (e.g. 60 Mins / 1 Hour). Upgrade to Engineering Studio to keep data for Days/Weeks/Months.</span>
+                                  <span>Free Demo Active: Retention is limited to <strong>1 Hour max</strong> (e.g. 60 Mins / 1 Hour). Upgrade to Engineering Studio to keep data for Days/Weeks/Years.</span>
+                                </div>
+                              )}
+
+                              {estimate.isClampedForMobile && (
+                                <div className="p-2 bg-violet-500/10 border border-violet-500/30 rounded text-[10px] text-violet-300 flex items-center space-x-1.5 font-medium">
+                                  <i className="fas fa-mobile-screen text-xs shrink-0"></i>
+                                  <span>Mobile Auto-Adaptation: Configured for {formData.retentionValue} {(formData.retentionUnit || 'DAYS').toLowerCase()}, but automatically constrained to <strong>30 Days</strong> on this mobile device.</span>
                                 </div>
                               )}
                             </div>
                           );
                         })()}
+                      </div>
+
+                      {/* Clustered Archiving & Partition Settings (PC/Pro Mode) */}
+                      <div className="bg-slate-900/70 border border-violet-500/30 rounded-xl p-3 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-violet-200 flex items-center gap-1.5">
+                            <i className="fas fa-file-zipper text-violet-400 text-xs"></i>
+                            <span>Lossless Clustered Partition Archiving</span>
+                          </span>
+                          <span className="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded font-mono font-bold">
+                            100% 1s Fidelity
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {/* Start Archiving After Dropdown */}
+                          <div>
+                            <label className="text-[10px] text-slate-300 font-bold block mb-1">
+                              Start Archiving After
+                            </label>
+                            <select
+                              value={formData.archiveAfterMonths ?? 1}
+                              onChange={(e) => {
+                                setFormData((p: any) => ({ ...p, archiveAfterMonths: parseInt(e.target.value) || 0 }));
+                              }}
+                              className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-violet-500 cursor-pointer font-medium"
+                            >
+                              <option value="1">1 Month (Recommended)</option>
+                              <option value="2">2 Months</option>
+                              <option value="3">3 Months</option>
+                              <option value="6">6 Months</option>
+                              <option value="12">12 Months (1 Year)</option>
+                              <option value="0">Never (Keep uncompressed)</option>
+                            </select>
+                            <p className="text-[9px] text-slate-500 mt-1">Recent data stays in fast uncompressed hot store</p>
+                          </div>
+
+                          {/* Archive Cluster Partition Size Dropdown */}
+                          <div>
+                            <label className="text-[10px] text-slate-300 font-bold block mb-1">
+                              Archive Cluster File Duration
+                            </label>
+                            <select
+                              value={formData.archiveClusterDuration || '1_WEEK'}
+                              onChange={(e) => {
+                                setFormData((p: any) => ({ ...p, archiveClusterDuration: e.target.value }));
+                              }}
+                              className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-violet-500 cursor-pointer font-medium"
+                            >
+                              <option value="1_WEEK">1 Week (Recommended — Fast queries)</option>
+                              <option value="1_DAY">1 Day (Micro-partition files)</option>
+                              <option value="1_MONTH">1 Month (Monthly archive files)</option>
+                              <option value="2_MONTHS">2 Months (Bi-monthly archive files)</option>
+                            </select>
+                            <p className="text-[9px] text-slate-500 mt-1">Smaller files enable faster single-file decompression</p>
+                          </div>
+                        </div>
+
+                        {/* Dynamic Cluster File Size Estimator Box */}
+                        {estimate.clusterEstimate && (
+                          <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-2.5 space-y-1.5 text-[11px]">
+                            <div className="flex items-center justify-between text-violet-300 font-semibold">
+                              <span className="flex items-center gap-1.5">
+                                <i className="fas fa-box-archive text-violet-400 text-xs"></i>
+                                <span>Est. Cluster File Size:</span>
+                              </span>
+                              <span className="font-mono text-emerald-300 font-bold">
+                                {estimate.clusterEstimate.formattedFileSize} / file
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-400 pt-1 border-t border-slate-800/80">
+                              <div>
+                                <span className="text-slate-500">Points per File:</span>{' '}
+                                <strong className="text-slate-300 font-mono">{estimate.clusterEstimate.pointsPerFile.toLocaleString()}</strong>
+                              </div>
+                              <div>
+                                <span className="text-slate-500">Total Archive Files:</span>{' '}
+                                <strong className="text-slate-300 font-mono">~{estimate.clusterEstimate.totalArchiveFiles} files ({estimate.clusterEstimate.formattedTotalArchiveSize})</strong>
+                              </div>
+                            </div>
+
+                            <div className="text-[9px] text-sky-400/90 flex items-center gap-1 pt-0.5">
+                              <i className="fas fa-bolt text-[8px]"></i>
+                              <span>Targeted Decompression: Opening a past trend decompresses <strong>only 1 small file</strong> in &lt; 5ms</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Per-Pen Logging Toggles */}
@@ -2701,37 +2867,36 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
                           <span className="text-sm leading-none mt-0.5">{tc.icon}</span>
                           <div className="flex-1">
                             <div className={`text-xs font-bold ${tc.text} flex items-center gap-2`}>
-                              ⚡ Estimated Local Storage: {estimate.formattedSize}
+                              ⚡ Total Local Storage: {estimate.formattedSize}
                               {isPersisted && (
                                 <span className="text-[9px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-bold">
                                   🤖 Android Protected
                                 </span>
                               )}
+                              {estimate.isPC && (
+                                <span className="text-[9px] bg-sky-700 text-white px-1.5 py-0.5 rounded font-bold">
+                                  💻 Lossless Clustered Archive
+                                </span>
+                              )}
                             </div>
                             <div className="text-[10px] text-slate-400 mt-0.5">
-                              {estimate.totalPoints.toLocaleString()} points · {pensCount} pen{pensCount > 1 ? 's' : ''} · {formData.logIntervalSeconds}s interval · {formData.retentionValue} {(formData.retentionUnit || 'DAYS').toLowerCase()}
+                              {estimate.totalPoints.toLocaleString()} 1s points · {pensCount} pen{pensCount > 1 ? 's' : ''} · {formData.logIntervalSeconds}s interval · {formData.retentionValue} {(formData.retentionUnit || 'DAYS').toLowerCase()}
                             </div>
                             <div className={`text-[10px] mt-1 ${tc.text} opacity-80`}>{tc.label}</div>
                           </div>
                         </div>
                       </div>
 
-                      {/* Mobile Advisory — iOS + Android */}
+                      {/* Device Portability & Storage Advisory */}
                       <div className="space-y-1.5">
                         <div className="flex items-start space-x-2 bg-slate-900/60 border border-slate-700 rounded-lg p-2.5">
-                          <span className="text-sm shrink-0">📱</span>
+                          <span className="text-sm shrink-0">🔄</span>
                           <div className="text-[10px] text-slate-400 leading-relaxed space-y-1">
                             <p>
-                              <strong className="text-slate-300">🍎 iOS Safari:</strong> Data cleared after 7 days inactivity.
-                              Install TASC as PWA for better protection. Use PC for long-term retention.
+                              <strong className="text-slate-300">💻 PC Clustered Decompression:</strong> Data older than {formData.archiveAfterMonths ?? 1} month(s) is partitioned into {formData.archiveClusterDuration === '1_DAY' ? 'daily' : formData.archiveClusterDuration === '1_MONTH' ? 'monthly' : formData.archiveClusterDuration === '2_MONTHS' ? 'bi-monthly' : 'weekly'} files. Historical queries decompress only the targeted file in milliseconds with 100% 1-second accuracy.
                             </p>
                             <p>
-                              <strong className="text-slate-300">🤖 Android Chrome:</strong> TASC requests OS-level <em>persistent storage</em> protection when logging is enabled.
-                              Install as PWA (Add to Home Screen) to also enable background FIFO pruning sync.
-                              Low-RAM OEM devices (MIUI/Huawei/ColorOS) may aggressively kill background tabs — use Chrome, not OEM browser.
-                            </p>
-                            <p className="text-slate-500">
-                              Sub-second logging (&lt;1s) is disabled on all mobile devices to prevent storage thrashing.
+                              <strong className="text-slate-300">📱 Mobile Portability:</strong> Opening this project backup on a mobile device automatically scales local retention to safe 30-day limits with zero data redundancy between devices.
                             </p>
                           </div>
                         </div>
@@ -3178,7 +3343,7 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
           )}
 
           {/* JSONPath Payload Parser & JSON Publish Pattern — MQTT Mode only */}
-          {formData.type !== PanelType.LINE_GRAPH && dataSourceMode !== 'driver' && (
+          {!isStaticText && !isImage && !isClock && !isPipe && !isShape && !isScreenJump && formData.type !== PanelType.LINE_GRAPH && dataSourceMode !== 'driver' && (
             <div className="space-y-4 pt-4 border-t border-[#262626]">
               <div className="flex items-center space-x-3">
               <input 
@@ -3265,24 +3430,26 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
           </div>
           )}
 
-          <div className={`grid grid-cols-1 ${isActionable ? 'sm:grid-cols-2' : ''} gap-4 pt-2 border-t border-[#262626]`}>
-            <div className="flex items-center space-x-3">
-              <input type="checkbox" id="showReceivedTimeStamp" name="showReceivedTimeStamp" checked={formData.showReceivedTimeStamp ?? true} onChange={handleChange} className="w-4 h-4 accent-amber-500 rounded" />
-              <label htmlFor="showReceivedTimeStamp" className="text-gray-300 text-xs font-semibold flex items-center space-x-1">
-                <i className="fas fa-clock text-emerald-400 text-[10px]"></i>
-                <span>Show Subscribed (Rx) Time</span>
-              </label>
-            </div>
-            {isActionable && (
+          {!isStaticText && !isImage && !isClock && !isPipe && !isShape && !isScreenJump && (
+            <div className={`grid grid-cols-1 ${isActionable ? 'sm:grid-cols-2' : ''} gap-4 pt-2 border-t border-[#262626]`}>
               <div className="flex items-center space-x-3">
-                <input type="checkbox" id="showSentTimeStamp" name="showSentTimeStamp" checked={formData.showSentTimeStamp ?? true} onChange={handleChange} className="w-4 h-4 accent-amber-500 rounded" />
-                <label htmlFor="showSentTimeStamp" className="text-gray-300 text-xs font-semibold flex items-center space-x-1">
-                  <i className="fas fa-paper-plane text-amber-400 text-[10px]"></i>
-                  <span>Show Published (Tx) Time</span>
+                <input type="checkbox" id="showReceivedTimeStamp" name="showReceivedTimeStamp" checked={formData.showReceivedTimeStamp ?? true} onChange={handleChange} className="w-4 h-4 accent-amber-500 rounded" />
+                <label htmlFor="showReceivedTimeStamp" className="text-gray-300 text-xs font-semibold flex items-center space-x-1">
+                  <i className="fas fa-clock text-emerald-400 text-[10px]"></i>
+                  <span>Show Subscribed (Rx) Time</span>
                 </label>
               </div>
-            )}
-          </div>
+              {isActionable && (
+                <div className="flex items-center space-x-3">
+                  <input type="checkbox" id="showSentTimeStamp" name="showSentTimeStamp" checked={formData.showSentTimeStamp ?? true} onChange={handleChange} className="w-4 h-4 accent-amber-500 rounded" />
+                  <label htmlFor="showSentTimeStamp" className="text-gray-300 text-xs font-semibold flex items-center space-x-1">
+                    <i className="fas fa-paper-plane text-amber-400 text-[10px]"></i>
+                    <span>Show Published (Tx) Time</span>
+                  </label>
+                </div>
+              )}
+            </div>
+          )}
 
           {isActionable && (
             <>

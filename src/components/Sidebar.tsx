@@ -54,6 +54,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: AppView.ADD_CONNECTION, icon: 'fa-server', label: 'MQTT Broker Settings' },
     { id: AppView.TOPIC_MANAGER, icon: 'fa-sitemap', label: 'MQTT Topic Manager' },
     { id: AppView.TAG_MANAGER, icon: 'fa-tags', label: 'MQTT Tag Manager' },
+    { id: AppView.AI_ASSISTANT, icon: 'fa-wand-magic-sparkles', label: 'AI Assistant' },
     { id: AppView.DRIVER_CONNECTIONS, icon: 'fa-plug-circle-bolt', label: 'Driver Connections', isDriverSection: true },
     { id: AppView.DRIVER_TAG_MANAGER, icon: 'fa-database', label: 'Driver Tag Manager', isDriverSection: true },
     { id: AppView.OPC_UA_BROWSER, icon: 'fa-sitemap', label: 'OPC UA Browser', isDriverSection: true },

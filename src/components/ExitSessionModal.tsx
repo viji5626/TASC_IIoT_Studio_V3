@@ -6,6 +6,7 @@ interface ExitSessionModalProps {
   onSaveAndExit: () => void;
   onExitWithoutSave: () => void;
   editionName?: string;
+  isCommunitySave?: boolean;
 }
 
 export const ExitSessionModal: React.FC<ExitSessionModalProps> = ({
@@ -14,6 +15,7 @@ export const ExitSessionModal: React.FC<ExitSessionModalProps> = ({
   onSaveAndExit,
   onExitWithoutSave,
   editionName = 'Community Edition',
+  isCommunitySave = false,
 }) => {
   if (!isOpen) return null;
 
@@ -24,12 +26,20 @@ export const ExitSessionModal: React.FC<ExitSessionModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Decorative Top Accent Bar */}
-        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-emerald-500 to-sky-500" />
+        <div className={`absolute top-0 left-0 right-0 h-1.5 ${
+          isCommunitySave 
+            ? 'bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-600'
+            : 'bg-gradient-to-r from-amber-500 via-emerald-500 to-sky-500'
+        }`} />
 
         {/* Header Icon & Close Button */}
         <div className="flex items-start justify-between mb-4">
-          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 text-xl shadow-inner">
-            <i className="fas fa-triangle-exclamation"></i>
+          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl shadow-inner ${
+            isCommunitySave 
+              ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400' 
+              : 'bg-amber-500/10 border border-amber-500/30 text-amber-400'
+          }`}>
+            <i className={`fas ${isCommunitySave ? 'fa-cube' : 'fa-triangle-exclamation'}`}></i>
           </div>
           <button
             type="button"
@@ -47,10 +57,20 @@ export const ExitSessionModal: React.FC<ExitSessionModalProps> = ({
             Close Session?
           </h2>
           <p className="text-sm font-semibold text-slate-100 leading-relaxed">
-            Do you really want to close this session? Your demo work will get erased.
+            {isCommunitySave
+              ? 'Save your Community Demo layout to browser storage before closing?'
+              : 'Do you want to save your current workstation setup before returning to the landing page?'}
           </p>
           <p className="text-xs text-slate-400 leading-normal">
-            You are currently in <span className="text-emerald-400 font-bold">{editionName}</span>. Choose whether to save your layout state in browser memory before returning to the landing page.
+            {isCommunitySave ? (
+              <>
+                You are currently in <span className="text-emerald-400 font-bold">{editionName}</span>. Saving will store your demo in the <span className="text-emerald-300 font-semibold">Community Demo slot</span> without affecting commercial packages.
+              </>
+            ) : (
+              <>
+                You are currently in <span className="text-sky-400 font-bold">{editionName}</span>. Choose whether to save your layout state in browser memory before returning to the landing page.
+              </>
+            )}
           </p>
         </div>
 
@@ -60,10 +80,14 @@ export const ExitSessionModal: React.FC<ExitSessionModalProps> = ({
           <button
             type="button"
             onClick={onSaveAndExit}
-            className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/20 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer"
+            className={`w-full py-3.5 px-4 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer ${
+              isCommunitySave
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 shadow-emerald-500/20'
+                : 'bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-slate-950 shadow-sky-500/20'
+            }`}
           >
             <i className="fas fa-floppy-disk text-sm"></i>
-            <span>Save and Exit (Save in Browser Memory)</span>
+            <span>{isCommunitySave ? 'Save and Exit (Community Demo Memory)' : 'Save and Exit (Save in Browser Memory)'}</span>
           </button>
 
           {/* Option 2: Exit without Save */}

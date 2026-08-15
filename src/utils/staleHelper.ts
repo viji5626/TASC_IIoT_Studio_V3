@@ -19,6 +19,29 @@ export function getPanelTelemetryStatus(
   latestValues: Record<string, { val: any; time: string; timestampMs?: number; quality?: string }> = {},
   nowMs: number = Date.now()
 ): TelemetryStatusResult {
+  // Static, decorative, clock, shape, or non-telemetry elements are never marked offline
+  const isStaticOrNonTelemetry =
+    panel.type === 'static_text' ||
+    (panel.type as string) === 'static_text' ||
+    (panel.type as string) === 'label' ||
+    panel.type === 'shape' ||
+    panel.type === 'clock' ||
+    panel.type === 'screen_jump' ||
+    panel.type === 'alarm_log' ||
+    (panel.type === 'image' && !panel.topic && !panel.driverTagId);
+
+  const hasNoDataBinding = !panel.topic?.trim() && !panel.driverTagId;
+
+  if (isStaticOrNonTelemetry || hasNoDataBinding) {
+    return {
+      hasData: true,
+      isStale: false,
+      isBad: false,
+      isOffline: false,
+      statusText: 'GOOD'
+    };
+  }
+
   // Determine key to look up in latestValues store
   let dataKey: string | undefined;
   if (panel.dataSourceMode === 'driver' && panel.driverTagId) {

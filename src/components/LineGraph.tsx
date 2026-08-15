@@ -200,7 +200,7 @@ const LineGraph: React.FC<LineGraphProps> = ({
   const [showToolbar, setShowToolbar] = useState(false);
   const [isDualCursor, setIsDualCursor] = useState(enableDualCursor);
   const [showTable, setShowTable] = useState(showMonitoringTable);
-  const [selectedTimeRange, setSelectedTimeRange] = useState<'1M' | '10M' | '30M' | '1H' | '8H' | '1D' | 'ALL' | 'CUSTOM'>('10M');
+  const [selectedTimeRange, setSelectedTimeRange] = useState<'1M' | '10M' | '30M' | '1H' | '8H' | '1D' | '1W' | '1MO' | '1Y' | '5Y' | 'ALL' | 'CUSTOM'>('10M');
   const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
   const [customFrom, setCustomFrom] = useState(() => {
     const d = new Date(Date.now() - 30 * 60 * 1000);
@@ -295,16 +295,23 @@ const LineGraph: React.FC<LineGraphProps> = ({
     setHistLoading(false);
   }, [panel, histQueryStart, histQueryEnd]);
 
-  const handleSelectPresetTimeRange = async (range: '1M' | '10M' | '30M' | '1H' | '8H' | '1D' | 'ALL') => {
+  const handleSelectPresetTimeRange = async (range: '1M' | '10M' | '30M' | '1H' | '8H' | '1D' | '1W' | '1MO' | '1Y' | '5Y' | 'ALL') => {
     setSelectedTimeRange(range);
     setShowCustomDatePicker(false);
 
-    if (panel?.enableHistorianLogging && (range === '30M' || range === '1H' || range === '8H' || range === '1D')) {
+    const isHistRange = (['30M', '1H', '8H', '1D', '1W', '1MO', '1Y', '5Y', 'ALL'] as string[]).includes(range);
+
+    if (panel?.enableHistorianLogging && isHistRange) {
       const nowMs = Date.now();
       let durationMs = 30 * 60 * 1000;
       if (range === '1H') durationMs = 60 * 60 * 1000;
       if (range === '8H') durationMs = 8 * 3600 * 1000;
       if (range === '1D') durationMs = 24 * 3600 * 1000;
+      if (range === '1W') durationMs = 7 * 86400 * 1000;
+      if (range === '1MO') durationMs = 30 * 86400 * 1000;
+      if (range === '1Y') durationMs = 365 * 86400 * 1000;
+      if (range === '5Y') durationMs = 5 * 365 * 86400 * 1000;
+      if (range === 'ALL') durationMs = 10 * 365 * 86400 * 1000;
 
       const startMs = nowMs - durationMs;
       setHistLoading(true);
@@ -775,15 +782,15 @@ const LineGraph: React.FC<LineGraphProps> = ({
               <span>{isPaused ? 'Resume' : 'Pause'}</span>
             </button>
             <div className="flex items-center space-x-0.5 bg-slate-900 p-0.5 rounded border border-slate-800 text-[10px]">
-              {(['1M', '10M', '30M', '1H', '8H', '1D', 'ALL'] as const).map((range) => {
-                const isLockedInCommunity = isCommunityEditionActive() && (range === '8H' || range === '1D' || range === 'ALL');
+              {(['1M', '10M', '30M', '1H', '8H', '1D', '1W', '1MO', '1Y', '5Y', 'ALL'] as const).map((range) => {
+                const isLockedInCommunity = isCommunityEditionActive() && (['8H', '1D', '1W', '1MO', '1Y', '5Y', 'ALL'] as string[]).includes(range);
                 return (
                   <button
                     key={range}
                     type="button"
                     onClick={() => {
                       if (isLockedInCommunity) {
-                        alert("Free Demo Limit: Maximum 1 Hour trend logging duration allowed in Community Edition. Upgrade to Engineering Studio for 8H, 1D, and ALL historical logging.");
+                        alert("Free Demo Limit: Maximum 1 Hour trend logging duration allowed in Community Edition. Upgrade to Engineering Studio for 8H to 5-Year historical logging.");
                         setSelectedTimeRange('1H');
                         return;
                       }
@@ -796,7 +803,7 @@ const LineGraph: React.FC<LineGraphProps> = ({
                         ? 'text-slate-500 hover:text-slate-300'
                         : 'text-slate-400 hover:text-white'
                     }`}
-                    title={isLockedInCommunity ? "🔒 Free Demo Limit: 1 Hour max duration. Upgrade to Engineering Studio for 8H/1D/ALL." : `Set time range to ${range}`}
+                    title={isLockedInCommunity ? "🔒 Free Demo Limit: 1 Hour max duration. Upgrade to Engineering Studio for 8H to 5-Year logging." : `Set time range to ${range}`}
                   >
                     <span>{range}</span>
                     {isLockedInCommunity && <i className="fas fa-lock text-[8px] text-amber-500"></i>}
