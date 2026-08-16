@@ -337,6 +337,41 @@ export interface Panel {
   dataSourceMode?: 'mqtt' | 'driver';
   driverTagId?: string;
   driverWriteTagId?: string;
+
+  // --- Tag-Based Motion Dynamics ---
+  enableMotionDynamics?: boolean;
+  motionTagMode?: 'same' | 'custom';
+  motionDataSourceMode?: 'mqtt' | 'driver';
+  motionTopic?: string;
+  motionDriverTagId?: string;
+  motionTagMin?: number;
+  motionTagMax?: number;
+  motionStartX?: number;
+  motionStartY?: number;
+  motionEndX?: number;
+  motionEndY?: number;
+  motionPathPoints?: { x: number; y: number }[]; // Multi-node bending motion path points
+  motionOrientToPath?: boolean; // Turn / orient object along path heading direction
+
+  // --- Tag-Based Rotation Dynamics ---
+  enableRotationDynamics?: boolean;
+  rotationMode?: 'continuous' | 'variable';
+  rotationTagMode?: 'same' | 'custom';
+  rotationDataSourceMode?: 'mqtt' | 'driver';
+  rotationTopic?: string;
+  rotationDriverTagId?: string;
+  // Continuous Rotation
+  rotationSpeed?: 'slow' | 'medium' | 'fast' | 'custom';
+  rotationDurationSeconds?: number;
+  rotationDirection?: 'cw' | 'ccw';
+  rotationTriggerType?: 'digital' | 'analog_compare';
+  rotationOperator?: '=' | '!=' | '>' | '>=' | '<' | '<=';
+  rotationTriggerValue?: number | string;
+  // Variable Rotation
+  rotationTagMin?: number;
+  rotationTagMax?: number;
+  rotationAngleMin?: number;
+  rotationAngleMax?: number;
 }
 
 export interface MqttMessageLog {

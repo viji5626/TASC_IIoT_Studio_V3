@@ -21,6 +21,9 @@ interface Props {
   appState: AppState;
   activeAlarms: ActiveAlarm[];
   initialTab?: 'chat' | 'settings';
+  isDrawer?: boolean;
+  onClose?: () => void;
+  onOpenFullAssistant?: () => void;
 }
 
 export type AiProviderType = 'google_gemini' | 'openai' | 'groq' | 'ollama' | 'lmstudio' | 'custom';
@@ -30,7 +33,10 @@ export const AiAssistantView: React.FC<Props> = ({
   latestValues,
   appState,
   activeAlarms,
-  initialTab = 'chat'
+  initialTab = 'chat',
+  isDrawer = false,
+  onClose,
+  onOpenFullAssistant
 }) => {
   const [activeTab, setActiveTab] = useState<'chat' | 'settings'>(initialTab);
 
@@ -312,100 +318,160 @@ export const AiAssistantView: React.FC<Props> = ({
 
   return (
     <div className="flex flex-col h-full bg-slate-950 text-slate-100 overflow-hidden">
-      {/* Top Header & Tabs Bar */}
-      <header className="bg-slate-900 border-b border-slate-800 px-4 sm:px-6 py-3 flex items-center justify-between shrink-0 sticky top-0 z-30">
-        <div className="flex items-center space-x-3">
-          {onBack && (
-            <button
-              type="button"
-              onClick={onBack}
-              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-all cursor-pointer mr-0.5"
-              title="Back to Dashboard"
-            >
-              <i className="fas fa-arrow-left text-base"></i>
-            </button>
-          )}
-
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-sky-500 via-indigo-500 to-purple-600 flex items-center justify-center text-white text-base shadow-md shrink-0">
-            <i className="fas fa-wand-magic-sparkles"></i>
-          </div>
-          <div>
-            <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-              <h1 className="text-base font-bold text-white tracking-tight">Industrial AI Assistant</h1>
-              <span className="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-2 py-0.5 rounded-full font-mono font-medium">
-                {provider === 'google_gemini' ? 'Gemini 2.0 Flash' : provider}
+      {/* Top Header */}
+      {isDrawer ? (
+        /* Sleek, Compact Floating Drawer Header */
+        <header className="bg-slate-900 border-b border-slate-800 px-3 sm:px-4 py-2.5 flex items-center justify-between shrink-0 sticky top-0 z-30">
+          <div className="flex items-center space-x-2 min-w-0">
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white text-xs shadow-md shrink-0">
+              <i className="fas fa-wand-magic-sparkles"></i>
+            </div>
+            <div className="flex items-center space-x-1.5 truncate">
+              <span className="text-xs font-bold text-white tracking-tight">AI Copilot</span>
+              <span className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.2 rounded font-mono font-medium truncate">
+                {provider === 'google_gemini' ? 'Gemini Flash' : provider}
               </span>
-              
-              {/* Community Quota Status Badge vs Engineering Badge */}
-              {isCommunity ? (
-                quotaStatus.isLocked ? (
-                  <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/50 px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1.5 animate-pulse shadow-sm">
-                    <i className="fas fa-lock text-amber-400"></i>
-                    <span>Quota Reached (5/5) • Resets in {quotaStatus.formattedTimeUntilReset}</span>
-                  </span>
-                ) : (
-                  <span className="text-[10px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1.5 shadow-sm">
-                    <i className="fas fa-bolt text-emerald-400"></i>
-                    <span>Community Quota: <strong className="font-mono text-white">{quotaStatus.remainingCount}/5</strong> left today</span>
-                  </span>
-                )
-              ) : (
-                <span className="text-[10px] bg-sky-500/15 text-sky-300 border border-sky-500/30 px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1.5 shadow-sm">
-                  <i className="fas fa-infinity text-sky-400"></i>
-                  <span>Engineering • Unlimited AI</span>
+              {isCommunity && (
+                <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold border ${
+                  quotaStatus.isLocked 
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' 
+                    : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                }`}>
+                  {quotaStatus.remainingCount}/5 Left
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-slate-400">SCADA & IIoT real-time copilot</p>
           </div>
-        </div>
 
-        {/* Right Section: Clear Chat Button & Tab Switcher */}
-        <div className="flex items-center space-x-2.5">
-          {activeTab === 'chat' && (
+          <div className="flex items-center space-x-1 shrink-0">
             <button
               type="button"
               onClick={handleClear}
-              title="Clear Conversation History"
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-slate-100 hover:bg-slate-800 border border-slate-700/60 transition-colors flex items-center space-x-1.5"
+              title="Clear Conversation"
+              className="p-1.5 text-slate-400 hover:text-rose-300 hover:bg-slate-800 rounded-lg text-xs transition-colors cursor-pointer"
             >
-              <i className="fas fa-trash-can text-slate-400 text-xs"></i>
-              <span className="hidden sm:inline">Clear Chat</span>
+              <i className="fas fa-trash-can"></i>
             </button>
-          )}
 
-          <div className="flex items-center space-x-1 bg-slate-800/80 p-1 rounded-xl border border-slate-700/60">
-            <button
-              type="button"
-              onClick={() => setActiveTab('chat')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center space-x-1.5 ${
-                activeTab === 'chat'
-                  ? 'bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
-              }`}
-            >
-              <i className="fas fa-comments"></i>
-              <span>Chat Copilot</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('settings')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center space-x-1.5 ${
-                activeTab === 'settings'
-                  ? 'bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
-              }`}
-            >
-              <i className="fas fa-sliders"></i>
-              <span>AI Settings & Providers</span>
-            </button>
+            {onOpenFullAssistant && (
+              <button
+                type="button"
+                onClick={onOpenFullAssistant}
+                title="Open in Full AI Assistant Page"
+                className="p-1.5 text-slate-400 hover:text-sky-300 hover:bg-slate-800 rounded-lg text-xs transition-colors cursor-pointer"
+              >
+                <i className="fas fa-up-right-from-square"></i>
+              </button>
+            )}
+
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                title="Close Drawer"
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg text-xs transition-colors cursor-pointer"
+              >
+                <i className="fas fa-xmark text-sm"></i>
+              </button>
+            )}
           </div>
-        </div>
-      </header>
+        </header>
+      ) : (
+        /* Full Workstation View Header for Side Menu AI Assistant */
+        <header className="bg-slate-900 border-b border-slate-800 px-4 sm:px-6 py-3 flex items-center justify-between shrink-0 sticky top-0 z-30">
+          <div className="flex items-center space-x-3">
+            {onBack && (
+              <button
+                type="button"
+                onClick={onBack}
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-all cursor-pointer mr-0.5"
+                title="Back to Dashboard"
+              >
+                <i className="fas fa-arrow-left text-base"></i>
+              </button>
+            )}
+
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-sky-500 via-indigo-500 to-purple-600 flex items-center justify-center text-white text-base shadow-md shrink-0">
+              <i className="fas fa-wand-magic-sparkles"></i>
+            </div>
+            <div>
+              <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                <h1 className="text-base font-bold text-white tracking-tight">Industrial AI Assistant</h1>
+                <span className="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-2 py-0.5 rounded-full font-mono font-medium">
+                  {provider === 'google_gemini' ? 'Gemini 2.0 Flash' : provider}
+                </span>
+                
+                {/* Community Quota Status Badge vs Engineering Badge */}
+                {isCommunity ? (
+                  quotaStatus.isLocked ? (
+                    <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/50 px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1.5 animate-pulse shadow-sm">
+                      <i className="fas fa-lock text-amber-400"></i>
+                      <span>Quota Reached (5/5) • Resets in {quotaStatus.formattedTimeUntilReset}</span>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1.5 shadow-sm">
+                      <i className="fas fa-bolt text-emerald-400"></i>
+                      <span>Community Quota: <strong className="font-mono text-white">{quotaStatus.remainingCount}/5</strong> left today</span>
+                    </span>
+                  )
+                ) : (
+                  <span className="text-[10px] bg-sky-500/15 text-sky-300 border border-sky-500/30 px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1.5 shadow-sm">
+                    <i className="fas fa-infinity text-sky-400"></i>
+                    <span>Engineering • Unlimited AI</span>
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400">SCADA & IIoT real-time copilot</p>
+            </div>
+          </div>
+
+          {/* Right Section: Clear Chat Button & Tab Switcher */}
+          <div className="flex items-center space-x-2.5">
+            {activeTab === 'chat' && (
+              <button
+                type="button"
+                onClick={handleClear}
+                title="Clear Conversation History"
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-slate-100 hover:bg-slate-800 border border-slate-700/60 transition-colors flex items-center space-x-1.5 cursor-pointer"
+              >
+                <i className="fas fa-trash-can text-slate-400 text-xs"></i>
+                <span className="hidden sm:inline">Clear Chat</span>
+              </button>
+            )}
+
+            <div className="flex items-center space-x-1 bg-slate-800/80 p-1 rounded-xl border border-slate-700/60">
+              <button
+                type="button"
+                onClick={() => setActiveTab('chat')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center space-x-1.5 cursor-pointer ${
+                  activeTab === 'chat'
+                    ? 'bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+                }`}
+              >
+                <i className="fas fa-comments"></i>
+                <span>Chat Copilot</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('settings')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center space-x-1.5 cursor-pointer ${
+                  activeTab === 'settings'
+                    ? 'bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+                }`}
+              >
+                <i className="fas fa-sliders"></i>
+                <span>AI Settings & Providers</span>
+              </button>
+            </div>
+          </div>
+        </header>
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        {activeTab === 'chat' ? (
+        {(isDrawer || activeTab === 'chat') ? (
           <AiChatPanel
             messages={chatSession}
             isLoading={isLoading}

@@ -2285,363 +2285,368 @@ export function App() {
   return (
     <div className="flex flex-col h-screen w-screen text-slate-200 overflow-hidden font-sans select-none" style={{ backgroundColor: activeThemeObj.bgCanvas }}>
       {/* Top Navbar */}
-      <header className="theme-header h-12 sm:h-[50px] px-2 sm:px-3 border-b border-slate-800 flex items-center justify-between shrink-0 z-40 backdrop-blur-md overflow-x-auto no-scrollbar max-w-full">
-        <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
-          <button 
-            onClick={() => setIsSidebarOpen(true)}
-            className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors shrink-0"
-          >
-            <i className="fas fa-bars text-lg"></i>
-          </button>
+      <header className="theme-header h-11 sm:h-[48px] px-2 sm:px-3 border-b border-slate-800 flex items-center justify-between shrink-0 z-40 backdrop-blur-md overflow-x-auto no-scrollbar w-full max-w-full touch-scroll overscroll-x-contain">
+        <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
           
-          <div className="flex items-center space-x-2 shrink-0">
+          {/* Sticky Left Brand Container (Hamburger + Logo + Title) */}
+          <div className="flex items-center space-x-1.5 shrink-0 sticky left-0 theme-header z-30 pr-1.5">
+            <button 
+              type="button"
+              onClick={() => setIsSidebarOpen(true)}
+              className="p-1 sm:p-1.5 text-slate-300 hover:text-white rounded-lg hover:bg-slate-800/80 active:scale-95 transition-all shrink-0 cursor-pointer"
+              title="Open Menu"
+            >
+              <i className="fas fa-bars text-sm sm:text-base"></i>
+            </button>
+            
             <AppLogo 
               size="sm" 
               accentColor={activeThemeObj.primary} 
               isCommunity={userRole === 'community' || productEdition === ProductEdition.COMMUNITY} 
             />
-            <span className="font-extrabold text-white text-xs sm:text-sm tracking-tight whitespace-nowrap shrink-0 hidden md:inline">TASC IIoT Studio</span>
-            <button
-              type="button"
-              onClick={editionMgr.IsClient() ? undefined : handleOpenActiveBrokerSettings}
-              className={`flex items-center space-x-1.5 bg-slate-950/80 ${editionMgr.IsClient() ? 'cursor-default' : 'hover:bg-slate-800 cursor-pointer'} px-2.5 py-1.5 rounded-lg border border-slate-800 transition-all group shrink-0 min-h-[34px]`}
-              title={editionMgr.IsClient() ? "MQTT Connection Status" : "Click to configure MQTT Broker Settings (Address, Port, Auth)"}
-            >
-              <span className={`w-2 h-2 rounded-full ${isSimulated ? 'bg-amber-400 animate-pulse' : mqttConnected ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-              <span className="text-[10px] sm:text-[11px] font-mono text-slate-300 group-hover:text-white font-semibold">
-                {isSimulated ? 'SIM' : mqttConnected ? 'CONNECTED' : 'OFFLINE'}
-              </span>
-              {!editionMgr.IsClient() && <i className="fas fa-server text-[10px] text-sky-400 opacity-70 group-hover:opacity-100 ml-0.5 hidden sm:inline"></i>}
-            </button>
-
-            {/* Inbuilt Alarm Center Bell Button */}
-            <button
-              type="button"
-              onClick={() => setIsAlarmModalOpen(true)}
-              className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer relative shrink-0 min-h-[34px] ${
-                activeAlarms.length > 0
-                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/60 hover:bg-rose-500/30 animate-pulse'
-                  : 'bg-slate-800/80 text-slate-400 border border-slate-700 hover:text-white'
-              }`}
-              title="Telemetry Inbuilt Parameter Alarms"
-            >
-              <i className={`fas fa-bell text-xs ${activeAlarms.length > 0 ? 'text-rose-400 animate-bounce' : 'text-slate-400'}`}></i>
-              <span className="hidden md:inline">ALARMS</span>
-              {activeAlarms.length > 0 && (
-                <span className="bg-rose-500 text-black text-[9px] font-mono font-black px-1.5 py-0.2 rounded-full">
-                  {activeAlarms.length}
-                </span>
-              )}
-            </button>
-
-            {/* Alarm Historian Button */}
-            <button
-              type="button"
-              onClick={() => setIsAlarmHistorianModalOpen(true)}
-              className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/50 hover:bg-indigo-500/30 transition-all cursor-pointer shadow-sm shrink-0 min-h-[34px]"
-              title="Industrial Alarm Historian Window (FIFO Storage & Exporter)"
-            >
-              <i className="fas fa-history text-xs text-indigo-400"></i>
-              <span className="hidden md:inline">HISTORIAN</span>
-            </button>
-
-            {userRole === 'community' || productEdition === ProductEdition.COMMUNITY ? (
-              <div className="flex items-center space-x-1.5 shrink-0">
-                {/* Ultra-Compact Community Edition Badge */}
-                <button
-                  type="button"
-                  onClick={handleRequestExitSession}
-                  className="flex items-center space-x-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-emerald-500/30 transition-all cursor-pointer shrink-0 min-h-[34px]"
-                  title={`Community Edition (Free) • ${appState.dashboards.length} Screens / 10 Widgets Max — Click to exit / change mode`}
-                >
-                  <i className="fas fa-cube text-xs text-emerald-400"></i>
-                  <span className="hidden 2xl:inline">COMMUNITY</span>
-                  <span className={`text-[9px] px-1 rounded font-mono font-extrabold ${appState.panels.length > 10 ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-slate-950'}`}>
-                    Free Demo ({appState.panels.length}/10W)
-                  </span>
-                </button>
-
-                {!isFullscreen && (
-                  <button
-                    type="button"
-                    onClick={handleToggleFullscreen}
-                    className="flex items-center space-x-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer shrink-0 min-h-[34px]"
-                    title="Toggle Fullscreen Mode"
-                  >
-                    <i className="fas fa-expand text-xs text-emerald-400"></i>
-                    <span className="hidden md:inline">Full Screen</span>
-                  </button>
-                )}
-
-                {/* Workstation Mode Switcher Toggle for Community Edition */}
-                <div className="flex items-center p-0.5 bg-slate-950 rounded-lg border border-slate-800 shrink-0 min-h-[34px]">
-                  <button
-                    type="button"
-                    onClick={() => setActiveMode('grid')}
-                    className={`px-2 py-1 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
-                      activeMode === 'grid'
-                        ? 'bg-emerald-500 text-slate-950 shadow'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                    title="Switch to IIoT Grid Dashboard Studio"
-                  >
-                    <i className="fas fa-border-all text-xs"></i>
-                    <span className="hidden xl:inline">Grid Studio</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveMode('hmi')}
-                    className={`px-2 py-1 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
-                      activeMode === 'hmi'
-                        ? 'bg-sky-500 text-slate-950 shadow'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                    title="Switch to Absolute Web HMI Canvas Designer"
-                  >
-                    <i className="fas fa-microchip text-xs"></i>
-                    <span className="hidden xl:inline">HMI Canvas</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsEngineeringChoiceOpen(true)}
-                    className="p-1 text-slate-400 hover:text-emerald-400"
-                    title="Change Workstation Architecture Mode"
-                  >
-                    <i className="fas fa-sliders text-xs"></i>
-                  </button>
-                </div>
-
-                {/* HMI Screen Switcher Dropdown — right beside HMI Canvas button */}
-                {appState.dashboards && appState.dashboards.length > 0 && (
-                  <select
-                    value={activeDashboardId}
-                    onChange={(e) => handleSelectDashboard(e.target.value)}
-                    className="bg-slate-950 text-sky-400 font-bold text-xs px-2.5 py-1.5 rounded-lg border border-slate-800 outline-none focus:border-sky-500 cursor-pointer max-w-[130px] sm:max-w-[190px] shadow-inner shrink-0 truncate hover:border-slate-700 transition-colors min-h-[34px]"
-                    title="Switch Active HMI Screen Page"
-                  >
-                    {appState.dashboards.map(d => (
-                      <option key={d.dashboardId} value={d.dashboardId} className="bg-slate-900 text-white font-normal">
-                        {d.dashboardName} {d.isHome ? '★ (Home)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                {/* Inline Fullscreen Controls inside Header to prevent overlapping */}
-                {isFullscreen && (
-                  <div className="flex items-center space-x-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => window.dispatchEvent(new CustomEvent('hmi-restore-autofit'))}
-                      className="flex items-center space-x-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 px-2.5 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[34px]"
-                      title="Restore Fit (Reset zoom to fit all screen elements)"
-                    >
-                      <i className="fas fa-compress-arrows-alt text-xs text-indigo-400"></i>
-                      <span className="hidden md:inline">Restore Fit</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleExitFullscreen}
-                      className="flex items-center space-x-1 bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 px-2.5 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[34px]"
-                      title="Exit Full Screen Mode"
-                    >
-                      <i className="fas fa-compress text-xs text-sky-400"></i>
-                      <span className="hidden md:inline">Exit Full Screen</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : userRole === 'client' || productEdition === ProductEdition.CLIENT_RUNTIME ? (
-              <div className="flex items-center space-x-1.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleRequestExitSession}
-                  className="flex items-center space-x-1 bg-sky-500/20 text-sky-300 border border-sky-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-sky-500/30 transition-all cursor-pointer shrink-0 min-h-[34px]"
-                  title="Client Edition (Operator Mode) — Click to exit / change mode"
-                >
-                  <i className="fas fa-shield-halved text-xs text-sky-400"></i>
-                  <span className="hidden lg:inline">{clientInfo?.clientName || 'CLIENT EDITION'}</span>
-                  <span className="text-[9px] bg-sky-500 text-slate-950 px-1 rounded font-mono font-extrabold">OPERATOR</span>
-                </button>
-
-                {!isFullscreen && (
-                  <button
-                    type="button"
-                    onClick={handleToggleFullscreen}
-                    className="flex items-center space-x-1 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer shrink-0 min-h-[34px]"
-                    title="Toggle Fullscreen Mode"
-                  >
-                    <i className="fas fa-expand text-xs text-sky-400"></i>
-                    <span className="hidden md:inline">Full Screen</span>
-                  </button>
-                )}
-
-                {/* Workstation Mode Switcher Toggle for Client Edition */}
-                <div className="flex items-center p-0.5 bg-slate-950 rounded-lg border border-slate-800 shrink-0 min-h-[34px]">
-                  <button
-                    type="button"
-                    onClick={() => setActiveMode('grid')}
-                    className={`px-2 py-1 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
-                      activeMode === 'grid'
-                        ? 'bg-sky-500 text-slate-950 shadow'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                    title="Switch to IIoT Grid Dashboard View"
-                  >
-                    <i className="fas fa-border-all text-xs"></i>
-                    <span className="hidden xl:inline">Grid View</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveMode('hmi')}
-                    className={`px-2 py-1 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
-                      activeMode === 'hmi'
-                        ? 'bg-sky-500 text-slate-950 shadow'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                    title="Switch to Absolute Web HMI Canvas View"
-                  >
-                    <i className="fas fa-microchip text-xs"></i>
-                    <span className="hidden xl:inline">HMI View</span>
-                  </button>
-                </div>
-
-                {/* HMI Screen Switcher Dropdown — right beside HMI View button */}
-                {appState.dashboards && appState.dashboards.length > 0 && (
-                  <select
-                    value={activeDashboardId}
-                    onChange={(e) => handleSelectDashboard(e.target.value)}
-                    className="bg-slate-950 text-sky-400 font-bold text-xs px-2.5 py-1.5 rounded-lg border border-slate-800 outline-none focus:border-sky-500 cursor-pointer max-w-[130px] sm:max-w-[190px] shadow-inner shrink-0 truncate hover:border-slate-700 transition-colors min-h-[34px]"
-                    title="Switch Active HMI Screen Page"
-                  >
-                    {appState.dashboards.map(d => (
-                      <option key={d.dashboardId} value={d.dashboardId} className="bg-slate-900 text-white font-normal">
-                        {d.dashboardName} {d.isHome ? '★ (Home)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                {/* Inline Fullscreen Controls inside Header to prevent overlapping */}
-                {isFullscreen && (
-                  <div className="flex items-center space-x-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => window.dispatchEvent(new CustomEvent('hmi-restore-autofit'))}
-                      className="flex items-center space-x-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 px-2.5 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[34px]"
-                      title="Restore Fit (Reset zoom to fit all screen elements)"
-                    >
-                      <i className="fas fa-compress-arrows-alt text-xs text-indigo-400"></i>
-                      <span className="hidden md:inline">Restore Fit</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleExitFullscreen}
-                      className="flex items-center space-x-1 bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 px-2.5 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[34px]"
-                      title="Exit Full Screen Mode"
-                    >
-                      <i className="fas fa-compress text-xs text-sky-400"></i>
-                      <span className="hidden md:inline">Exit Full Screen</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-center space-x-1.5 shrink-0">
-
-                {!isFullscreen && (
-                  <button
-                    type="button"
-                    onClick={handleToggleFullscreen}
-                    className="flex items-center space-x-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer shrink-0 min-h-[34px]"
-                    title="Toggle Fullscreen Mode"
-                  >
-                    <i className="fas fa-expand text-xs text-amber-400"></i>
-                    <span className="hidden md:inline">Full Screen</span>
-                  </button>
-                )}
-
-                {/* Workstation Mode Switcher Toggle */}
-                <div className="flex items-center p-0.5 bg-slate-950 rounded-lg border border-slate-800 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setActiveMode('grid')}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
-                      activeMode === 'grid'
-                        ? 'bg-amber-500 text-slate-950 shadow'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                    title="Switch to IIoT Grid Dashboard Studio"
-                  >
-                    <i className="fas fa-border-all text-xs"></i>
-                    <span className="hidden xl:inline">Grid Studio</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveMode('hmi')}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
-                      activeMode === 'hmi'
-                        ? 'bg-sky-500 text-slate-950 shadow'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                    title="Switch to Absolute Web HMI Canvas Designer"
-                  >
-                    <i className="fas fa-microchip text-xs"></i>
-                    <span className="hidden xl:inline">HMI Canvas</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsEngineeringChoiceOpen(true)}
-                    className="p-1 text-slate-400 hover:text-amber-400"
-                    title="Change Engineering Architecture Mode"
-                  >
-                    <i className="fas fa-sliders text-xs"></i>
-                  </button>
-                </div>
-
-                {/* HMI Screen Switcher Dropdown — right beside HMI Canvas button */}
-                {appState.dashboards && appState.dashboards.length > 0 && (
-                  <select
-                    value={activeDashboardId}
-                    onChange={(e) => handleSelectDashboard(e.target.value)}
-                    className="bg-slate-950 text-sky-400 font-bold text-xs px-2 py-0.5 rounded-lg border border-slate-800 outline-none focus:border-sky-500 cursor-pointer max-w-[130px] sm:max-w-[190px] shadow-inner shrink-0 truncate hover:border-slate-700 transition-colors"
-                    title="Switch Active HMI Screen Page"
-                  >
-                    {appState.dashboards.map(d => (
-                      <option key={d.dashboardId} value={d.dashboardId} className="bg-slate-900 text-white font-normal">
-                        {d.dashboardName} {d.isHome ? '★ (Home)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                {/* Inline Fullscreen Controls inside Header to prevent overlapping */}
-                {isFullscreen && (
-                  <div className="flex items-center space-x-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => window.dispatchEvent(new CustomEvent('hmi-restore-autofit'))}
-                      className="flex items-center space-x-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 px-2 py-0.5 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0"
-                      title="Restore Fit (Reset zoom to fit all screen elements)"
-                    >
-                      <i className="fas fa-compress-arrows-alt text-xs text-indigo-400"></i>
-                      <span className="hidden md:inline">Restore Fit</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleExitFullscreen}
-                      className="flex items-center space-x-1 bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 px-2 py-0.5 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0"
-                      title="Exit Full Screen Mode"
-                    >
-                      <i className="fas fa-compress text-xs text-sky-400"></i>
-                      <span className="hidden md:inline">Exit Full Screen</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
+            <span className="font-extrabold text-white text-xs sm:text-sm tracking-tight whitespace-nowrap shrink-0 hidden lg:inline">TASC IIoT Studio</span>
           </div>
+
+          {/* MQTT Connection Status Pill */}
+          <button
+            type="button"
+            onClick={editionMgr.IsClient() ? undefined : handleOpenActiveBrokerSettings}
+            className={`flex items-center space-x-1 bg-slate-950/80 ${editionMgr.IsClient() ? 'cursor-default' : 'hover:bg-slate-800 cursor-pointer'} px-2 py-1 rounded-lg border border-slate-800 transition-all group shrink-0 min-h-[30px]`}
+            title={editionMgr.IsClient() ? "MQTT Connection Status" : "Click to configure MQTT Broker Settings (Address, Port, Auth)"}
+          >
+            <span className={`w-2 h-2 rounded-full ${isSimulated ? 'bg-amber-400 animate-pulse' : mqttConnected ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+            <span className="text-[10px] sm:text-[11px] font-mono text-slate-300 group-hover:text-white font-semibold">
+              {isSimulated ? 'SIM' : mqttConnected ? 'CONNECTED' : 'OFFLINE'}
+            </span>
+            {!editionMgr.IsClient() && <i className="fas fa-server text-[9px] text-sky-400 opacity-70 group-hover:opacity-100 ml-0.5 hidden sm:inline"></i>}
+          </button>
+
+          {/* Inbuilt Alarm Center Bell Button */}
+          <button
+            type="button"
+            onClick={() => setIsAlarmModalOpen(true)}
+            className={`flex items-center space-x-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer relative shrink-0 min-h-[30px] ${
+              activeAlarms.length > 0
+                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/60 hover:bg-rose-500/30 animate-pulse'
+                : 'bg-slate-800/80 text-slate-400 border border-slate-700 hover:text-white'
+            }`}
+            title="Telemetry Inbuilt Parameter Alarms"
+          >
+            <i className={`fas fa-bell text-xs ${activeAlarms.length > 0 ? 'text-rose-400 animate-bounce' : 'text-slate-400'}`}></i>
+            <span className="hidden md:inline">ALARMS</span>
+            {activeAlarms.length > 0 && (
+              <span className="bg-rose-500 text-black text-[9px] font-mono font-black px-1.5 py-0.2 rounded-full">
+                {activeAlarms.length}
+              </span>
+            )}
+          </button>
+
+          {/* Alarm Historian Button */}
+          <button
+            type="button"
+            onClick={() => setIsAlarmHistorianModalOpen(true)}
+            className="flex items-center space-x-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/50 hover:bg-indigo-500/30 transition-all cursor-pointer shadow-sm shrink-0 min-h-[30px]"
+            title="Industrial Alarm Historian Window (FIFO Storage & Exporter)"
+          >
+            <i className="fas fa-history text-xs text-indigo-400"></i>
+            <span className="hidden md:inline">HISTORIAN</span>
+          </button>
+
+          {userRole === 'community' || productEdition === ProductEdition.COMMUNITY ? (
+            <div className="flex items-center space-x-1.5 shrink-0">
+              {/* Ultra-Compact Community Edition Badge */}
+              <button
+                type="button"
+                onClick={handleRequestExitSession}
+                className="flex items-center space-x-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-1 rounded-lg text-[10px] font-bold hover:bg-emerald-500/30 transition-all cursor-pointer shrink-0 min-h-[30px]"
+                title={`Community Edition (Free) • ${appState.dashboards.length} Screens / 10 Widgets Max — Click to exit / change mode`}
+              >
+                <i className="fas fa-cube text-xs text-emerald-400"></i>
+                <span className="hidden 2xl:inline">COMMUNITY</span>
+                <span className={`text-[9px] px-1 rounded font-mono font-extrabold ${appState.panels.length > 10 ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-slate-950'}`}>
+                  Free Demo ({appState.panels.length}/10W)
+                </span>
+              </button>
+
+              {!isFullscreen && (
+                <button
+                  type="button"
+                  onClick={handleToggleFullscreen}
+                  className="flex items-center space-x-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 px-2 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer shrink-0 min-h-[30px]"
+                  title="Toggle Fullscreen Mode"
+                >
+                  <i className="fas fa-expand text-xs text-emerald-400"></i>
+                  <span className="hidden md:inline">Full Screen</span>
+                </button>
+              )}
+
+              {/* Workstation Mode Switcher Toggle for Community Edition */}
+              <div className="flex items-center p-0.5 bg-slate-950 rounded-lg border border-slate-800 shrink-0 min-h-[30px]">
+                <button
+                  type="button"
+                  onClick={() => setActiveMode('grid')}
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
+                    activeMode === 'grid'
+                      ? 'bg-emerald-500 text-slate-950 shadow'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Switch to IIoT Grid Dashboard Studio"
+                >
+                  <i className="fas fa-border-all text-xs"></i>
+                  <span className="hidden sm:inline">Grid Studio</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveMode('hmi')}
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
+                    activeMode === 'hmi'
+                      ? 'bg-sky-500 text-slate-950 shadow'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Switch to Absolute Web HMI Canvas Designer"
+                >
+                  <i className="fas fa-microchip text-xs"></i>
+                  <span className="hidden sm:inline">HMI Canvas</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEngineeringChoiceOpen(true)}
+                  className="p-1 text-slate-400 hover:text-emerald-400"
+                  title="Change Workstation Architecture Mode"
+                >
+                  <i className="fas fa-sliders text-xs"></i>
+                </button>
+              </div>
+
+              {/* HMI Screen Switcher Dropdown */}
+              {appState.dashboards && appState.dashboards.length > 0 && (
+                <select
+                  value={activeDashboardId}
+                  onChange={(e) => handleSelectDashboard(e.target.value)}
+                  className="bg-slate-950 text-sky-400 font-bold text-xs px-2 py-1 rounded-lg border border-slate-800 outline-none focus:border-sky-500 cursor-pointer max-w-[130px] sm:max-w-[180px] shadow-inner shrink-0 truncate hover:border-slate-700 transition-colors min-h-[30px]"
+                  title="Switch Active HMI Screen Page"
+                >
+                  {appState.dashboards.map(d => (
+                    <option key={d.dashboardId} value={d.dashboardId} className="bg-slate-900 text-white font-normal">
+                      {d.dashboardName} {d.isHome ? '★ (Home)' : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {/* Inline Fullscreen Controls */}
+              {isFullscreen && (
+                <div className="flex items-center space-x-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => window.dispatchEvent(new CustomEvent('hmi-restore-autofit'))}
+                    className="flex items-center space-x-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[30px]"
+                    title="Restore Fit (Reset zoom to fit all screen elements)"
+                  >
+                    <i className="fas fa-compress-arrows-alt text-xs text-indigo-400"></i>
+                    <span className="hidden md:inline">Restore Fit</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExitFullscreen}
+                    className="flex items-center space-x-1 bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[30px]"
+                    title="Exit Full Screen Mode"
+                  >
+                    <i className="fas fa-compress text-xs text-sky-400"></i>
+                    <span className="hidden md:inline">Exit Full Screen</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : userRole === 'client' || productEdition === ProductEdition.CLIENT_RUNTIME ? (
+            <div className="flex items-center space-x-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={handleRequestExitSession}
+                className="flex items-center space-x-1 bg-sky-500/20 text-sky-300 border border-sky-500/30 px-2 py-1 rounded-lg text-[10px] font-bold hover:bg-sky-500/30 transition-all cursor-pointer shrink-0 min-h-[30px]"
+                title="Client Edition (Operator Mode) — Click to exit / change mode"
+              >
+                <i className="fas fa-shield-halved text-xs text-sky-400"></i>
+                <span className="hidden lg:inline">{clientInfo?.clientName || 'CLIENT EDITION'}</span>
+                <span className="text-[9px] bg-sky-500 text-slate-950 px-1 rounded font-mono font-extrabold">OPERATOR</span>
+              </button>
+
+              {!isFullscreen && (
+                <button
+                  type="button"
+                  onClick={handleToggleFullscreen}
+                  className="flex items-center space-x-1 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 px-2 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer shrink-0 min-h-[30px]"
+                  title="Toggle Fullscreen Mode"
+                >
+                  <i className="fas fa-expand text-xs text-sky-400"></i>
+                  <span className="hidden md:inline">Full Screen</span>
+                </button>
+              )}
+
+              {/* Workstation Mode Switcher Toggle for Client Edition */}
+              <div className="flex items-center p-0.5 bg-slate-950 rounded-lg border border-slate-800 shrink-0 min-h-[30px]">
+                <button
+                  type="button"
+                  onClick={() => setActiveMode('grid')}
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
+                    activeMode === 'grid'
+                      ? 'bg-sky-500 text-slate-950 shadow'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Switch to IIoT Grid Dashboard View"
+                >
+                  <i className="fas fa-border-all text-xs"></i>
+                  <span className="hidden sm:inline">Grid View</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveMode('hmi')}
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
+                    activeMode === 'hmi'
+                      ? 'bg-sky-500 text-slate-950 shadow'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Switch to Absolute Web HMI Canvas View"
+                >
+                  <i className="fas fa-microchip text-xs"></i>
+                  <span className="hidden sm:inline">HMI View</span>
+                </button>
+              </div>
+
+              {/* HMI Screen Switcher Dropdown */}
+              {appState.dashboards && appState.dashboards.length > 0 && (
+                <select
+                  value={activeDashboardId}
+                  onChange={(e) => handleSelectDashboard(e.target.value)}
+                  className="bg-slate-950 text-sky-400 font-bold text-xs px-2 py-1 rounded-lg border border-slate-800 outline-none focus:border-sky-500 cursor-pointer max-w-[130px] sm:max-w-[180px] shadow-inner shrink-0 truncate hover:border-slate-700 transition-colors min-h-[30px]"
+                  title="Switch Active HMI Screen Page"
+                >
+                  {appState.dashboards.map(d => (
+                    <option key={d.dashboardId} value={d.dashboardId} className="bg-slate-900 text-white font-normal">
+                      {d.dashboardName} {d.isHome ? '★ (Home)' : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {/* Inline Fullscreen Controls */}
+              {isFullscreen && (
+                <div className="flex items-center space-x-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => window.dispatchEvent(new CustomEvent('hmi-restore-autofit'))}
+                    className="flex items-center space-x-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[30px]"
+                    title="Restore Fit (Reset zoom to fit all screen elements)"
+                  >
+                    <i className="fas fa-compress-arrows-alt text-xs text-indigo-400"></i>
+                    <span className="hidden md:inline">Restore Fit</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExitFullscreen}
+                    className="flex items-center space-x-1 bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[30px]"
+                    title="Exit Full Screen Mode"
+                  >
+                    <i className="fas fa-compress text-xs text-sky-400"></i>
+                    <span className="hidden md:inline">Exit Full Screen</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center space-x-1.5 shrink-0">
+
+              {!isFullscreen && (
+                <button
+                  type="button"
+                  onClick={handleToggleFullscreen}
+                  className="flex items-center space-x-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 px-2 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer shrink-0 min-h-[30px]"
+                  title="Toggle Fullscreen Mode"
+                >
+                  <i className="fas fa-expand text-xs text-amber-400"></i>
+                  <span className="hidden md:inline">Full Screen</span>
+                </button>
+              )}
+
+              {/* Workstation Mode Switcher Toggle */}
+              <div className="flex items-center p-0.5 bg-slate-950 rounded-lg border border-slate-800 shrink-0 min-h-[30px]">
+                <button
+                  type="button"
+                  onClick={() => setActiveMode('grid')}
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
+                    activeMode === 'grid'
+                      ? 'bg-amber-500 text-slate-950 shadow'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Switch to IIoT Grid Dashboard Studio"
+                >
+                  <i className="fas fa-border-all text-xs"></i>
+                  <span className="hidden sm:inline">Grid Studio</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveMode('hmi')}
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
+                    activeMode === 'hmi'
+                      ? 'bg-sky-500 text-slate-950 shadow'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Switch to Absolute Web HMI Canvas Designer"
+                >
+                  <i className="fas fa-microchip text-xs"></i>
+                  <span className="hidden sm:inline">HMI Canvas</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEngineeringChoiceOpen(true)}
+                  className="p-1 text-slate-400 hover:text-amber-400"
+                  title="Change Engineering Architecture Mode"
+                >
+                  <i className="fas fa-sliders text-xs"></i>
+                </button>
+              </div>
+
+              {/* HMI Screen Switcher Dropdown */}
+              {appState.dashboards && appState.dashboards.length > 0 && (
+                <select
+                  value={activeDashboardId}
+                  onChange={(e) => handleSelectDashboard(e.target.value)}
+                  className="bg-slate-950 text-sky-400 font-bold text-xs px-2 py-1 rounded-lg border border-slate-800 outline-none focus:border-sky-500 cursor-pointer max-w-[130px] sm:max-w-[180px] shadow-inner shrink-0 truncate hover:border-slate-700 transition-colors min-h-[30px]"
+                  title="Switch Active HMI Screen Page"
+                >
+                  {appState.dashboards.map(d => (
+                    <option key={d.dashboardId} value={d.dashboardId} className="bg-slate-900 text-white font-normal">
+                      {d.dashboardName} {d.isHome ? '★ (Home)' : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {/* Inline Fullscreen Controls */}
+              {isFullscreen && (
+                <div className="flex items-center space-x-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => window.dispatchEvent(new CustomEvent('hmi-restore-autofit'))}
+                    className="flex items-center space-x-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[30px]"
+                    title="Restore Fit (Reset zoom to fit all screen elements)"
+                  >
+                    <i className="fas fa-compress-arrows-alt text-xs text-indigo-400"></i>
+                    <span className="hidden md:inline">Restore Fit</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExitFullscreen}
+                    className="flex items-center space-x-1 bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[30px]"
+                    title="Exit Full Screen Mode"
+                  >
+                    <i className="fas fa-compress text-xs text-sky-400"></i>
+                    <span className="hidden md:inline">Exit Full Screen</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
 
@@ -3343,6 +3348,10 @@ export function App() {
           latestValues={latestValues}
           appState={appState}
           activeAlarms={activeAlarms}
+          onOpenFullAssistant={() => {
+            setIsAiDrawerOpen(false);
+            setCurrentView(AppView.AI_ASSISTANT);
+          }}
         />
       )}
 

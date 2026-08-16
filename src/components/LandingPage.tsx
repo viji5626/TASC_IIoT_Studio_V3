@@ -135,7 +135,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
   };
 
   return (
-    <div className="w-full min-h-screen sm:h-screen overflow-y-auto bg-[#060a12] text-slate-100 flex flex-col justify-between p-3 sm:p-5 relative select-none font-sans">
+    <div className="w-full h-full min-h-[100dvh] max-h-[100dvh] overflow-y-auto overscroll-contain touch-scroll bg-[#060a12] text-slate-100 flex flex-col justify-start sm:justify-between p-3 sm:p-5 relative select-none font-sans">
       
       {/* Background Industrial Lighting Glows */}
       <div 
@@ -177,7 +177,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
       </header>
 
       {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto w-full py-2 sm:py-3 relative z-10 space-y-3 sm:space-y-4 my-auto shrink-0">
+      <main className="max-w-7xl mx-auto w-full py-3 sm:py-3 relative z-10 space-y-3 sm:space-y-4 my-0 sm:my-auto shrink-0 flex-1 flex flex-col justify-start sm:justify-center">
         
         {/* Title Section */}
         <div className="text-center space-y-1 max-w-2xl mx-auto">
@@ -533,9 +533,9 @@ const LandingPage: React.FC<LandingPageProps> = ({
 
       {/* IMPORT PROJECT MODAL */}
       {showImportModal && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-150 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg max-h-[90vh] overflow-y-auto my-auto p-6 sm:p-8 space-y-6 shadow-2xl relative text-slate-100">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-150 overflow-y-auto touch-scroll">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg max-h-[92dvh] overflow-y-auto p-4 sm:p-8 space-y-5 sm:space-y-6 shadow-2xl relative text-slate-100 my-auto">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 sm:pb-4">
               <div className="flex items-center space-x-3 text-sky-400">
                 <div className="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-lg">
                   <i className="fas fa-file-shield"></i>
@@ -639,8 +639,8 @@ const LandingPage: React.FC<LandingPageProps> = ({
 
       {/* ADMIN LOGIN MODAL */}
       {showAdminPinModal && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-150 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto my-auto p-6 sm:p-8 space-y-5 shadow-2xl relative text-slate-100">
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-150 overflow-y-auto touch-scroll">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md max-h-[92dvh] overflow-y-auto p-4 sm:p-8 space-y-4 sm:space-y-5 shadow-2xl relative text-slate-100 my-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center space-x-2.5 text-amber-400 font-bold">
                 <i className="fas fa-user-shield text-lg"></i>

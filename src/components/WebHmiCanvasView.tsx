@@ -13,6 +13,7 @@ import { getPanelTelemetryStatus } from '../utils/staleHelper';
 import { AlarmHistorianWidget } from './AlarmHistorianWidget';
 import { EditionManager } from '../utils/EditionManager';
 import { ColorBoxPopover } from './ColorBoxPopover';
+import { getDynamicElementTransform, evaluateMotionDynamics, evaluateRotationDynamics, getEffectiveMotionPathPoints } from '../utils/dynamicsHelper';
 
 interface WebHmiCanvasViewProps {
   appState: AppState;
@@ -275,6 +276,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
   const [isEditMode, setIsEditMode] = useState(!isClientMode);
   const [gridSnap, setGridSnap] = useState(true);
+  const [isMobileToolsCollapsed, setIsMobileToolsCollapsed] = useState<boolean>(false);
 
   // Canvas zoom & pan state
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
@@ -1104,6 +1106,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
   const [marqueeRect, setMarqueeRect] = useState<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
   const [draggingNode, setDraggingNode] = useState<{ panelId: string; nodeIndex: number } | null>(null);
+  const [draggingMotionHandle, setDraggingMotionHandle] = useState<{ panelId: string; nodeIndex: number } | null>(null);
   const hasDraggedMarqueeRef = useRef(false);
   const justFinishedMarqueeRef = useRef(false);
 
@@ -1689,6 +1692,129 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       };
     }
   }, [draggingNode, appState, onUpdateAppState]);
+
+  // Motion Path Node Manipulation Handlers
+  const handleAddMotionPathNode = (panel: Panel) => {
+    const pts = getEffectiveMotionPathPoints(panel);
+    const newPts = [...pts];
+    const lastPt = newPts[newPts.length - 1] || { x: 150, y: 0 };
+    const prevPt = newPts[newPts.length - 2] || { x: 0, y: 0 };
+    const newPt = {
+      x: Math.round((lastPt.x + prevPt.x) / 2),
+      y: Math.round((lastPt.y + prevPt.y) / 2) + 40
+    };
+    newPts.splice(newPts.length - 1, 0, newPt);
+    const updated = {
+      ...panel,
+      motionPathPoints: newPts,
+      motionStartX: newPts[0].x,
+      motionStartY: newPts[0].y,
+      motionEndX: newPts[newPts.length - 1].x,
+      motionEndY: newPts[newPts.length - 1].y
+    };
+    const updatedPanels = appState.panels.map(p => p.panelId === panel.panelId ? updated : p);
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
+  };
+
+  const handleRemoveMotionPathNode = (panel: Panel) => {
+    const pts = getEffectiveMotionPathPoints(panel);
+    if (pts.length <= 2) return;
+    const newPts = pts.filter((_, i) => i !== pts.length - 2);
+    const updated = {
+      ...panel,
+      motionPathPoints: newPts,
+      motionStartX: newPts[0].x,
+      motionStartY: newPts[0].y,
+      motionEndX: newPts[newPts.length - 1].x,
+      motionEndY: newPts[newPts.length - 1].y
+    };
+    const updatedPanels = appState.panels.map(p => p.panelId === panel.panelId ? updated : p);
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
+  };
+
+  const handleToggleMotionOrient = (panel: Panel) => {
+    const updated = {
+      ...panel,
+      motionOrientToPath: !panel.motionOrientToPath
+    };
+    const updatedPanels = appState.panels.map(p => p.panelId === panel.panelId ? updated : p);
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
+  };
+
+  // Motion Path Node Handle Dragging Handler
+  const handleMotionHandleMouseDown = (e: React.MouseEvent, panelId: string, nodeIndex: number) => {
+    if (!effectiveEditMode) return;
+    e.stopPropagation();
+    setDraggingMotionHandle({ panelId, nodeIndex });
+  };
+
+  useEffect(() => {
+    const handleMotionMouseMove = (e: MouseEvent) => {
+      if (!draggingMotionHandle || !canvasRef.current) return;
+      const { panelId, nodeIndex } = draggingMotionHandle;
+      const targetPanel = appState.panels.find(p => p.panelId === panelId);
+      if (!targetPanel) return;
+
+      const idx = panels.findIndex(p => p.panelId === panelId);
+      const pos = getPanelPos(targetPanel, idx);
+
+      const rect = canvasRef.current.getBoundingClientRect();
+      const scrollLeft = canvasRef.current.scrollLeft || 0;
+      const scrollTop = canvasRef.current.scrollTop || 0;
+
+      const mouseCanvasX = (e.clientX - rect.left + scrollLeft) / effectiveScale;
+      const mouseCanvasY = (e.clientY - rect.top + scrollTop) / effectiveScale;
+
+      // Delta relative to element's center/anchor
+      let deltaX = Math.round(mouseCanvasX - (pos.x + pos.w / 2));
+      let deltaY = Math.round(mouseCanvasY - (pos.y + pos.h / 2));
+
+      if (gridSnap) {
+        deltaX = Math.round(deltaX / 10) * 10;
+        deltaY = Math.round(deltaY / 10) * 10;
+      }
+
+      const pts = getEffectiveMotionPathPoints(targetPanel);
+      const updatedPts = pts.map((pt, i) => {
+        if (i === nodeIndex) {
+          return { x: deltaX, y: deltaY };
+        }
+        return pt;
+      });
+
+      const updatedPanels = appState.panels.map(p => {
+        if (p.panelId === panelId) {
+          return {
+            ...p,
+            motionPathPoints: updatedPts,
+            motionStartX: updatedPts[0].x,
+            motionStartY: updatedPts[0].y,
+            motionEndX: updatedPts[updatedPts.length - 1].x,
+            motionEndY: updatedPts[updatedPts.length - 1].y
+          };
+        }
+        return p;
+      });
+
+      onUpdateAppState({ ...appState, panels: updatedPanels });
+    };
+
+    const handleMotionMouseUp = () => {
+      if (draggingMotionHandle) {
+        setDraggingMotionHandle(null);
+        updateAppStateWithHistory(appStateRef.current);
+      }
+    };
+
+    if (draggingMotionHandle) {
+      window.addEventListener('mousemove', handleMotionMouseMove);
+      window.addEventListener('mouseup', handleMotionMouseUp);
+      return () => {
+        window.removeEventListener('mousemove', handleMotionMouseMove);
+        window.removeEventListener('mouseup', handleMotionMouseUp);
+      };
+    }
+  }, [draggingMotionHandle, appState, effectiveScale, gridSnap, onUpdateAppState, panels, updateAppStateWithHistory]);
 
   // Resize & Rotation Transformation State
   const [transformState, setTransformState] = useState<{
@@ -2494,120 +2620,134 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     <div className="flex flex-col h-full bg-[#030712] text-slate-100 select-none overflow-hidden relative">
       
       {/* Web HMI Canvas Top Navigation Bar (Hidden in Fullscreen mode to allow full canvas auto-fit) */}
+      {/* Web HMI Canvas Main Studio Toolbar */}
       {!isFullscreen && (
-        <div className="bg-slate-900/95 border-b border-slate-800 px-3 py-1 flex flex-wrap items-center justify-between gap-2 shrink-0 z-20 backdrop-blur-md">
+        <div className="bg-slate-900/95 border-b border-slate-800 px-2 sm:px-3 py-1 flex items-center justify-between gap-1.5 shrink-0 z-20 backdrop-blur-md overflow-x-auto no-scrollbar w-full max-w-full touch-scroll overscroll-x-contain min-h-[38px]">
           {/* HMI Canvas Element Controls */}
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0 whitespace-nowrap">
             {effectiveEditMode && (
               <>
-
-              <button
-                type="button"
-                onClick={onOpenAddPanel}
-                className="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-xl shadow transition-all flex items-center space-x-1.5 cursor-pointer shrink-0"
-              >
-                <i className="fas fa-plus"></i>
-                <span>Add Element</span>
-              </button>
-
-              {/* Undo & Redo Controls with Shortcut Support */}
-              <div className="flex items-center space-x-1 bg-slate-950 p-0.5 rounded-xl border border-slate-800 shrink-0">
+                {/* Mobile Tools Collapse Toggle Button */}
                 <button
                   type="button"
-                  onClick={handleUndo}
-                  disabled={!canUndo}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer ${
-                    canUndo
-                      ? 'bg-slate-800 hover:bg-slate-700 text-sky-300 hover:text-sky-200 border border-slate-700 shadow-sm'
-                      : 'opacity-40 cursor-not-allowed text-slate-500'
+                  onClick={() => setIsMobileToolsCollapsed(prev => !prev)}
+                  className={`p-1.5 rounded-lg border text-xs font-bold transition-all sm:hidden cursor-pointer shrink-0 ${
+                    isMobileToolsCollapsed 
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' 
+                      : 'bg-slate-800 text-slate-400 border-slate-700'
                   }`}
-                  title="Undo Canvas Action (Ctrl+Z)"
+                  title={isMobileToolsCollapsed ? "Show All Editing Tools" : "Hide Editing Tools (Max Canvas Area)"}
                 >
-                  <i className="fas fa-undo text-xs"></i>
-                  <span className="hidden sm:inline">Undo</span>
-                  <span className="text-[9px] font-mono text-slate-400 bg-slate-900 px-1 py-0.2 rounded border border-slate-800 hidden lg:inline">Ctrl+Z</span>
+                  <i className={`fas ${isMobileToolsCollapsed ? 'fa-screwdriver-wrench' : 'fa-chevron-up'}`}></i>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={handleRedo}
-                  disabled={!canRedo}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer ${
-                    canRedo
-                      ? 'bg-slate-800 hover:bg-slate-700 text-sky-300 hover:text-sky-200 border border-slate-700 shadow-sm'
-                      : 'opacity-40 cursor-not-allowed text-slate-500'
-                  }`}
-                  title="Redo Canvas Action (Ctrl+Y)"
-                >
-                  <i className="fas fa-redo text-xs"></i>
-                  <span className="hidden sm:inline">Redo</span>
-                  <span className="text-[9px] font-mono text-slate-400 bg-slate-900 px-1 py-0.2 rounded border border-slate-800 hidden lg:inline">Ctrl+Y</span>
-                </button>
-              </div>
+                {!isMobileToolsCollapsed && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={onOpenAddPanel}
+                      className="px-2 sm:px-2.5 py-1 bg-sky-500 hover:bg-sky-400 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-xl shadow transition-all flex items-center space-x-1 cursor-pointer shrink-0 active:scale-95"
+                    >
+                      <i className="fas fa-plus text-xs"></i>
+                      <span>Add Element</span>
+                    </button>
 
-              {/* Quick Add Geometrical / Vector Shape Dropdown */}
-              <div className="flex items-center space-x-1 bg-slate-950 px-2 py-1 rounded-xl border border-slate-800 shrink-0" title="Quick Add Geometrical / Vector Shape">
-                <i className="fas fa-shapes text-xs text-amber-400"></i>
-                <select
-                  defaultValue=""
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      handleAddVectorShape(e.target.value);
-                      e.target.value = '';
-                    }
-                  }}
-                  className="bg-transparent text-xs font-bold text-amber-300 outline-none cursor-pointer"
-                >
-                  <option value="" disabled className="bg-slate-900 text-slate-400">+ Add Vector Shape...</option>
-                  <option value="rectangle" className="bg-slate-900 text-white">🔲 Rectangle</option>
-                  <option value="circle" className="bg-slate-900 text-white">⚪ Circle / Ellipse</option>
-                  <option value="line" className="bg-slate-900 text-white">➖ Vector Line</option>
-                  <option value="polyline" className="bg-slate-900 text-white">🐍 Bendable Open Line / Polyline</option>
-                  <option value="pipe" className="bg-slate-900 text-white">🚰 Process Pipe</option>
-                  <option value="triangle" className="bg-slate-900 text-white">🔺 Triangle</option>
-                  <option value="polygon" className="bg-slate-900 text-white">⬡ Custom Polygon (N-Point)</option>
-                  <option value="star" className="bg-slate-900 text-white">⭐ Vector Star</option>
-                  <option value="arrow" className="bg-slate-900 text-white">➔ Vector Arrow</option>
-                </select>
-              </div>
+                    {/* Undo & Redo Controls with Shortcut Support */}
+                    <div className="flex items-center space-x-0.5 bg-slate-950 p-0.5 rounded-xl border border-slate-800 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleUndo}
+                        disabled={!canUndo}
+                        className={`px-1.5 sm:px-2 py-1 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer ${
+                          canUndo
+                            ? 'bg-slate-800 hover:bg-slate-700 text-sky-300 hover:text-sky-200 border border-slate-700 shadow-sm'
+                            : 'opacity-40 cursor-not-allowed text-slate-500'
+                        }`}
+                        title="Undo Canvas Action (Ctrl+Z)"
+                      >
+                        <i className="fas fa-undo text-xs"></i>
+                        <span className="hidden md:inline">Undo</span>
+                      </button>
 
-              {/* TASC Symbol Library Button */}
-              <button
-                type="button"
-                onClick={() => setIsSymbolLibraryOpen(true)}
-                className="px-3 py-1 bg-gradient-to-r from-sky-500/20 via-indigo-500/20 to-purple-500/20 hover:from-sky-500/30 hover:via-indigo-500/30 hover:to-purple-500/30 text-sky-300 hover:text-white border border-sky-500/40 hover:border-sky-400 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer shrink-0 shadow-md active:scale-95"
-                title="Open TASC Symbol Library (Valves, Tanks, Motors, Agitators, Silos, Pumps, Heat Exchangers, Sensors)"
-              >
-                <i className="fas fa-industry text-xs text-sky-400 animate-pulse"></i>
-                <span className="hidden sm:inline">TASC Symbol Library</span>
-                <span className="bg-sky-500/30 text-sky-200 text-[9px] font-extrabold px-1.5 py-0.2 rounded-md border border-sky-400/30">TASC Symbols</span>
-              </button>
-            </>
-          )}
-        </div>
+                      <button
+                        type="button"
+                        onClick={handleRedo}
+                        disabled={!canRedo}
+                        className={`px-1.5 sm:px-2 py-1 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer ${
+                          canRedo
+                            ? 'bg-slate-800 hover:bg-slate-700 text-sky-300 hover:text-sky-200 border border-slate-700 shadow-sm'
+                            : 'opacity-40 cursor-not-allowed text-slate-500'
+                        }`}
+                        title="Redo Canvas Action (Ctrl+Y)"
+                      >
+                        <i className="fas fa-redo text-xs"></i>
+                        <span className="hidden md:inline">Redo</span>
+                      </button>
+                    </div>
 
-        {/* Toolbar Controls */}
-        <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                    {/* Quick Add Geometrical / Vector Shape Dropdown */}
+                    <div className="flex items-center space-x-1 bg-slate-950 px-1.5 py-1 rounded-xl border border-slate-800 shrink-0" title="Quick Add Geometrical / Vector Shape">
+                      <i className="fas fa-shapes text-xs text-amber-400"></i>
+                      <select
+                        defaultValue=""
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            handleAddVectorShape(e.target.value);
+                            e.target.value = '';
+                          }
+                        }}
+                        className="bg-transparent text-xs font-bold text-amber-300 outline-none cursor-pointer max-w-[110px] sm:max-w-none"
+                      >
+                        <option value="" disabled className="bg-slate-900 text-slate-400">+ Add Shape...</option>
+                        <option value="rectangle" className="bg-slate-900 text-white">🔲 Rectangle</option>
+                        <option value="circle" className="bg-slate-900 text-white">⚪ Circle / Ellipse</option>
+                        <option value="line" className="bg-slate-900 text-white">➖ Vector Line</option>
+                        <option value="polyline" className="bg-slate-900 text-white">🐍 Bendable Polyline</option>
+                        <option value="pipe" className="bg-slate-900 text-white">🚰 Process Pipe</option>
+                        <option value="triangle" className="bg-slate-900 text-white">🔺 Triangle</option>
+                        <option value="polygon" className="bg-slate-900 text-white">⬡ Custom Polygon</option>
+                        <option value="star" className="bg-slate-900 text-white">⭐ Vector Star</option>
+                        <option value="arrow" className="bg-slate-900 text-white">➔ Vector Arrow</option>
+                      </select>
+                    </div>
 
-            
-            {effectiveEditMode && (
+                    {/* TASC Symbol Library Button */}
+                    <button
+                      type="button"
+                      onClick={() => setIsSymbolLibraryOpen(true)}
+                      className="px-2 sm:px-2.5 py-1 bg-gradient-to-r from-sky-500/20 via-indigo-500/20 to-purple-500/20 hover:from-sky-500/30 text-sky-300 hover:text-white border border-sky-500/40 hover:border-sky-400 rounded-xl text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shrink-0 shadow-md active:scale-95"
+                      title="Open TASC Symbol Library (Valves, Tanks, Motors, Agitators, Silos, Pumps, Heat Exchangers, Sensors)"
+                    >
+                      <i className="fas fa-industry text-xs text-sky-400"></i>
+                      <span className="hidden md:inline">Symbol Library</span>
+                      <span className="bg-sky-500/30 text-sky-200 text-[9px] font-extrabold px-1 py-0.2 rounded-md border border-sky-400/30">Symbols</span>
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Right Toolbar Controls */}
+          <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0 whitespace-nowrap">
+            {effectiveEditMode && !isMobileToolsCollapsed && (
               <>
                 {/* Screen Background Color Swatch Picker */}
-                <div className="flex items-center space-x-1.5 bg-slate-950 px-2 py-1 rounded-xl border border-slate-800" title="Screen Background Color">
+                <div className="flex items-center space-x-1 bg-slate-950 px-1.5 py-1 rounded-xl border border-slate-800 shrink-0" title="Screen Background Color">
                   <i className="fas fa-palette text-xs text-sky-400"></i>
-                  <span className="text-[10px] text-slate-400 font-bold hidden md:inline">Canvas BG:</span>
+                  <span className="text-[10px] text-slate-400 font-bold hidden xl:inline">Canvas BG:</span>
                   <input
                     type="color"
                     value={screenBgColor}
                     onChange={(e) => updateCanvasBgColor(e.target.value)}
-                    className="w-5 h-5 bg-transparent cursor-pointer rounded border-0 outline-none overflow-hidden"
+                    className="w-3.5 h-3.5 bg-transparent cursor-pointer rounded border-0 outline-none overflow-hidden"
                   />
                 </div>
 
-                {/* Media Import Button (JPG, JPEG, PNG, GIF, SVG) */}
-                <label className="px-2.5 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 hover:border-purple-400 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer shrink-0 shadow-sm" title="Import Image, Animated GIF or SVG Graphic to Canvas">
+                {/* Media Import Button */}
+                <label className="px-2 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 hover:border-purple-400 rounded-xl text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shrink-0 shadow-sm" title="Import Image, Animated GIF or SVG Graphic to Canvas">
                   <i className="fas fa-file-image text-xs text-purple-400"></i>
-                  <span className="hidden sm:inline">Import Media</span>
+                  <span className="hidden lg:inline">Media</span>
                   <input
                     type="file"
                     accept=".jpg,.jpeg,.png,.gif,.svg,image/jpeg,image/png,image/gif,image/svg+xml"
@@ -2626,10 +2766,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       }
                     }}
                     defaultValue=""
-                    className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold transition-all outline-none cursor-pointer"
+                    className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold transition-all outline-none cursor-pointer shrink-0"
                   >
                     <option value="" disabled className="bg-slate-900 text-slate-400">
-                      ⚡ Load Demo Template...
+                      ⚡ Load Demo...
                     </option>
                     {DEMO_PRESETS.map((preset) => (
                       <option key={preset.id} value={preset.id} className="bg-slate-900 text-white font-medium">
@@ -2643,7 +2783,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setGridSnap(!gridSnap)}
-                  className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer ${
+                  className={`px-1.5 sm:px-2 py-1 rounded-xl border text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shrink-0 ${
                     gridSnap 
                       ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400' 
                       : 'bg-slate-800 border-slate-700 text-slate-400'
@@ -2651,39 +2791,38 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   title="Snap to 10px Grid"
                 >
                   <i className="fas fa-border-top-left text-xs"></i>
-                  <span className="hidden sm:inline">Snap 10px</span>
+                  <span className="hidden xl:inline">Snap 10px</span>
                 </button>
 
                 {/* Pan / Move Canvas Tool Button */}
                 <button
                   type="button"
                   onClick={() => setIsPanMode(!isPanMode)}
-                  className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer ${
+                  className={`px-1.5 sm:px-2 py-1 rounded-xl border text-xs font-bold flex items-center space-x-1 transition-all cursor-pointer shrink-0 ${
                     isPanMode || isSpacePressed
                       ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
                       : 'bg-slate-900 text-slate-300 hover:text-white border border-slate-800'
                   }`}
                   title="Pan / Move Canvas (Click Hand tool, Hold Spacebar, or Middle-click / Drag)"
                 >
-                  <i className={`fas fa-hand ${isPanMode || isSpacePressed ? 'text-amber-400' : 'text-slate-400'}`}></i>
-                  <span className="hidden sm:inline">{isPanMode ? 'Pan Mode' : 'Pan'}</span>
+                  <i className={`fas fa-hand text-xs ${isPanMode || isSpacePressed ? 'text-amber-400' : 'text-slate-400'}`}></i>
+                  <span className="hidden xl:inline">Pan</span>
                 </button>
 
                 {/* Zoom Level Controls (0.5x to 2.0x) */}
-                <div className="flex items-center space-x-1 bg-slate-950 px-2 py-1 rounded-xl border border-slate-800" title="Canvas Zoom Level (0.5x to 2.0x, Ctrl+Wheel or Pinch)">
-                  <i className="fas fa-magnifying-glass text-xs text-sky-400"></i>
+                <div className="flex items-center space-x-0.5 bg-slate-950 px-1 py-0.5 rounded-xl border border-slate-800 shrink-0" title="Canvas Zoom Level">
                   <button
                     type="button"
                     onClick={() => setZoomLevel(prev => Math.max(0.5, Number((prev - 0.1).toFixed(1))))}
                     disabled={zoomLevel <= 0.5}
-                    className="w-5 h-5 flex items-center justify-center rounded bg-slate-900 hover:bg-slate-800 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-[10px] cursor-pointer"
+                    className="w-4 h-4 flex items-center justify-center rounded bg-slate-900 hover:bg-slate-800 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-[9px] cursor-pointer"
                     title="Zoom Out (-10%)"
                   >
                     <i className="fas fa-minus"></i>
                   </button>
                   <span 
                     onClick={() => setZoomLevel(1.0)} 
-                    className="text-xs font-mono font-bold text-sky-300 hover:text-white cursor-pointer px-1 min-w-[42px] text-center"
+                    className="text-[11px] font-mono font-bold text-sky-300 hover:text-white cursor-pointer px-0.5 min-w-[32px] text-center"
                     title="Click to Reset Zoom to 100%"
                   >
                     {Math.round(zoomLevel * 100)}%
@@ -2692,28 +2831,18 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     type="button"
                     onClick={() => setZoomLevel(prev => Math.min(2.0, Number((prev + 0.1).toFixed(1))))}
                     disabled={zoomLevel >= 2.0}
-                    className="w-5 h-5 flex items-center justify-center rounded bg-slate-900 hover:bg-slate-800 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-[10px] cursor-pointer"
+                    className="w-4 h-4 flex items-center justify-center rounded bg-slate-900 hover:bg-slate-800 text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-[9px] cursor-pointer"
                     title="Zoom In (+10%)"
                   >
                     <i className="fas fa-plus"></i>
                   </button>
-                  {zoomLevel !== 1.0 && (
-                    <button
-                      type="button"
-                      onClick={() => setZoomLevel(1.0)}
-                      className="ml-1 text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 hover:bg-sky-500 hover:text-slate-950 transition-colors cursor-pointer"
-                      title="Reset Zoom to 100%"
-                    >
-                      100%
-                    </button>
-                  )}
                 </div>
 
                 {/* Auto-Fit Screen Toggle Button */}
                 <button
                   type="button"
                   onClick={() => setIsAutoFit(prev => !prev)}
-                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer shadow-sm ${
+                  className={`px-2 py-1 rounded-xl text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shadow-sm shrink-0 ${
                     isAutoFit
                       ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 hover:bg-sky-500/30'
                       : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
@@ -2721,36 +2850,20 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   title="Auto Fit Screen (Dynamically scales all canvas elements to fit mobile/desktop screen without scrolling)"
                 >
                   <i className="fas fa-expand text-xs text-sky-400"></i>
-                  <span>{isAutoFit ? 'Auto Fit ON' : 'Auto Fit'}</span>
+                  <span>{isAutoFit ? 'Fit ON' : 'Fit'}</span>
                 </button>
-
-                {/* Restore Fit Button (Visible when zoomed or not AutoFit) */}
-                {(zoomLevel !== 1.0 || !isAutoFit) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAutoFit(true);
-                      setZoomLevel(1.0);
-                      setPanPosition({ x: 0, y: 0 });
-                    }}
-                    className="px-2.5 py-1 rounded-xl text-xs font-extrabold bg-indigo-500/20 text-indigo-300 border border-indigo-500/50 hover:bg-indigo-500/30 transition-all flex items-center space-x-1.5 cursor-pointer shadow-sm"
-                    title="Restore Fit (Reset screen zoom and position to fit screen)"
-                  >
-                    <i className="fas fa-compress-arrows-alt text-xs text-indigo-400"></i>
-                    <span>Restore Fit</span>
-                  </button>
-                )}
               </>
             )}
 
             {/* Edit Mode vs Live Run Mode */}
             {isClientMode ? (
               <div 
-                className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-extrabold tracking-wider uppercase flex items-center space-x-1.5 shadow-sm"
+                className="px-2.5 py-1 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-extrabold tracking-wider uppercase flex items-center space-x-1 shadow-sm shrink-0"
                 title="Client Edition (Operator Mode) — Live Execution Active"
               >
                 <i className="fas fa-play text-xs text-emerald-400 animate-pulse"></i>
-                <span>LIVE HMI RUN</span>
+                <span className="hidden sm:inline">LIVE HMI RUN</span>
+                <span className="sm:hidden">LIVE</span>
               </div>
             ) : (
               <button
@@ -2762,34 +2875,33 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     setMasterPanelId(null);
                   }
                 }}
-                className={`px-3 py-1.5 rounded-xl border text-xs font-extrabold tracking-wider uppercase transition-all flex items-center space-x-1.5 cursor-pointer ${
+                className={`px-2.5 py-1 rounded-xl border text-xs font-extrabold tracking-wider uppercase transition-all flex items-center space-x-1 cursor-pointer shrink-0 active:scale-95 ${
                   isEditMode 
                     ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md shadow-amber-500/20' 
                     : 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shadow-emerald-500/20'
                 }`}
               >
                 <i className={`fas ${isEditMode ? 'fa-pen-to-square' : 'fa-play'} text-xs`}></i>
-                <span>{isEditMode ? 'Design Mode' : 'Live HMI Run'}</span>
+                <span className="hidden sm:inline">{isEditMode ? 'Design Mode' : 'Live HMI Run'}</span>
+                <span className="sm:hidden">{isEditMode ? 'Design' : 'Run'}</span>
               </button>
             )}
           </div>
         </div>
       )}
 
-
-
       {/* Selected Element(s) & Alignment Floating Toolbar */}
       {effectiveEditMode && selectedPanelIds.length > 0 && (
-        <div className="bg-slate-950 border-b border-slate-800 px-4 py-1.5 flex flex-wrap items-center justify-between gap-2 text-xs z-20 animate-in fade-in shadow-xl">
-          <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+        <div className="bg-slate-950 border-b border-slate-800 px-2 sm:px-3 py-1 flex items-center justify-between gap-1.5 text-xs z-20 animate-in fade-in shadow-xl overflow-x-auto no-scrollbar w-full max-w-full touch-scroll overscroll-x-contain shrink-0 min-h-[36px]">
+          <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0 whitespace-nowrap">
             
             {/* Selection Info Badge */}
-            <div className="flex items-center space-x-1.5 font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30">
+            <div className="flex items-center space-x-1 font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/30 shrink-0">
               <i className="fas fa-object-group text-xs"></i>
-              <span className="truncate max-w-[200px]">
+              <span className="truncate max-w-[120px] sm:max-w-[180px]">
                 {selectedPanelIds.length === 1
-                  ? (selectedPanel?.panelName || '1 Element Selected')
-                  : `${selectedPanelIds.length} Elements Selected`}
+                  ? (selectedPanel?.panelName || '1 Selected')
+                  : `${selectedPanelIds.length} Selected`}
               </span>
               {masterPanel && selectedPanelIds.length > 1 && (
                 <span className="text-[9px] text-amber-300 font-normal border-l border-amber-500/40 pl-1.5 ml-1 hidden lg:inline">
@@ -2827,9 +2939,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
             />
 
             {/* Element Opacity Slider */}
-            <div className="flex items-center space-x-1.5 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800" title="Element Opacity (Semi-Transparency)">
-              <i className="fas fa-circle-half-stroke text-[11px] text-purple-400"></i>
-              <span className="text-[10px] text-slate-300 font-bold hidden sm:inline">Opacity:</span>
+            <div className="flex items-center space-x-1 bg-slate-900 px-1.5 py-0.5 rounded-lg border border-slate-800 shrink-0" title="Element Opacity (Semi-Transparency)">
+              <i className="fas fa-circle-half-stroke text-[10px] text-purple-400"></i>
+              <span className="text-[9px] text-slate-300 font-bold hidden sm:inline">Opacity:</span>
               <input
                 type="range"
                 min="0.05"
@@ -2837,17 +2949,17 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 step="0.05"
                 value={selectedPanel?.opacity ?? 1}
                 onChange={(e) => updateSelectedPanelProp('opacity', parseFloat(e.target.value))}
-                className="w-16 accent-purple-500 cursor-pointer h-1.5 bg-slate-700 rounded-lg appearance-none"
+                className="w-10 sm:w-12 accent-purple-500 cursor-pointer h-1.5 bg-slate-700 rounded-lg appearance-none"
               />
-              <span className="text-[10px] font-mono text-purple-300 w-8 text-right font-bold">
+              <span className="text-[9px] font-mono text-purple-300 w-6 text-right font-bold">
                 {Math.round((selectedPanel?.opacity ?? 1) * 100)}%
               </span>
             </div>
 
             {/* Element Rotation Angle Slider */}
-            <div className="flex items-center space-x-1.5 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800" title="Rotation Angle (0-360°)">
-              <i className="fas fa-rotate text-[11px] text-amber-400"></i>
-              <span className="text-[10px] text-slate-300 font-bold hidden sm:inline">Rotate:</span>
+            <div className="flex items-center space-x-1 bg-slate-900 px-1.5 py-0.5 rounded-lg border border-slate-800 shrink-0" title="Rotation Angle (0-360°)">
+              <i className="fas fa-rotate text-[10px] text-amber-400"></i>
+              <span className="text-[9px] text-slate-300 font-bold hidden sm:inline">Rotate:</span>
               <input
                 type="range"
                 min="0"
@@ -2855,9 +2967,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 step="1"
                 value={selectedPanel?.rotation ?? 0}
                 onChange={(e) => updateSelectedPanelProp('rotation', parseInt(e.target.value) || 0)}
-                className="w-16 accent-amber-500 cursor-pointer h-1.5 bg-slate-700 rounded-lg appearance-none"
+                className="w-10 sm:w-12 accent-amber-500 cursor-pointer h-1.5 bg-slate-700 rounded-lg appearance-none"
               />
-              <span className="text-[10px] font-mono text-amber-300 w-9 text-right font-bold">
+              <span className="text-[9px] font-mono text-amber-300 w-6 text-right font-bold">
                 {(selectedPanel?.rotation ?? 0)}°
               </span>
             </div>
@@ -2865,11 +2977,11 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
             {/* Corner Radius Slider (0-100px) */}
             <div 
               id="hmi-canvas-element"
-              className="flex items-center space-x-1.5 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800" 
+              className="flex items-center space-x-1 bg-slate-900 px-1.5 py-0.5 rounded-lg border border-slate-800 shrink-0" 
               title="Corner Radius (0-100px)"
             >
-              <i className="fas fa-vector-square text-[11px] text-teal-400"></i>
-              <span className="text-[10px] text-slate-300 font-bold hidden sm:inline">Radius:</span>
+              <i className="fas fa-vector-square text-[10px] text-teal-400"></i>
+              <span className="text-[9px] text-slate-300 font-bold hidden sm:inline">Radius:</span>
               <input
                 type="range"
                 min="0"
@@ -2877,16 +2989,16 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 step="1"
                 value={selectedPanel?.borderRadius ?? 8}
                 onChange={(e) => updateSelectedPanelProp('borderRadius', parseInt(e.target.value) || 0)}
-                className="w-16 accent-teal-400 cursor-pointer h-1.5 bg-slate-700 rounded-lg appearance-none"
+                className="w-10 sm:w-12 accent-teal-400 cursor-pointer h-1.5 bg-slate-700 rounded-lg appearance-none"
               />
-              <span className="text-[10px] font-mono text-teal-300 w-8 text-right font-bold">
+              <span className="text-[9px] font-mono text-teal-300 w-6 text-right font-bold">
                 {(selectedPanel?.borderRadius ?? 8)}px
               </span>
             </div>
 
             {/* Shadow / Glow Effect Controls */}
             <div 
-              className="flex items-center space-x-1.5 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800"
+              className="flex items-center space-x-1 bg-slate-900 px-1.5 py-0.5 rounded-lg border border-slate-800 shrink-0"
               title={selectedPanel?.type === PanelType.STATIC_TEXT ? "Font Glow / Shadow Effect" : "Element Shadow / Glow Effect"}
             >
               <button
@@ -2899,7 +3011,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 }`}
               >
                 <i className={`fas fa-wand-magic-sparkles text-[10px] ${selectedPanel?.shadowEnabled ? 'text-cyan-400 animate-pulse' : ''}`}></i>
-                <span className="hidden sm:inline">{selectedPanel?.type === PanelType.STATIC_TEXT ? 'Font Glow:' : 'Glow/Shadow:'}</span>
+                <span className="hidden sm:inline">{selectedPanel?.type === PanelType.STATIC_TEXT ? 'Font Glow:' : 'Glow:'}</span>
               </button>
 
               {selectedPanel?.shadowEnabled && (
@@ -2908,7 +3020,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     type="color"
                     value={selectedPanel?.shadowColor || '#38bdf8'}
                     onChange={(e) => updateSelectedPanelProp('shadowColor', e.target.value)}
-                    className="w-5 h-5 bg-transparent cursor-pointer rounded border-0 outline-none overflow-hidden"
+                    className="w-3.5 h-3.5 bg-transparent cursor-pointer rounded border-0 outline-none overflow-hidden"
                     title="Shadow / Glow Color"
                   />
                   <input
@@ -2918,10 +3030,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     step="1"
                     value={selectedPanel?.shadowIntensity ?? 15}
                     onChange={(e) => updateSelectedPanelProp('shadowIntensity', parseInt(e.target.value) || 15)}
-                    className="w-14 accent-cyan-400 cursor-pointer h-1.5 bg-slate-700 rounded-lg appearance-none"
+                    className="w-10 sm:w-12 accent-cyan-400 cursor-pointer h-1.5 bg-slate-700 rounded-lg appearance-none"
                     title="Glow / Shadow Intensity (px)"
                   />
-                  <span className="text-[10px] font-mono text-cyan-300 w-7 text-right font-bold">
+                  <span className="text-[9px] font-mono text-cyan-300 w-5 text-right font-bold">
                     {selectedPanel?.shadowIntensity ?? 15}px
                   </span>
                 </>
@@ -2931,50 +3043,49 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
             {/* If Single Element Selected: Show Precise Coordinates X, Y, W, H */}
             {selectedPanel && selectedPanelIds.length === 1 && (
               <>
-                <div className="flex items-center space-x-1 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800">
-                  <span className="text-[10px] text-slate-400 font-mono font-bold">X:</span>
+                <div className="flex items-center space-x-0.5 bg-slate-900 px-1 py-0.5 rounded-lg border border-slate-800 shrink-0">
+                  <span className="text-[9px] text-slate-400 font-mono font-bold">X:</span>
                   <input
                     type="number"
                     value={selectedPanel.x ?? 0}
                     onChange={(e) => updateSelectedPanelProp('x', Math.max(0, parseInt(e.target.value) || 0))}
-                    className="w-12 bg-transparent font-mono text-xs font-bold text-sky-400 outline-none text-right"
+                    className="w-8 sm:w-10 bg-transparent font-mono text-[11px] font-bold text-sky-400 outline-none text-right"
                   />
                 </div>
 
-                <div className="flex items-center space-x-1 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800">
-                  <span className="text-[10px] text-slate-400 font-mono font-bold">Y:</span>
+                <div className="flex items-center space-x-0.5 bg-slate-900 px-1 py-0.5 rounded-lg border border-slate-800 shrink-0">
+                  <span className="text-[9px] text-slate-400 font-mono font-bold">Y:</span>
                   <input
                     type="number"
                     value={selectedPanel.y ?? 0}
                     onChange={(e) => updateSelectedPanelProp('y', Math.max(0, parseInt(e.target.value) || 0))}
-                    className="w-12 bg-transparent font-mono text-xs font-bold text-sky-400 outline-none text-right"
+                    className="w-8 sm:w-10 bg-transparent font-mono text-[11px] font-bold text-sky-400 outline-none text-right"
                   />
                 </div>
 
-                <div className="flex items-center space-x-1 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800">
-                  <span className="text-[10px] text-slate-400 font-mono font-bold">W:</span>
+                <div className="flex items-center space-x-0.5 bg-slate-900 px-1 py-0.5 rounded-lg border border-slate-800 shrink-0">
+                  <span className="text-[9px] text-slate-400 font-mono font-bold">W:</span>
                   <input
                     type="number"
                     value={selectedPanel.w ?? 180}
                     onChange={(e) => updateSelectedPanelProp('w', Math.max(40, parseInt(e.target.value) || 40))}
-                    className="w-12 bg-transparent font-mono text-xs font-bold text-emerald-400 outline-none text-right"
+                    className="w-8 sm:w-10 bg-transparent font-mono text-[11px] font-bold text-emerald-400 outline-none text-right"
                   />
                 </div>
 
-                <div className="flex items-center space-x-1 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800">
-                  <span className="text-[10px] text-slate-400 font-mono font-bold">H:</span>
+                <div className="flex items-center space-x-0.5 bg-slate-900 px-1 py-0.5 rounded-lg border border-slate-800 shrink-0">
+                  <span className="text-[9px] text-slate-400 font-mono font-bold">H:</span>
                   <input
                     type="number"
                     value={selectedPanel.h ?? 60}
                     onChange={(e) => updateSelectedPanelProp('h', Math.max(25, parseInt(e.target.value) || 25))}
-                    className="w-12 bg-transparent font-mono text-xs font-bold text-emerald-400 outline-none text-right"
+                    className="w-8 sm:w-10 bg-transparent font-mono text-[11px] font-bold text-emerald-400 outline-none text-right"
                   />
                 </div>
 
-                {/* Geometrical & Vector Shape Dropdown (Placed directly beside W and H) */}
-                <div className="flex items-center space-x-1 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800" title="Geometrical / Vector Shape Dropdown Selection">
+                {/* Geometrical & Vector Shape Dropdown */}
+                <div className="flex items-center space-x-1 bg-slate-900 px-1.5 py-0.5 rounded-lg border border-slate-800 shrink-0" title="Geometrical / Vector Shape Dropdown Selection">
                   <i className="fas fa-shapes text-[10px] text-amber-400"></i>
-                  <span className="text-[10px] text-slate-300 font-bold hidden xl:inline">Shape:</span>
                   <select
                     value={
                       selectedPanel.type === PanelType.PIPE 
@@ -2999,50 +3110,64 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       });
                       updateAppStateWithHistory({ ...appState, panels: updatedPanels });
                     }}
-                    className="bg-transparent font-mono text-xs font-bold text-amber-300 outline-none cursor-pointer"
+                    className="bg-transparent font-mono text-[11px] font-bold text-amber-300 outline-none cursor-pointer max-w-[100px] sm:max-w-none"
                   >
                     <option value="none" className="bg-slate-900 text-slate-400">Standard Widget</option>
                     <option value="rectangle" className="bg-slate-900 text-white">🔲 Rectangle</option>
                     <option value="circle" className="bg-slate-900 text-white">⚪ Circle / Ellipse</option>
                     <option value="line" className="bg-slate-900 text-white">➖ Vector Line</option>
-                    <option value="polyline" className="bg-slate-900 text-white">🐍 Bendable Open Line / Polyline</option>
+                    <option value="polyline" className="bg-slate-900 text-white">🐍 Polyline</option>
                     <option value="pipe" className="bg-slate-900 text-white">🚰 Process Pipe</option>
                     <option value="triangle" className="bg-slate-900 text-white">🔺 Triangle</option>
-                    <option value="polygon" className="bg-slate-900 text-white">⬡ Custom Polygon (N-Point)</option>
+                    <option value="polygon" className="bg-slate-900 text-white">⬡ Polygon</option>
                     <option value="star" className="bg-slate-900 text-white">⭐ Vector Star</option>
                     <option value="arrow" className="bg-slate-900 text-white">➔ Vector Arrow</option>
                   </select>
                 </div>
 
-                {(selectedPanel.type === PanelType.IMAGE || selectedPanel.type === 'image') && (
-                  <div className="flex items-center space-x-1 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800" title="Image Aspect Ratio Fit">
-                    <i className="fas fa-expand text-[10px] text-purple-400"></i>
-                    <select
-                      value={selectedPanel.imageFit || 'contain'}
-                      onChange={(e) => updateSelectedPanelProp('imageFit', e.target.value)}
-                      className="bg-transparent font-mono text-xs font-bold text-purple-300 outline-none cursor-pointer"
-                    >
-                      <option value="contain" className="bg-slate-900 text-white">Fit: Contain</option>
-                      <option value="cover" className="bg-slate-900 text-white">Fit: Cover</option>
-                      <option value="fill" className="bg-slate-900 text-white">Fit: Fill</option>
-                    </select>
-                  </div>
-                )}
+                {/* Dynamics & Animation Quick Badges */}
+                <div className="flex items-center space-x-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => onEditPanel(selectedPanel)}
+                    className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold font-mono transition-all flex items-center space-x-1 border cursor-pointer ${
+                      selectedPanel.enableMotionDynamics
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
+                        : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800'
+                    }`}
+                    title={selectedPanel.enableMotionDynamics ? 'Motion Path Active - Click to Edit Dynamics' : 'Add Tag-Based Motion Path'}
+                  >
+                    <i className="fas fa-route text-[10px] text-amber-400"></i>
+                    <span>{selectedPanel.enableMotionDynamics ? `Path: ${selectedPanel.motionEndX ?? 150}px` : '+ Motion'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => onEditPanel(selectedPanel)}
+                    className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold font-mono transition-all flex items-center space-x-1 border cursor-pointer ${
+                      selectedPanel.enableRotationDynamics
+                        ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
+                        : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800'
+                    }`}
+                    title={selectedPanel.enableRotationDynamics ? 'Rotation Dynamics Active - Click to Edit Dynamics' : 'Add Tag-Based Rotation'}
+                  >
+                    <i className="fas fa-rotate text-[10px] text-cyan-400"></i>
+                    <span>{selectedPanel.enableRotationDynamics ? (selectedPanel.rotationMode === 'variable' ? 'Rot: Var' : 'Rot: Spin') : '+ Rotate'}</span>
+                  </button>
+                </div>
               </>
             )}
 
             {/* Alignment Tools Toolbar (Enabled when 2+ Elements Selected) */}
             {selectedPanelIds.length >= 2 && (
-              <div className="flex items-center space-x-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
-                <span className="text-[10px] font-bold text-slate-400 px-1 uppercase hidden md:inline">Align:</span>
-                
+              <div className="flex items-center space-x-0.5 bg-slate-900 p-0.5 rounded-xl border border-slate-800 shrink-0">
                 <button
                   type="button"
                   onClick={() => alignSelectedPanels('left')}
                   className="p-1 hover:bg-slate-800 text-sky-400 rounded transition-colors"
-                  title="Align Left (To Reference Element)"
+                  title="Align Left"
                 >
-                  <i className="fas fa-align-left text-xs w-4 text-center"></i>
+                  <i className="fas fa-align-left text-xs w-3.5 text-center"></i>
                 </button>
                 <button
                   type="button"
@@ -3050,7 +3175,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   className="p-1 hover:bg-slate-800 text-sky-400 rounded transition-colors"
                   title="Align Center Horizontal"
                 >
-                  <i className="fas fa-align-center text-xs w-4 text-center"></i>
+                  <i className="fas fa-align-center text-xs w-3.5 text-center"></i>
                 </button>
                 <button
                   type="button"
@@ -3058,10 +3183,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   className="p-1 hover:bg-slate-800 text-sky-400 rounded transition-colors"
                   title="Align Right"
                 >
-                  <i className="fas fa-align-right text-xs w-4 text-center"></i>
+                  <i className="fas fa-align-right text-xs w-3.5 text-center"></i>
                 </button>
                 
-                <div className="w-px h-4 bg-slate-800 mx-0.5"></div>
+                <div className="w-px h-3 bg-slate-800 mx-0.5"></div>
 
                 <button
                   type="button"
@@ -3069,7 +3194,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   className="p-1 hover:bg-slate-800 text-sky-400 rounded transition-colors"
                   title="Align Top"
                 >
-                  <i className="fas fa-turn-up text-xs w-4 text-center"></i>
+                  <i className="fas fa-turn-up text-xs w-3.5 text-center"></i>
                 </button>
                 <button
                   type="button"
@@ -3077,7 +3202,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   className="p-1 hover:bg-slate-800 text-sky-400 rounded transition-colors"
                   title="Align Center Vertical"
                 >
-                  <i className="fas fa-grip-lines text-xs w-4 text-center"></i>
+                  <i className="fas fa-grip-lines text-xs w-3.5 text-center"></i>
                 </button>
                 <button
                   type="button"
@@ -3085,26 +3210,26 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   className="p-1 hover:bg-slate-800 text-sky-400 rounded transition-colors"
                   title="Align Bottom"
                 >
-                  <i className="fas fa-turn-down text-xs w-4 text-center"></i>
+                  <i className="fas fa-turn-down text-xs w-3.5 text-center"></i>
                 </button>
 
-                <div className="w-px h-4 bg-slate-800 mx-0.5"></div>
+                <div className="w-px h-3 bg-slate-800 mx-0.5"></div>
 
                 <button
                   type="button"
                   onClick={() => alignSelectedPanels('sameW')}
-                  className="p-1 hover:bg-slate-800 text-emerald-400 rounded transition-colors text-[10px] font-bold px-1.5"
+                  className="p-0.5 hover:bg-slate-800 text-emerald-400 rounded transition-colors text-[9px] font-bold px-1"
                   title="Make Same Width"
                 >
-                  Equal W
+                  =W
                 </button>
                 <button
                   type="button"
                   onClick={() => alignSelectedPanels('sameH')}
-                  className="p-1 hover:bg-slate-800 text-emerald-400 rounded transition-colors text-[10px] font-bold px-1.5"
+                  className="p-0.5 hover:bg-slate-800 text-emerald-400 rounded transition-colors text-[9px] font-bold px-1"
                   title="Make Same Height"
                 >
-                  Equal H
+                  =H
                 </button>
               </div>
             )}
@@ -3114,7 +3239,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
               <button
                 type="button"
                 onClick={handleGroupSelected}
-                className="px-2 py-1 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center space-x-1"
+                className="px-2 py-0.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center space-x-1 shrink-0"
                 title="Group Selected Elements Together"
               >
                 <i className="fas fa-link text-xs"></i>
@@ -3126,93 +3251,88 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
               <button
                 type="button"
                 onClick={handleUngroupSelected}
-                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center space-x-1"
+                className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center space-x-1 shrink-0"
                 title="Ungroup Elements"
               >
                 <i className="fas fa-link-slash text-xs"></i>
                 <span>Ungroup</span>
               </button>
             )}
-
           </div>
 
-          {/* Action Buttons: Copy Property, Paste Property, Duplicate, Config & Delete */}
-          <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-            {/* Copy Property & Paste Property Buttons */}
-            <div className="flex items-center space-x-1 bg-slate-900 p-0.5 rounded-xl border border-slate-800">
+          {/* Action Buttons: Copy Property, Duplicate, Config & Delete */}
+          <div className="flex items-center space-x-1 shrink-0 whitespace-nowrap">
+            {/* Copy & Paste Property Buttons */}
+            <div className="flex items-center space-x-0.5 bg-slate-900 p-0.5 rounded-xl border border-slate-800 shrink-0">
               <button
                 type="button"
                 onClick={handleCopyProperties}
-                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-amber-200 rounded-lg text-[11px] font-bold transition-colors cursor-pointer flex items-center space-x-1"
-                title="Copy Visual Properties (Colors, Border, Radius, Opacity, Glow) of Selected Element"
+                className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-amber-200 rounded-lg text-[10px] font-bold transition-colors cursor-pointer flex items-center space-x-1"
+                title="Copy Visual Properties"
               >
-                <i className="fas fa-paintbrush text-xs text-amber-400"></i>
-                <span className="hidden sm:inline">Copy Prop</span>
+                <i className="fas fa-paintbrush text-[9px] text-amber-400"></i>
+                <span className="hidden md:inline">Copy</span>
               </button>
 
               <button
                 type="button"
                 onClick={handlePasteProperties}
                 disabled={!copiedProperties}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center space-x-1 cursor-pointer ${
+                className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold transition-all flex items-center space-x-1 cursor-pointer ${
                   copiedProperties
                     ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 shadow-sm'
                     : 'bg-slate-950 text-slate-600 cursor-not-allowed border border-slate-800/50'
                 }`}
-                title={copiedProperties ? "Paste Visual Properties to Selected Element(s)" : "No Properties Copied Yet"}
+                title={copiedProperties ? "Paste Visual Properties" : "No Properties Copied"}
               >
-                <i className={`fas fa-paint-roller text-xs ${copiedProperties ? 'text-amber-400' : 'text-slate-600'}`}></i>
-                <span className="hidden sm:inline">Paste Prop</span>
-                {copiedProperties && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse ml-0.5"></span>
-                )}
+                <i className={`fas fa-paint-roller text-[9px] ${copiedProperties ? 'text-amber-400' : 'text-slate-600'}`}></i>
+                <span className="hidden md:inline">Paste</span>
               </button>
             </div>
 
             {/* Layering Z-Index Quick Controls */}
-            <div className="flex items-center space-x-1 bg-slate-900 p-0.5 rounded-xl border border-slate-800" title="Change Element Layering / Z-Index Order">
-              <span className="text-[10px] text-slate-400 font-bold uppercase px-1 hidden md:inline">Layer:</span>
+            <div className="flex items-center space-x-0.5 bg-slate-900 p-0.5 rounded-xl border border-slate-800 shrink-0" title="Change Layering Order">
               <button
                 type="button"
                 onClick={handleBringToVeryFront}
-                className="p-1 hover:bg-slate-800 text-sky-400 rounded transition-colors text-[10px]"
+                className="p-1 hover:bg-slate-800 text-sky-400 rounded transition-colors text-[9px]"
                 title="Bring to Very Front"
               >
-                <i className="fas fa-arrow-up-to-line w-4 text-center"></i>
+                <i className="fas fa-arrow-up-to-line w-3 text-center"></i>
               </button>
               <button
                 type="button"
                 onClick={handleBringOneLayerFront}
-                className="p-1 hover:bg-slate-800 text-sky-400 rounded transition-colors text-[10px]"
+                className="p-1 hover:bg-slate-800 text-sky-400 rounded transition-colors text-[9px]"
                 title="Bring 1 Layer Forward"
               >
-                <i className="fas fa-arrow-up w-4 text-center"></i>
+                <i className="fas fa-arrow-up w-3 text-center"></i>
               </button>
               <button
                 type="button"
                 onClick={handleSendOneLayerBack}
-                className="p-1 hover:bg-slate-800 text-sky-400 rounded transition-colors text-[10px]"
+                className="p-1 hover:bg-slate-800 text-sky-400 rounded transition-colors text-[9px]"
                 title="Send 1 Layer Backward"
               >
-                <i className="fas fa-arrow-down w-4 text-center"></i>
+                <i className="fas fa-arrow-down w-3 text-center"></i>
               </button>
               <button
                 type="button"
                 onClick={handleSendToVeryBack}
-                className="p-1 hover:bg-slate-800 text-sky-400 rounded transition-colors text-[10px]"
+                className="p-1 hover:bg-slate-800 text-sky-400 rounded transition-colors text-[9px]"
                 title="Send to Very Back"
               >
-                <i className="fas fa-arrow-down-to-line w-4 text-center"></i>
+                <i className="fas fa-arrow-down-to-line w-3 text-center"></i>
               </button>
             </div>
 
             <button
               type="button"
               onClick={handleDuplicateSelected}
-              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-sky-300 rounded-lg text-[11px] font-bold transition-colors cursor-pointer flex items-center space-x-1"
-              title="Duplicate / Copy Selected Elements"
+              className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-sky-300 rounded-lg text-[10px] font-bold transition-colors cursor-pointer flex items-center space-x-1 shrink-0"
+              title="Duplicate Selected Elements"
             >
-              <i className="fas fa-copy text-xs"></i>
+              <i className="fas fa-copy text-[9px]"></i>
               <span className="hidden sm:inline">Duplicate</span>
             </button>
 
@@ -3220,9 +3340,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
               <button
                 type="button"
                 onClick={() => onEditPanel(selectedPanel)}
-                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-lg text-[11px] font-bold transition-colors cursor-pointer flex items-center space-x-1"
+                className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-lg text-[10px] font-bold transition-colors cursor-pointer flex items-center space-x-1 shrink-0"
               >
-                <i className="fas fa-gear text-xs"></i>
+                <i className="fas fa-gear text-[9px]"></i>
                 <span>Config</span>
               </button>
             )}
@@ -3230,9 +3350,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
             <button
               type="button"
               onClick={handleDeleteSelected}
-              className="px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 rounded-lg text-[11px] font-bold border border-rose-500/30 transition-colors cursor-pointer flex items-center space-x-1"
+              className="px-2 py-0.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 rounded-lg text-[10px] font-bold border border-rose-500/30 transition-colors cursor-pointer flex items-center space-x-1 shrink-0"
             >
-              <i className="fas fa-trash text-xs"></i>
+              <i className="fas fa-trash text-[9px]"></i>
               <span>Delete ({selectedPanelIds.length})</span>
             </button>
           </div>
@@ -3389,6 +3509,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
             const showRx = !isStaticOrDecorative && panel.showReceivedTimeStamp !== false && !!lastRxTime && (!!panel.topic || !!panel.driverTagId);
             const showTx = !isStaticOrDecorative && !!panel.showSentTimeStamp && !!lastTxTime && (!!panel.publishTopic || !!panel.topic);
 
+            // Dynamic Tag-Based Motion Translation and Rotation Evaluation
+            const dynTransform = getDynamicElementTransform(panel, latestValues, effectiveEditMode);
+
             return (
               <div
                 key={panel.panelId}
@@ -3421,7 +3544,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   borderRadius: isPureShapeWithoutBox ? '0px' : `${panel.borderRadius ?? 8}px`,
                   color: panel.textColor || '#f8fafc',
                   opacity: panel.opacity !== undefined ? panel.opacity : 1,
-                  transform: panel.rotation ? `rotate(${panel.rotation}deg)` : undefined,
+                  transform: dynTransform.transform || (panel.rotation ? `rotate(${panel.rotation}deg)` : undefined),
+                  animation: dynTransform.animation || undefined,
                   boxShadow: !isPureShapeWithoutBox && panel.shadowEnabled
                     ? `0 0 ${panel.shadowIntensity ?? 15}px ${panel.shadowColor || '#38bdf8'}, 0 4px 12px rgba(0, 0, 0, 0.5)`
                     : undefined
@@ -4472,6 +4596,125 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         {pos.w} × {pos.h} px {panel.rotation ? `| ${panel.rotation}°` : ''}
                       </div>
                     </div>
+
+                    {/* ─── DESIGN-TIME INTERACTIVE MULTI-NODE MOTION PATH VECTOR OVERLAY ─── */}
+                    {panel.enableMotionDynamics && (() => {
+                      const effectivePoints = getEffectiveMotionPathPoints(panel);
+
+                      return (
+                        <div className="absolute inset-0 pointer-events-none z-[80]">
+                          {/* Motion Vector SVG Polyline & Arrowhead */}
+                          <svg className="overflow-visible absolute top-0 left-0 w-full h-full pointer-events-none">
+                            <defs>
+                              <marker
+                                id={`motionArrow_${panel.panelId}`}
+                                viewBox="0 0 10 10"
+                                refX="6"
+                                refY="5"
+                                markerWidth="6"
+                                markerHeight="6"
+                                orient="auto-start-reverse"
+                              >
+                                <path d="M 0 1 L 10 5 L 0 9 z" fill="#f59e0b" />
+                              </marker>
+                            </defs>
+                            {effectivePoints.map((pt, i) => {
+                              if (i === 0) return null;
+                              const prev = effectivePoints[i - 1];
+                              const isLast = i === effectivePoints.length - 1;
+                              return (
+                                <line
+                                  key={i}
+                                  x1={prev.x + pos.w / 2}
+                                  y1={prev.y + pos.h / 2}
+                                  x2={pt.x + pos.w / 2}
+                                  y2={pt.y + pos.h / 2}
+                                  stroke="#f59e0b"
+                                  strokeWidth="2.5"
+                                  strokeDasharray="6 4"
+                                  markerEnd={isLast ? `url(#motionArrow_${panel.panelId})` : undefined}
+                                  opacity="0.85"
+                                />
+                              );
+                            })}
+                          </svg>
+
+                          {/* Draggable Node Handles for all Path Points */}
+                          {effectivePoints.map((pt, i) => {
+                            const isStart = i === 0;
+                            const isEnd = i === effectivePoints.length - 1;
+                            return (
+                              <div
+                                key={i}
+                                onMouseDown={(e) => handleMotionHandleMouseDown(e, panel.panelId, i)}
+                                className={`w-6 h-6 rounded-full absolute -translate-x-1/2 -translate-y-1/2 border-2 border-white font-black text-[9px] flex items-center justify-center shadow-2xl pointer-events-auto cursor-grab active:cursor-grabbing hover:scale-125 transition-transform select-none ${
+                                  isStart
+                                    ? 'bg-emerald-500 text-slate-950 ring-4 ring-emerald-500/30 z-[90]'
+                                    : isEnd
+                                    ? 'bg-amber-400 text-slate-950 ring-4 ring-amber-500/40 z-[95] animate-pulse'
+                                    : 'bg-cyan-400 text-slate-950 ring-4 ring-cyan-500/40 z-[92]'
+                                }`}
+                                style={{
+                                  left: `${pt.x + pos.w / 2}px`,
+                                  top: `${pt.y + pos.h / 2}px`
+                                }}
+                                title={`Motion Node ${i + 1} (${pt.x}px, ${pt.y}px) - Drag to bend/turn path!`}
+                              >
+                                {isStart ? '0' : isEnd ? '100' : `${i + 1}`}
+                              </div>
+                            );
+                          })}
+
+                          {/* Quick Motion Path Mini-Toolbar */}
+                          <div
+                            className={`absolute ${pos.y < 45 ? 'top-2 left-2' : '-top-8 left-0'} bg-slate-950/95 border border-amber-500/60 text-amber-300 px-2 py-0.5 rounded-lg text-[9px] font-mono font-bold whitespace-nowrap shadow-xl pointer-events-auto flex items-center space-x-1.5 z-[96]`}
+                          >
+                            <i className="fas fa-route text-amber-400 text-[10px]"></i>
+                            <span className="hidden sm:inline">Path Nodes ({effectivePoints.length}):</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAddMotionPathNode(panel);
+                              }}
+                              className="px-1.5 py-0.2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded font-black cursor-pointer shadow-sm transition-transform active:scale-95"
+                              title="Add a bend node to turn the motion path"
+                            >
+                              + Bend
+                            </button>
+                            {effectivePoints.length > 2 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemoveMotionPathNode(panel);
+                                }}
+                                className="px-1.5 py-0.2 bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 rounded font-bold cursor-pointer border border-rose-500/30 transition-transform active:scale-95"
+                                title="Remove intermediate bending node"
+                              >
+                                - Point
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleMotionOrient(panel);
+                              }}
+                              className={`px-1.5 py-0.2 rounded font-bold cursor-pointer transition-colors border ${
+                                panel.motionOrientToPath
+                                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                  : 'bg-slate-800 text-slate-400 border-slate-700'
+                              }`}
+                              title="Turn/rotate element heading along path turns"
+                            >
+                              <i className="fas fa-compass text-[9px] mr-1"></i>
+                              {panel.motionOrientToPath ? 'Turn: ON' : 'Turn: OFF'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </>
                 )}
               </div>

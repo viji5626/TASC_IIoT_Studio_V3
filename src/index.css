@@ -333,3 +333,55 @@ input[type=range]::-moz-range-thumb:active {
   background: #38bdf8;
   box-shadow: 0 0 16px rgba(56, 189, 248, 0.9);
 }
+
+/* Mobile & PWA Viewport / Safe-Area Utilities */
+.touch-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.safe-top {
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+}
+
+.safe-bottom {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+.safe-left {
+  padding-left: max(0.5rem, env(safe-area-inset-left));
+}
+
+.safe-right {
+  padding-right: max(0.5rem, env(safe-area-inset-right));
+}
+
+/* Hide scrollbar for clean horizontal mobile toolbar scrolling while keeping touch-swipe functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Dynamic Tag-Based Continuous Rotation Animations */
+@keyframes hmi-spin-cw {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes hmi-spin-ccw {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+
