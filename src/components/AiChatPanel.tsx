@@ -103,6 +103,7 @@ export const AiChatPanel: React.FC<Props> = ({
   const [isListening, setIsListening] = useState(false);
   const [dictationSupported, setDictationSupported] = useState(true);
   const dictationControllerRef = useRef<SpeechDictationController | null>(null);
+  const baseTextRef = useRef<string>('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -237,28 +238,23 @@ export const AiChatPanel: React.FC<Props> = ({
       controller.stop();
       setIsListening(false);
     } else {
+      // Remember any text already in the input box before starting speech
+      baseTextRef.current = inputText.trim();
       setIsListening(true);
+
       controller.start(
-        (interim) => {
-          // Interim transcription preview
-          if (interim) {
-            setInputText(prev => {
-              const base = prev.trim();
-              return base ? `${base} ${interim}` : interim;
-            });
-          }
-        },
-        (finalCleaned) => {
-          // Final cleaned text without filler sounds
-          if (finalCleaned) {
-            setInputText(prev => {
-              const base = prev.trim();
-              return base ? `${base} ${finalCleaned}` : finalCleaned;
-            });
-          }
+        (finalText, interimText) => {
+          const spoken = [finalText, interimText].filter(Boolean).join(' ').trim();
+          const combined = baseTextRef.current
+            ? (spoken ? `${baseTextRef.current} ${spoken}` : baseTextRef.current)
+            : spoken;
+          setInputText(combined);
         },
         (err) => {
           console.warn('[Dictation Error]:', err);
+          setIsListening(false);
+        },
+        () => {
           setIsListening(false);
         }
       );

@@ -3386,7 +3386,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
         }`}
         style={{
           backgroundColor: screenBgColor,
-          backgroundImage: gridSnap 
+          backgroundImage: effectiveEditMode && gridSnap 
             ? 'radial-gradient(circle, rgba(255,255,255,0.08) 1px, transparent 1px)' 
             : 'none',
           backgroundSize: '15px 15px'
@@ -3421,55 +3421,71 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
           />
         )}
         {panels.length === 0 ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-slate-300 overflow-y-auto">
-            <div className="max-w-4xl w-full space-y-6 text-center my-auto py-6">
-              <div className="space-y-1.5">
-                <div className="inline-flex items-center space-x-2 px-3 py-1 bg-sky-500/10 border border-sky-500/30 rounded-full text-sky-400 text-xs font-bold uppercase tracking-widest">
-                  <i className="fas fa-cubes"></i>
-                  <span>HMI Screen Templates</span>
+          !isClientMode ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-slate-300 overflow-y-auto">
+              <div className="max-w-4xl w-full space-y-6 text-center my-auto py-6">
+                <div className="space-y-1.5">
+                  <div className="inline-flex items-center space-x-2 px-3 py-1 bg-sky-500/10 border border-sky-500/30 rounded-full text-sky-400 text-xs font-bold uppercase tracking-widest">
+                    <i className="fas fa-cubes"></i>
+                    <span>HMI Screen Templates</span>
+                  </div>
+                  <h3 className="text-xl font-black text-white tracking-tight">Select a Demo Dashboard Template</h3>
+                  <p className="text-xs text-slate-400 max-w-xl mx-auto">
+                    Choose from any of these pre-configured demo templates to instantly populate this screen canvas, or click <span className="text-sky-400 font-bold">+ Add Element</span> above to build from scratch.
+                  </p>
                 </div>
-                <h3 className="text-xl font-black text-white tracking-tight">Select a Demo Dashboard Template</h3>
-                <p className="text-xs text-slate-400 max-w-xl mx-auto">
-                  Choose from any of these pre-configured demo templates to instantly populate this screen canvas, or click <span className="text-sky-400 font-bold">+ Add Element</span> above to build from scratch.
-                </p>
-              </div>
 
-              {/* Grid of 8 Small Buttons / Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-left">
-                {DEMO_PRESETS.map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => handleLoadPresetTemplate(preset.id)}
-                    className="group relative p-3.5 bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 hover:border-sky-500/60 rounded-2xl transition-all cursor-pointer flex flex-col justify-between space-y-2.5 shadow-xl hover:shadow-sky-500/10 active:scale-95"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-base ${preset.bgClass} ${preset.textClass}`}>
-                        <i className={`fas ${preset.icon}`}></i>
+                {/* Grid of 8 Small Buttons / Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-left">
+                  {DEMO_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => handleLoadPresetTemplate(preset.id)}
+                      className="group relative p-3.5 bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 hover:border-sky-500/60 rounded-2xl transition-all cursor-pointer flex flex-col justify-between space-y-2.5 shadow-xl hover:shadow-sky-500/10 active:scale-95"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-base ${preset.bgClass} ${preset.textClass}`}>
+                          <i className={`fas ${preset.icon}`}></i>
+                        </div>
+                        <span className="text-[10px] font-mono font-bold text-slate-500 group-hover:text-sky-400 transition-colors">
+                          {preset.elementCount} Elements
+                        </span>
                       </div>
-                      <span className="text-[10px] font-mono font-bold text-slate-500 group-hover:text-sky-400 transition-colors">
-                        {preset.elementCount} Elements
-                      </span>
-                    </div>
 
-                    <div className="flex-1 space-y-0.5">
-                      <h4 className="text-xs font-bold text-slate-100 group-hover:text-white transition-colors">
-                        {preset.title}
-                      </h4>
-                      <p className="text-[10px] text-slate-400 leading-relaxed line-clamp-2">
-                        {preset.desc}
-                      </p>
-                    </div>
+                      <div className="flex-1 space-y-0.5">
+                        <h4 className="text-xs font-bold text-slate-100 group-hover:text-white transition-colors">
+                          {preset.title}
+                        </h4>
+                        <p className="text-[10px] text-slate-400 leading-relaxed line-clamp-2">
+                          {preset.desc}
+                        </p>
+                      </div>
 
-                    <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-bold text-sky-400 opacity-80 group-hover:opacity-100">
-                      <span>Load Template</span>
-                      <i className="fas fa-arrow-right text-[9px] group-hover:translate-x-1 transition-transform"></i>
-                    </div>
-                  </button>
-                ))}
+                      <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-bold text-sky-400 opacity-80 group-hover:opacity-100">
+                        <span>Load Template</span>
+                        <i className="fas fa-arrow-right text-[9px] group-hover:translate-x-1 transition-transform"></i>
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-slate-400 pointer-events-none select-none">
+              <div className="text-center space-y-3 max-w-md">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-center text-slate-500 text-2xl shadow-inner">
+                  <i className="fas fa-display"></i>
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-bold text-slate-300">No HMI Elements Deployed</h3>
+                  <p className="text-xs text-slate-500">
+                    This screen is currently empty. Deploy project elements or load a backup package from Studio.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )
         ) : (
           panels.map((panel, idx) => {
             const pos = getPanelPos(panel, idx);

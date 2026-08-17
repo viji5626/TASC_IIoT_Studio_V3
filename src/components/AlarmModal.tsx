@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ActiveAlarm } from '../types';
+import { triggerAckHaptic, triggerClickHaptic } from '../utils/hapticFeedback';
 
 interface AlarmModalProps {
   activeAlarms: ActiveAlarm[];
@@ -17,7 +18,7 @@ interface AlarmModalProps {
   onOpenHistorian?: () => void;
 }
 
-const AlarmModal: React.FC<AlarmModalProps> = ({
+export const AlarmModal: React.FC<AlarmModalProps> = ({
   activeAlarms,
   isOpen,
   onClose,
@@ -75,7 +76,10 @@ const AlarmModal: React.FC<AlarmModalProps> = ({
               {onToggleAutoPopup && (
                 <button
                   type="button"
-                  onClick={onToggleAutoPopup}
+                  onClick={() => {
+                    triggerClickHaptic();
+                    onToggleAutoPopup();
+                  }}
                   className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded flex items-center space-x-1 font-bold transition-all cursor-pointer ${
                     isAutoPopupEnabled
                       ? 'bg-indigo-500/25 text-indigo-300 border border-indigo-500/40 shadow-sm'
@@ -91,7 +95,10 @@ const AlarmModal: React.FC<AlarmModalProps> = ({
               {onToggleSound && (
                 <button
                   type="button"
-                  onClick={onToggleSound}
+                  onClick={() => {
+                    triggerClickHaptic();
+                    onToggleSound();
+                  }}
                   className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded flex items-center space-x-1 font-bold transition-all cursor-pointer ${
                     isSoundEnabled
                       ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 shadow-sm'
@@ -107,7 +114,14 @@ const AlarmModal: React.FC<AlarmModalProps> = ({
               {onToggleVibrate && (
                 <button
                   type="button"
-                  onClick={onToggleVibrate}
+                  onClick={() => {
+                    if (!isVibrateEnabled) {
+                      triggerAckHaptic(); // Provide instant test vibration feedback
+                    } else {
+                      triggerClickHaptic();
+                    }
+                    onToggleVibrate();
+                  }}
                   className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded flex items-center space-x-1 font-bold transition-all cursor-pointer ${
                     isVibrateEnabled
                       ? 'bg-amber-500/25 text-amber-300 border border-amber-500/40 shadow-sm'
@@ -123,7 +137,10 @@ const AlarmModal: React.FC<AlarmModalProps> = ({
 
             {onOpenHistorian && (
               <button
-                onClick={onOpenHistorian}
+                onClick={() => {
+                  triggerClickHaptic();
+                  onOpenHistorian();
+                }}
                 className="px-2 sm:px-3 py-1 sm:py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/50 rounded-lg text-[10px] sm:text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shadow-sm active:scale-95"
                 title="Switch to Alarm Historian Database Log"
               >
@@ -135,209 +152,219 @@ const AlarmModal: React.FC<AlarmModalProps> = ({
 
             <button
               onClick={() => setIsMaximized(!isMaximized)}
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-all cursor-pointer border border-slate-800"
-              title={isMaximized ? "Restore window size" : "Maximize window"}
+              className="p-1 sm:p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800/80 transition-all cursor-pointer"
+              title={isMaximized ? "Restore Window" : "Maximize Window"}
             >
               <i className={`fas ${isMaximized ? 'fa-compress' : 'fa-expand'} text-xs`}></i>
             </button>
             <button
               onClick={onClose}
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-900 hover:bg-rose-950/50 text-slate-400 hover:text-rose-400 flex items-center justify-center transition-all cursor-pointer border border-slate-800"
-              title="Close window"
+              className="p-1 sm:p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all cursor-pointer"
+              title="Close Center"
             >
               <i className="fas fa-xmark text-sm"></i>
             </button>
           </div>
         </div>
 
-        {/* Latest Alarm Banner if just triggered */}
-        {latestAlarmTriggered && (
-          <div className="bg-rose-500/10 border-b border-rose-500/30 px-3 sm:px-5 py-1 sm:py-1.5 flex items-center justify-between space-x-2 shrink-0 text-[10px] sm:text-xs">
-            <div className="flex items-center space-x-2 overflow-hidden">
-              <i className="fas fa-circle-exclamation text-rose-400 text-xs shrink-0 animate-pulse"></i>
-              <div className="truncate">
-                <span className="font-bold text-rose-300">Latest: </span>
-                <span className="text-white font-semibold">{latestAlarmTriggered.panelName}</span>
-                <span className="text-[10px] text-rose-200/90 ml-1 font-mono">
-                  ({latestAlarmTriggered.zone === 'TRIP' || latestAlarmTriggered.zone === 'FAULT' ? 'TRIP' : `${latestAlarmTriggered.zone}: ${latestAlarmTriggered.value}${latestAlarmTriggered.unit || ''}`})
-                </span>
-              </div>
-            </div>
-            <span className="text-[9px] font-mono text-slate-400 shrink-0">{latestAlarmTriggered.timestamp}</span>
-          </div>
-        )}
-
-        {/* Toolbar & View Toggle */}
-        <div className="bg-slate-950/90 border-b border-slate-800/80 px-3 sm:px-5 py-1 sm:py-1.5 flex items-center justify-between shrink-0">
-          <div className="flex items-center space-x-1.5 text-[10px] sm:text-xs">
-            <span className="font-bold text-slate-400 uppercase tracking-wider">Active Alarms</span>
-            <span className="text-slate-600">•</span>
-            <span className="font-mono text-amber-400 font-bold">{unackCount} Pending</span>
+        {/* View Toggle Toolbar */}
+        <div className="bg-slate-950/80 px-3 sm:px-5 py-1.5 border-b border-slate-800 flex items-center justify-between shrink-0">
+          <div className="flex items-center space-x-2 text-[10px] sm:text-xs text-slate-400">
+            <span className="font-bold uppercase tracking-wider text-slate-300">Active Alarms</span>
+            <span>•</span>
+            <span className="text-amber-400 font-mono font-bold">{unackCount} Pending</span>
           </div>
 
-          <div className="flex items-center space-x-2">
-            <div className="flex items-center bg-slate-900 rounded-lg p-0.5 border border-slate-800">
-              <button
-                onClick={() => setViewMode('CARDS')}
-                className={`px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold transition-all ${
-                  viewMode === 'CARDS' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <i className="fas fa-th-large mr-1 text-[9px]"></i>
-                Cards
-              </button>
-              <button
-                onClick={() => setViewMode('TABLE')}
-                className={`px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold transition-all ${
-                  viewMode === 'TABLE' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <i className="fas fa-table-list mr-1 text-[9px]"></i>
-                Table
-              </button>
-            </div>
+          <div className="flex items-center space-x-1 bg-slate-900 rounded-lg p-0.5 border border-slate-800">
+            <button
+              onClick={() => setViewMode('CARDS')}
+              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                viewMode === 'CARDS'
+                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                  : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              <i className="fas fa-table-cells-large mr-1 text-[9px]"></i>
+              Cards
+            </button>
+            <button
+              onClick={() => setViewMode('TABLE')}
+              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                viewMode === 'TABLE'
+                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                  : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              <i className="fas fa-table-list mr-1 text-[9px]"></i>
+              Table
+            </button>
           </div>
         </div>
 
-        {/* Alarm List Body */}
-        <div className="flex-1 overflow-auto p-2 sm:p-4">
+        {/* Alarm List Content */}
+        <div className="flex-1 p-3 sm:p-4 overflow-y-auto space-y-2.5">
           {activeAlarms.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500 space-y-2">
-              <div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-emerald-400 text-xl">
-                <i className="fas fa-shield-check"></i>
+            <div className="flex flex-col items-center justify-center h-full text-slate-500 space-y-2 text-center py-12">
+              <div className="w-12 h-12 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-600 text-xl">
+                <i className="fas fa-circle-check"></i>
               </div>
-              <p className="text-xs sm:text-sm font-semibold text-slate-300">No active parameter alarms or trips.</p>
-              <p className="text-[11px] text-slate-500 max-w-md">
-                All telemetry parameters operating within normal bounds.
-              </p>
+              <div className="text-sm font-bold text-slate-400">No active parameter alarms or trips.</div>
+              <div className="text-xs text-slate-600 max-w-sm">All telemetry parameters operating within normal bounds.</div>
               {onOpenHistorian && (
                 <button
                   onClick={onOpenHistorian}
-                  className="mt-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold shadow-lg transition-all"
+                  className="mt-2 px-3 py-1.5 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 border border-indigo-500/40 rounded-lg text-xs font-bold transition-all cursor-pointer"
                 >
                   View Historical Logs
                 </button>
               )}
             </div>
           ) : viewMode === 'CARDS' ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-4">
-              {activeAlarms.map((alarm) => (
-                <div
-                  key={alarm.alarmKey}
-                  className={`p-2.5 sm:p-3.5 rounded-lg border transition-all flex flex-col justify-between space-y-1.5 sm:space-y-2.5 ${
-                    alarm.acknowledged 
-                      ? 'bg-slate-900/40 border-slate-800/80 opacity-75' 
-                      : 'bg-[#161b26] border-rose-500/50 shadow-lg ring-1 ring-rose-500/20'
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center space-x-2">
-                      <span 
-                        className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm animate-pulse"
-                        style={{ backgroundColor: alarm.color }}
-                      />
-                      <div>
-                        <h4 className="text-xs sm:text-sm font-extrabold text-white leading-tight">{alarm.panelName}</h4>
-                        <div className="flex items-center space-x-1.5 mt-0.5">
-                          <span 
-                            className="text-[9px] font-extrabold uppercase px-1 py-0.1 rounded border"
-                            style={{ 
-                              borderColor: alarm.color, 
-                              color: alarm.color,
-                              backgroundColor: `${alarm.color}15`
-                            }}
-                          >
-                            {alarm.zone === 'TRIP' || alarm.zone === 'FAULT' ? '⚡ TRIP / FAULT' : `${alarm.zone} ZONE`}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {activeAlarms.map((alarm) => {
+                const isTrip = alarm.alarmType === 'TRIP';
+                const isUnack = !alarm.acknowledged;
+
+                return (
+                  <div
+                    key={alarm.alarmKey}
+                    className={`rounded-xl p-3 border transition-all relative overflow-hidden flex flex-col justify-between space-y-2 shadow-lg ${
+                      isTrip
+                        ? isUnack
+                          ? 'bg-gradient-to-br from-rose-950/90 via-slate-900 to-slate-950 border-rose-500 shadow-rose-950/50 ring-1 ring-rose-500/60 animate-pulse'
+                          : 'bg-slate-900/90 border-rose-900/60 opacity-80'
+                        : isUnack
+                        ? 'bg-gradient-to-br from-amber-950/80 via-slate-900 to-slate-950 border-amber-500 shadow-amber-950/40'
+                        : 'bg-slate-900/90 border-amber-900/60 opacity-80'
+                    }`}
+                  >
+                    {/* Card Header */}
+                    <div className="flex items-start justify-between gap-1.5">
+                      <div className="flex items-start space-x-2 overflow-hidden">
+                        <div
+                          className={`mt-0.5 w-6 h-6 rounded-lg flex items-center justify-center shrink-0 text-xs font-black ${
+                            isTrip
+                              ? 'bg-rose-500 text-black shadow-md shadow-rose-500/50'
+                              : 'bg-amber-500 text-black shadow-md shadow-amber-500/50'
+                          }`}
+                        >
+                          <i className={`fas ${isTrip ? 'fa-skull-crossbones' : 'fa-triangle-exclamation'}`}></i>
+                        </div>
+                        <div className="truncate">
+                          <h4 className="text-xs font-black text-white truncate">{alarm.panelTitle}</h4>
+                          <span className="text-[10px] font-mono text-slate-400 truncate block">
+                            {alarm.topic || alarm.driverTagId || 'Parameter Tag'}
                           </span>
-                          {alarm.zone !== 'TRIP' && alarm.zone !== 'FAULT' && (
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              Limit: {alarm.threshold} {alarm.unit || ''}
-                            </span>
-                          )}
                         </div>
                       </div>
+
+                      {/* Alarm Type Chip */}
+                      <span
+                        className={`text-[9px] font-mono font-black px-1.5 py-0.5 rounded border uppercase shrink-0 ${
+                          isTrip
+                            ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                            : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                        }`}
+                      >
+                        {alarm.alarmType}
+                      </span>
                     </div>
 
-                    <div className="text-right shrink-0">
-                      <div className="text-xs sm:text-sm font-black font-mono text-white">
-                        {alarm.value} <span className="text-[10px] text-slate-400 font-normal">{alarm.unit || ''}</span>
+                    {/* Alarm Description & Threshold Details */}
+                    <div className="bg-black/40 rounded-lg p-2 border border-slate-800/80 text-[11px] space-y-1">
+                      <div className="flex items-center justify-between text-slate-300">
+                        <span className="text-slate-400">Current Value:</span>
+                        <span className="font-mono font-black text-rose-400 text-xs">
+                          {alarm.currentValue}
+                        </span>
                       </div>
-                      <div className="text-[9px] font-mono text-slate-400">{alarm.timestamp}</div>
+                      <div className="flex items-center justify-between text-slate-400 text-[10px]">
+                        <span>Threshold Limit:</span>
+                        <span className="font-mono text-slate-300">
+                          {alarm.limitThreshold !== undefined ? alarm.limitThreshold : 'Digital Trip'}
+                        </span>
+                      </div>
+                      <div className="text-[10px] font-medium text-slate-300 pt-0.5 border-t border-slate-800/60 truncate">
+                        {alarm.message}
+                      </div>
+                    </div>
+
+                    {/* Card Footer: Timestamp & Action */}
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-800/60 text-[10px]">
+                      <div className="text-slate-400 font-mono flex items-center space-x-1">
+                        <i className="fas fa-clock text-[9px] text-slate-500"></i>
+                        <span>{new Date(alarm.triggeredAt).toLocaleTimeString()}</span>
+                      </div>
+
+                      {isUnack ? (
+                        <button
+                          onClick={() => {
+                            triggerAckHaptic();
+                            onAcknowledgeAlarm(alarm.alarmKey);
+                          }}
+                          className="px-2.5 py-1 bg-rose-500 hover:bg-rose-400 text-black font-black uppercase rounded-lg shadow transition-all active:scale-95 cursor-pointer flex items-center space-x-1 text-[10px]"
+                        >
+                          <i className="fas fa-check text-[9px]"></i>
+                          <span>ACKNOWLEDGE</span>
+                        </button>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 rounded font-mono text-[9px] font-bold">
+                          ✓ ACKNOWLEDGED
+                        </span>
+                      )}
                     </div>
                   </div>
-
-                  <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/80 text-[11px]">
-                    <span className="text-slate-300 font-medium italic truncate max-w-[170px] sm:max-w-[200px]" title={alarm.message}>
-                      "{alarm.message}"
-                    </span>
-
-                    <button
-                      onClick={() => onAcknowledgeAlarm(alarm.alarmKey)}
-                      className={`px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-md text-[10px] sm:text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer ${
-                        alarm.acknowledged
-                          ? 'bg-slate-800 text-slate-400 hover:text-white'
-                          : 'bg-rose-500 hover:bg-rose-400 text-black shadow-sm active:scale-95'
-                      }`}
-                    >
-                      {alarm.acknowledged ? 'Acked ✓' : 'ACKNOWLEDGE'}
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
-            <div className="overflow-x-auto border border-slate-800/80 rounded-xl bg-slate-950/60 shadow-inner">
-              <table className="w-full text-left text-xs text-slate-300 border-collapse">
-                <thead>
-                  <tr className="bg-slate-900/90 text-slate-400 border-b border-slate-800 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider">
-                    <th className="p-2">Status</th>
-                    <th className="p-2">Equipment</th>
-                    <th className="p-2">Category</th>
-                    <th className="p-2 text-right">Value</th>
-                    <th className="p-2">Time</th>
-                    <th className="p-2">Message</th>
-                    <th className="p-2 text-right">Action</th>
+            /* Table View */
+            <div className="bg-slate-900/80 rounded-xl border border-slate-800 overflow-hidden">
+              <table className="w-full text-left text-[11px]">
+                <thead className="bg-slate-950 text-slate-400 uppercase font-mono text-[10px] border-b border-slate-800">
+                  <tr>
+                    <th className="p-2.5">Severity</th>
+                    <th className="p-2.5">Panel / Source</th>
+                    <th className="p-2.5">Tag / Topic</th>
+                    <th className="p-2.5">Value</th>
+                    <th className="p-2.5">Limit</th>
+                    <th className="p-2.5">Triggered Time</th>
+                    <th className="p-2.5 text-right">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/50 font-sans">
+                <tbody className="divide-y divide-slate-800/60">
                   {activeAlarms.map((alarm) => (
-                    <tr key={alarm.alarmKey} className="hover:bg-slate-900/60 transition-colors">
-                      <td className="p-2 whitespace-nowrap">
-                        <span 
-                          className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider ${
-                            alarm.acknowledged
-                              ? 'bg-slate-800 text-slate-400'
-                              : 'bg-rose-500 text-black animate-pulse'
+                    <tr key={alarm.alarmKey} className="hover:bg-slate-800/40 transition-colors">
+                      <td className="p-2.5">
+                        <span
+                          className={`px-1.5 py-0.5 rounded font-mono font-black text-[9px] uppercase border ${
+                            alarm.alarmType === 'TRIP'
+                              ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                              : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                           }`}
                         >
-                          {alarm.acknowledged ? 'ACKED' : 'UNACKED'}
+                          {alarm.alarmType}
                         </span>
                       </td>
-                      <td className="p-2 font-bold text-white whitespace-nowrap text-xs">{alarm.panelName}</td>
-                      <td className="p-2 whitespace-nowrap">
-                        <span 
-                          className="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase border"
-                          style={{ borderColor: alarm.color, color: alarm.color, backgroundColor: `${alarm.color}15` }}
-                        >
-                          {alarm.zone === 'TRIP' || alarm.zone === 'FAULT' ? 'TRIP' : `${alarm.zone}`}
-                        </span>
-                      </td>
-                      <td className="p-2 font-mono font-bold text-right text-white whitespace-nowrap text-xs">
-                        {alarm.value} <span className="text-[9px] text-slate-400 font-normal">{alarm.unit}</span>
-                      </td>
-                      <td className="p-2 font-mono text-[10px] text-slate-300 whitespace-nowrap">{alarm.timestamp}</td>
-                      <td className="p-2 text-slate-300 italic max-w-xs truncate text-[11px]" title={alarm.message}>"{alarm.message}"</td>
-                      <td className="p-2 text-right whitespace-nowrap">
-                        <button
-                          onClick={() => onAcknowledgeAlarm(alarm.alarmKey)}
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                            alarm.acknowledged
-                              ? 'bg-slate-800 text-slate-400 hover:text-white'
-                              : 'bg-rose-500 hover:bg-rose-400 text-black'
-                          }`}
-                        >
-                          {alarm.acknowledged ? 'Acked ✓' : 'Ack'}
-                        </button>
+                      <td className="p-2.5 font-bold text-white">{alarm.panelTitle}</td>
+                      <td className="p-2.5 font-mono text-slate-400">{alarm.topic || alarm.driverTagId || 'Tag'}</td>
+                      <td className="p-2.5 font-mono font-bold text-rose-400">{alarm.currentValue}</td>
+                      <td className="p-2.5 font-mono text-slate-400">{alarm.limitThreshold ?? 'Trip'}</td>
+                      <td className="p-2.5 font-mono text-slate-400">{new Date(alarm.triggeredAt).toLocaleTimeString()}</td>
+                      <td className="p-2.5 text-right">
+                        {!alarm.acknowledged ? (
+                          <button
+                            onClick={() => {
+                              triggerAckHaptic();
+                              onAcknowledgeAlarm(alarm.alarmKey);
+                            }}
+                            className="px-2 py-0.5 bg-rose-500 hover:bg-rose-400 text-black font-black uppercase rounded text-[9px] transition-all active:scale-95 cursor-pointer"
+                          >
+                            ACK
+                          </button>
+                        ) : (
+                          <span className="text-emerald-400 font-mono text-[9px] font-bold">✓ ACKED</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -347,27 +374,21 @@ const AlarmModal: React.FC<AlarmModalProps> = ({
           )}
         </div>
 
-        {/* Footer Controls */}
-        <div className="bg-[#121824] px-3 sm:px-5 py-1.5 sm:py-2 border-t border-slate-800 flex flex-wrap items-center justify-between shrink-0 gap-1.5 text-[10px] sm:text-xs">
-          {onToggleVibrate && (
-            <button
-              onClick={onToggleVibrate}
-              className={`flex items-center space-x-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg border font-bold transition-all cursor-pointer ${
-                isVibrateEnabled
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
-                  : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
-              }`}
-              title="Toggle Mobile Vibration Haptic on Alarm"
-            >
-              <i className={`fas ${isVibrateEnabled ? 'fa-mobile-retro animate-pulse text-amber-400' : 'fa-mobile-retro text-slate-500'}`}></i>
-              <span>{isVibrateEnabled ? '5s Haptic Active' : 'Haptic Muted'}</span>
-            </button>
-          )}
+        {/* Footer Controls (Cleaned without duplicate bottom haptic button) */}
+        <div className="bg-[#121824] px-3 sm:px-5 py-1.5 sm:py-2 border-t border-slate-800 flex items-center justify-between shrink-0 gap-1.5 text-[10px] sm:text-xs">
+          <div className="text-[10px] text-slate-500 font-mono">
+            {activeAlarms.length > 0
+              ? `${activeAlarms.length} active alarm${activeAlarms.length > 1 ? 's' : ''} monitored`
+              : 'All systems normal'}
+          </div>
 
           <div className="flex items-center space-x-1.5 ml-auto">
             {activeAlarms.some(a => !a.acknowledged) && (
               <button
-                onClick={onAcknowledgeAll}
+                onClick={() => {
+                  triggerAckHaptic();
+                  onAcknowledgeAll();
+                }}
                 className="px-2.5 sm:px-4 py-1 sm:py-1.5 bg-rose-500 hover:bg-rose-400 text-black font-black uppercase tracking-wider rounded-lg shadow-md transition-all active:scale-95 cursor-pointer flex items-center space-x-1 text-[10px] sm:text-xs"
               >
                 <i className="fas fa-check-double text-[10px]"></i>
@@ -377,7 +398,10 @@ const AlarmModal: React.FC<AlarmModalProps> = ({
 
             {onOpenHistorian && (
               <button
-                onClick={onOpenHistorian}
+                onClick={() => {
+                  triggerClickHaptic();
+                  onOpenHistorian();
+                }}
                 className="px-2.5 sm:px-4 py-1 sm:py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer shadow-md flex items-center space-x-1 text-[10px] sm:text-xs"
               >
                 <i className="fas fa-history text-[10px]"></i>

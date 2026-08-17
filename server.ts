@@ -187,6 +187,179 @@ async function startServer() {
     socket.connect(port, host);
   });
 
+  // ─── Local AI Server (Ollama & LM Studio) Management Endpoints ───────────────
+  
+  // Helper to probe local HTTP AI endpoints
+  function pingLocalAiEndpoint(host: string, port: number, pathname: string): Promise<{ ok: boolean; data?: any; error?: string }> {
+    return new Promise((resolve) => {
+      const req = http.request({
+        host,
+        port,
+        path: pathname,
+        method: 'GET',
+        timeout: 2000,
+        headers: { 'User-Agent': 'TASC-IIoT-Studio' }
+      }, (res) => {
+        let body = '';
+        res.on('data', chunk => { body += chunk; });
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(body);
+            resolve({ ok: res.statusCode ? res.statusCode >= 200 && res.statusCode < 400 : true, data: parsed });
+          } catch (e) {
+            resolve({ ok: res.statusCode ? res.statusCode >= 200 && res.statusCode < 400 : true, data: body });
+          }
+        });
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        resolve({ ok: false, error: 'Connection timed out' });
+      });
+
+      req.on('error', (err) => {
+        resolve({ ok: false, error: err.message });
+      });
+
+      req.end();
+    });
+  }
+
+  // 1. GET /api/local-ai/status
+  app.get('/api/local-ai/status', async (req, res) => {
+    const type = ((req.query.type as string) || 'ollama').toLowerCase();
+    const isLmStudio = type === 'lmstudio';
+    const host = (req.query.host as string) || '127.0.0.1';
+    const port = parseInt((req.query.port as string) || (isLmStudio ? '1234' : '11434'), 10);
+    const probePath = isLmStudio ? '/v1/models' : '/api/tags';
+
+    try {
+      const result = await pingLocalAiEndpoint(host, port, probePath);
+      let models: string[] = [];
+
+      if (result.ok && result.data) {
+        if (!isLmStudio && result.data.models && Array.isArray(result.data.models)) {
+          models = result.data.models.map((m: any) => m.name || m.model).filter(Boolean);
+        } else if (isLmStudio && result.data.data && Array.isArray(result.data.data)) {
+          models = result.data.data.map((m: any) => m.id).filter(Boolean);
+        }
+      }
+
+      res.json({
+        success: true,
+        type,
+        host,
+        port,
+        running: result.ok,
+        status: result.ok ? 'online' : 'offline',
+        models,
+        error: result.error
+      });
+    } catch (err: any) {
+      res.json({
+        success: true,
+        type,
+        host,
+        port,
+        running: false,
+        status: 'offline',
+        models: [],
+        error: err.message
+      });
+    }
+  });
+
+  // 2. POST /api/local-ai/start
+  app.post('/api/local-ai/start', (req, res) => {
+    const type = ((req.body?.type || req.query?.type as string) || 'ollama').toLowerCase();
+    const isLmStudio = type === 'lmstudio';
+    const isWin = os.platform() === 'win32';
+    const customPort = parseInt((req.body?.port || req.query?.port as string) || (isLmStudio ? '1234' : '11434'), 10);
+
+    let cmdToRun = '';
+    if (isWin) {
+      if (isLmStudio) {
+        cmdToRun = `start "LM Studio Server (TASC IIoT)" cmd.exe /k "echo ==================================================== && echo   Starting LM Studio Local Server on Port ${customPort}... && echo ==================================================== && lms server start --cors --port ${customPort}"`;
+      } else {
+        cmdToRun = `start "Ollama Server (TASC IIoT)" cmd.exe /k "echo ==================================================== && echo   Starting Ollama Server with CORS on Port ${customPort} && echo ==================================================== && set OLLAMA_ORIGINS=* && set OLLAMA_HOST=127.0.0.1:${customPort} && ollama serve"`;
+      }
+    } else {
+      if (isLmStudio) {
+        cmdToRun = `nohup lms server start --cors --port ${customPort} > /tmp/lms_server.log 2>&1 &`;
+      } else {
+        cmdToRun = `nohup env OLLAMA_ORIGINS="*" OLLAMA_HOST="127.0.0.1:${customPort}" ollama serve > /tmp/ollama_server.log 2>&1 &`;
+      }
+    }
+
+    try {
+      exec(cmdToRun, { windowsHide: false }, (err) => {
+        if (err) {
+          console.warn(`[LocalAI] Launch command note for ${type}:`, err.message);
+        }
+      });
+
+      // Also execute direct start command as fallback to guarantee background daemon startup
+      if (isLmStudio) {
+        exec(`lms server start --cors --port ${customPort}`, (err, stdout) => {
+          if (stdout) console.log(`[LocalAI LMStudio]`, stdout.trim());
+        });
+      }
+
+      res.json({
+        success: true,
+        type,
+        port: customPort,
+        message: `Command dispatched to launch ${isLmStudio ? 'LM Studio' : 'Ollama'} server on port ${customPort}.`,
+        command: cmdToRun
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        type,
+        error: err.message
+      });
+    }
+  });
+
+  // 3. POST /api/local-ai/stop
+  app.post('/api/local-ai/stop', (req, res) => {
+    const type = ((req.body?.type || req.query?.type as string) || 'ollama').toLowerCase();
+    const isLmStudio = type === 'lmstudio';
+    const isWin = os.platform() === 'win32';
+
+    let stopCmd = '';
+    if (isWin) {
+      if (isLmStudio) {
+        stopCmd = 'lms server stop & taskkill /FI "WINDOWTITLE eq LM Studio Server*" /F /T';
+      } else {
+        stopCmd = 'taskkill /IM ollama.exe /F /T & taskkill /IM "ollama app.exe" /F /T & taskkill /FI "WINDOWTITLE eq Ollama Server*" /F /T';
+      }
+    } else {
+      if (isLmStudio) {
+        stopCmd = 'lms server stop || pkill -f "lms server"';
+      } else {
+        stopCmd = 'pkill -f "ollama serve"';
+      }
+    }
+
+    try {
+      exec(stopCmd, (err, stdout, stderr) => {
+        res.json({
+          success: true,
+          type,
+          message: `Stop command executed for ${isLmStudio ? 'LM Studio' : 'Ollama'}.`,
+          output: stdout || stderr
+        });
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        type,
+        error: err.message
+      });
+    }
+  });
+
   // Attach WebSocket server for TCP-MQTT bridging, Driver bridge, and OPC UA Browser
   const wss = new WebSocketServer({ noServer: true });
   const driverWss = new WebSocketServer({ noServer: true });

@@ -4,10 +4,10 @@
  * fixes stuttered words, parses spoken punctuation, and formats proper sentence casing.
  */
 
-// Regex list for common vocal filler sounds and hesitation pauses
-const FILLER_WORDS_REGEX = /\b(umm+|uhh+|aah+|er+|hmm+|erm+|ah+|uh+|like,\s+you\s+know|you\s+know|so\s+basically)\b/gi;
+// Regex list for common vocal filler sounds, hesitation pauses, and speech clutter
+const FILLER_WORDS_REGEX = /\b(umm+|uhh+|aah+|er+|hmm+|erm+|ah+|uh+|huh+|mhm+|like,\s*you\s*know|you\s*know\s*what\s*I\s*mean|you\s*know|so\s*basically|I\s*mean)\b/gi;
 
-// Repeated word stuttering regex (e.g. "the the" -> "the", "what what" -> "what")
+// Repeated word stuttering regex (e.g. "the the" -> "the", "what what" -> "what", "is is" -> "is")
 const STUTTER_REGEX = /\b([a-zA-Z]+)\s+\1\b/gi;
 
 // Spoken punctuation replacement map
@@ -31,17 +31,18 @@ export function cleanDictationText(rawText: string): string {
     cleaned = cleaned.replace(regex, replacement);
   }
 
-  // 2. Strip vocal filler words
+  // 2. Strip vocal filler words and hesitation sounds
   cleaned = cleaned.replace(FILLER_WORDS_REGEX, '');
 
-  // 3. Remove consecutive repeated word stuttering (run twice to catch triplets)
+  // 3. Remove consecutive repeated word stuttering (run multiple times for n-tuples like "the the the")
+  cleaned = cleaned.replace(STUTTER_REGEX, '$1');
   cleaned = cleaned.replace(STUTTER_REGEX, '$1');
   cleaned = cleaned.replace(STUTTER_REGEX, '$1');
 
   // 4. Fix spaces around punctuation (e.g. "temperature ," -> "temperature,")
   cleaned = cleaned.replace(/\s+([.,!?:;])/g, '$1');
 
-  // 5. Consolidate multiple spaces
+  // 5. Consolidate multiple spaces and tabs
   cleaned = cleaned.replace(/[ \t]+/g, ' ').trim();
 
   // 6. Capitalize sentence beginnings
@@ -55,7 +56,11 @@ export function cleanDictationText(rawText: string): string {
 export interface SpeechDictationController {
   isSupported: boolean;
   isListening: boolean;
-  start: (onInterim: (text: string) => void, onFinal: (text: string) => void, onError?: (err: string) => void) => void;
+  start: (
+    onUpdate: (finalText: string, interimText: string) => void,
+    onError?: (err: string) => void,
+    onEnd?: () => void
+  ) => void;
   stop: () => void;
 }
 
@@ -76,7 +81,7 @@ export function createSpeechDictation(): SpeechDictationController {
     return {
       isSupported: false,
       isListening: false,
-      start: (_onI, _onF, onError) => {
+      start: (_onUpdate, onError) => {
         if (onError) onError('Web Speech API is not supported in this browser. Please use Chrome, Edge, or Safari.');
       },
       stop: () => {}
@@ -92,7 +97,7 @@ export function createSpeechDictation(): SpeechDictationController {
       return isListening;
     },
 
-    start(onInterim, onFinal, onError) {
+    start(onUpdate, onError, onEnd) {
       if (isListening && recognition) {
         try { recognition.stop(); } catch {}
       }
@@ -108,27 +113,22 @@ export function createSpeechDictation(): SpeechDictationController {
         };
 
         recognition.onresult = (event: any) => {
-          let interimTranscript = '';
-          let finalTranscript = '';
+          let sessionFinalTranscript = '';
+          let currentInterimTranscript = '';
 
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript;
+          for (let i = 0; i < event.results.length; i++) {
+            const transcript = event.results[i][0]?.transcript || '';
             if (event.results[i].isFinal) {
-              finalTranscript += transcript + ' ';
+              sessionFinalTranscript += transcript + ' ';
             } else {
-              interimTranscript += transcript;
+              currentInterimTranscript += transcript;
             }
           }
 
-          if (finalTranscript) {
-            const cleanedFinal = cleanDictationText(finalTranscript);
-            if (cleanedFinal) onFinal(cleanedFinal);
-          }
+          const cleanedFinal = cleanDictationText(sessionFinalTranscript);
+          const cleanedInterim = cleanDictationText(currentInterimTranscript);
 
-          if (interimTranscript) {
-            const cleanedInterim = cleanDictationText(interimTranscript);
-            onInterim(cleanedInterim);
-          }
+          onUpdate(cleanedFinal, cleanedInterim);
         };
 
         recognition.onerror = (event: any) => {
@@ -139,6 +139,7 @@ export function createSpeechDictation(): SpeechDictationController {
 
         recognition.onend = () => {
           isListening = false;
+          if (onEnd) onEnd();
         };
 
         recognition.start();

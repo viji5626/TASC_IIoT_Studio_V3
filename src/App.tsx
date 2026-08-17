@@ -48,6 +48,7 @@ import { applyThemeToDocument, getAppTheme } from './utils/theme';
 import { EditionManager, sanitizeAppState } from './utils/EditionManager';
 import { getSampleProject } from './utils/sampleProjectPreset';
 import { ConfirmModal } from './components/ConfirmModal';
+import { MultiDriverStatusPill } from './components/MultiDriverStatusPill';
 import {
   saveCommunityState,
   saveCommercialState,
@@ -70,6 +71,7 @@ import { AiAssistantView } from './components/AiAssistantView';
 import { AiChatFab } from './components/AiChatFab';
 import { AiChatDrawer } from './components/AiChatDrawer';
 import { AiErrorBoundary } from './components/AiErrorBoundary';
+import { triggerHaptic, stopHaptic, initMobileHapticPriming, triggerAckHaptic } from './utils/hapticFeedback';
 
 const sampleInitial = getSampleProject('conn_demo', undefined, undefined, true);
 
@@ -523,6 +525,10 @@ export function App() {
 
   // Auto-dismiss locked notice after 5 seconds
   useEffect(() => {
+    initMobileHapticPriming();
+  }, []);
+
+  useEffect(() => {
     if (isLocked) {
       setShowLockedNotice(true);
       const timer = setTimeout(() => {
@@ -820,18 +826,14 @@ export function App() {
     const unackAlarmsCount = activeAlarms.filter(a => !a.acknowledged).length;
 
     if (unackAlarmsCount === 0 || typeof window === 'undefined') {
-      if ('vibrate' in navigator) {
-        try { navigator.vibrate(0); } catch {}
-      }
+      stopHaptic();
       return;
     }
 
     const triggerHapticAndSound = () => {
-      // 1. Try Navigator Vibrate API (Pattern across 5 seconds if enabled)
-      if (isVibrateEnabled && 'vibrate' in navigator) {
-        try {
-          navigator.vibrate([400, 150, 400, 150, 400]);
-        } catch {}
+      // 1. Mobile Haptic Vibration (Industrial dual-pulse pattern across 5s if enabled)
+      if (isVibrateEnabled) {
+        triggerHaptic([400, 150, 400, 150, 400]);
       }
 
       // 2. Web Audio Dual-Tone Industrial Alarm Siren Sound Pulse (if sound enabled)
@@ -873,18 +875,18 @@ export function App() {
 
     return () => {
       clearInterval(hapticInterval);
-      if ('vibrate' in navigator) {
-        try { navigator.vibrate(0); } catch {}
-      }
+      stopHaptic();
     };
   }, [activeAlarms, isVibrateEnabled, isSoundEnabled]);
 
   const handleAcknowledgeAlarm = (alarmKey: string) => {
+    triggerAckHaptic();
     setAcknowledgedAlarms(prev => ({ ...prev, [alarmKey]: true }));
     recordAlarmAckEvent(alarmKey);
   };
 
   const handleAcknowledgeAllAlarms = () => {
+    triggerAckHaptic();
     const updated: Record<string, boolean> = {};
     activeAlarms.forEach(a => {
       updated[a.alarmKey] = true;
@@ -2280,6 +2282,7 @@ export function App() {
   };
 
   const editionMgr = EditionManager.fromState(appState);
+  const activeMqttConnection = appState.connections.find(c => c.connectionId === activeConnectionId) || appState.connections[0];
 
   // Render main screen view
   return (
@@ -2291,7 +2294,7 @@ export function App() {
           {/* Sticky Left Brand Container (Hamburger + Logo + Title) */}
           <div className="flex items-center space-x-1.5 shrink-0 sticky left-0 theme-header z-30 pr-1.5">
             <button 
-              type="button"
+              type="button" 
               onClick={() => setIsSidebarOpen(true)}
               className="p-1 sm:p-1.5 text-slate-300 hover:text-white rounded-lg hover:bg-slate-800/80 active:scale-95 transition-all shrink-0 cursor-pointer"
               title="Open Menu"
@@ -2303,23 +2306,21 @@ export function App() {
               size="sm" 
               accentColor={activeThemeObj.primary} 
               isCommunity={userRole === 'community' || productEdition === ProductEdition.COMMUNITY} 
-            />
+              />
             <span className="font-extrabold text-white text-xs sm:text-sm tracking-tight whitespace-nowrap shrink-0 hidden lg:inline">TASC IIoT Studio</span>
           </div>
 
-          {/* MQTT Connection Status Pill */}
-          <button
-            type="button"
-            onClick={editionMgr.IsClient() ? undefined : handleOpenActiveBrokerSettings}
-            className={`flex items-center space-x-1 bg-slate-950/80 ${editionMgr.IsClient() ? 'cursor-default' : 'hover:bg-slate-800 cursor-pointer'} px-2 py-1 rounded-lg border border-slate-800 transition-all group shrink-0 min-h-[30px]`}
-            title={editionMgr.IsClient() ? "MQTT Connection Status" : "Click to configure MQTT Broker Settings (Address, Port, Auth)"}
-          >
-            <span className={`w-2 h-2 rounded-full ${isSimulated ? 'bg-amber-400 animate-pulse' : mqttConnected ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-            <span className="text-[10px] sm:text-[11px] font-mono text-slate-300 group-hover:text-white font-semibold">
-              {isSimulated ? 'SIM' : mqttConnected ? 'CONNECTED' : 'OFFLINE'}
-            </span>
-            {!editionMgr.IsClient() && <i className="fas fa-server text-[9px] text-sky-400 opacity-70 group-hover:opacity-100 ml-0.5 hidden sm:inline"></i>}
-          </button>
+          {/* Multi-Driver & MQTT Live Connection Status Pill with Multi-Dots & Dropdown Popover */}
+          <MultiDriverStatusPill
+            mqttConnection={activeMqttConnection}
+            allMqttConnections={appState.connections}
+            mqttConnected={mqttConnected}
+            isSimulated={isSimulated}
+            driverConnections={appState.driverConnections}
+            isClient={editionMgr.IsClient() || userRole === 'client' || !!appState.isLockedPackage}
+            onOpenMqttSettings={handleOpenActiveBrokerSettings}
+            onOpenDriverConnections={() => setCurrentView(AppView.DRIVER_CONNECTIONS)}
+          />
 
           {/* Inbuilt Alarm Center Bell Button */}
           <button
@@ -2821,18 +2822,22 @@ export function App() {
                 </div>
                 <h2 className="text-xl font-bold text-white">No Panels Added Yet</h2>
                 <p className="text-xs text-slate-400 max-w-sm">
-                  Click the button below to add real-time gauges, switches, line graphs, and controls to this Bento dashboard.
+                  {editionMgr.IsClient() || userRole === 'client' || appState.isLockedPackage
+                    ? 'No dashboard panels deployed on this screen yet.'
+                    : 'Click the button below to add real-time gauges, switches, line graphs, and controls to this Bento dashboard.'}
                 </p>
-                <button 
-                  onClick={handleOpenAddPanel}
-                  className="px-6 py-3 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all active:scale-95"
-                  style={{
-                    backgroundColor: activeThemeObj.primary,
-                    boxShadow: `0 10px 25px -5px ${activeThemeObj.primary}40`
-                  }}
-                >
-                  Create First Panel
-                </button>
+                {!editionMgr.IsClient() && userRole !== 'client' && !appState.isLockedPackage && (
+                  <button 
+                    onClick={handleOpenAddPanel}
+                    className="px-6 py-3 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all active:scale-95 cursor-pointer"
+                    style={{
+                      backgroundColor: activeThemeObj.primary,
+                      boxShadow: `0 10px 25px -5px ${activeThemeObj.primary}40`
+                    }}
+                  >
+                    Create First Panel
+                  </button>
+                )}
               </div>
             ) : (
               <BentoGrid

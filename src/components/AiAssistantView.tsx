@@ -14,6 +14,7 @@ import { getCommunityAiQuotaStatus, recordCommunityPromptUsed, COMMUNITY_AI_QUOT
 import { AiChatPanel } from './AiChatPanel';
 import { PasteApiSnippet } from './PasteApiSnippet';
 import { ParsedSnippet } from '../utils/aiSnippetParser';
+import { LocalAiServerControl } from './LocalAiServerControl';
 
 interface Props {
   onBack?: () => void;
@@ -551,6 +552,16 @@ export const AiAssistantView: React.FC<Props> = ({
                   })}
                 </div>
               </div>
+
+              {/* Local AI Server Controller (Start/Stop Server with CMD & Live Status LED) */}
+              {(provider === 'ollama' || provider === 'lmstudio') && (
+                <LocalAiServerControl
+                  provider={provider}
+                  baseUrl={baseUrl}
+                  currentModel={model}
+                  onSelectModel={(selected) => setModel(selected)}
+                />
+              )}
 
               {/* Base URL (if custom or local) */}
               {(provider === 'custom' || provider === 'ollama' || provider === 'lmstudio' || provider === 'openai') && (
