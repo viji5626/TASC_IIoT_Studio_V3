@@ -29,6 +29,70 @@ interface Props {
 
 export type AiProviderType = 'google_gemini' | 'openai' | 'groq' | 'ollama' | 'lmstudio' | 'custom';
 
+interface ProviderConfig {
+  model: string;
+  baseUrl: string;
+  temperature: number;
+  extraBodyJson: string;
+}
+
+const DEFAULT_PROVIDER_CONFIGS: Record<AiProviderType, ProviderConfig> = {
+  google_gemini: {
+    model: 'gemini-2.0-flash',
+    baseUrl: '',
+    temperature: 0.3,
+    extraBodyJson: ''
+  },
+  openai: {
+    model: 'gpt-4o-mini',
+    baseUrl: 'https://api.openai.com/v1',
+    temperature: 0.3,
+    extraBodyJson: ''
+  },
+  groq: {
+    model: 'llama-3.3-70b-versatile',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    temperature: 0.3,
+    extraBodyJson: ''
+  },
+  ollama: {
+    model: 'llama3.2',
+    baseUrl: 'http://localhost:11434',
+    temperature: 0.3,
+    extraBodyJson: ''
+  },
+  lmstudio: {
+    model: 'local-model',
+    baseUrl: 'http://localhost:1234',
+    temperature: 0.3,
+    extraBodyJson: ''
+  },
+  custom: {
+    model: 'nvidia/nemotron-3.5-lightning-30b-a3b',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    temperature: 0.1,
+    extraBodyJson: '{"chat_template_kwargs":{"enable_thinking":true},"reasoning_budget":16384}'
+  }
+};
+
+function getProviderConfig(p: AiProviderType): ProviderConfig {
+  const saved = localStorage.getItem(`tasc_ai_config_${p}`);
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      return {
+        ...DEFAULT_PROVIDER_CONFIGS[p],
+        ...parsed
+      };
+    } catch {}
+  }
+  return DEFAULT_PROVIDER_CONFIGS[p];
+}
+
+function saveProviderConfig(p: AiProviderType, config: ProviderConfig): void {
+  localStorage.setItem(`tasc_ai_config_${p}`, JSON.stringify(config));
+}
+
 export const AiAssistantView: React.FC<Props> = ({
   onBack,
   latestValues,
@@ -41,45 +105,37 @@ export const AiAssistantView: React.FC<Props> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'chat' | 'settings'>(initialTab);
 
-  // Settings State
+  // Settings State - loaded per provider
   const [provider, setProvider] = useState<AiProviderType>(() => {
     return (localStorage.getItem('tasc_ai_provider') as AiProviderType) || 'google_gemini';
   });
+
+  const initialConfig = getProviderConfig((localStorage.getItem('tasc_ai_provider') as AiProviderType) || 'google_gemini');
   const [apiKey, setApiKey] = useState<string>('');
-  const [model, setModel] = useState<string>(() => {
-    return localStorage.getItem('tasc_ai_model') || 'gemini-2.0-flash';
-  });
-  const [baseUrl, setBaseUrl] = useState<string>(() => {
-    return localStorage.getItem('tasc_ai_base_url') || 'https://api.openai.com/v1';
-  });
-  const [temperature, setTemperature] = useState<number>(() => {
-    const saved = localStorage.getItem('tasc_ai_temp');
-    return saved !== null ? parseFloat(saved) : 0.3;
-  });
+  const [model, setModel] = useState<string>(initialConfig.model);
+  const [baseUrl, setBaseUrl] = useState<string>(initialConfig.baseUrl);
+  const [temperature, setTemperature] = useState<number>(initialConfig.temperature);
+  const [extraBodyJson, setExtraBodyJson] = useState<string>(initialConfig.extraBodyJson);
 
   // Vision capability detection: auto-identify if current model can understand images
   const supportsVision = React.useMemo(() => {
     const modelLower = (model || '').toLowerCase();
     const providerLower = provider;
-    // Known vision-capable model patterns
     const visionPatterns = [
-      'gemini',         // All Gemini models support vision
-      'gpt-4o',         // GPT-4o/4o-mini support vision
+      'gemini',
+      'gpt-4o',
       'gpt-4-vision',
-      'claude-3',       // Claude 3 family
+      'claude-3',
       'claude-4',
-      'llava',          // LLaVA vision models
-      'pixtral',        // Mistral vision
-      'vision',         // Generic vision keyword
-      'llama-3.2-11b-vision', 'llama-3.2-90b-vision'  // Meta vision variants
+      'llava',
+      'pixtral',
+      'vision',
+      'llama-3.2-11b-vision',
+      'llama-3.2-90b-vision'
     ];
-    // Google Gemini provider always supports vision
     if (providerLower === 'google_gemini') return true;
     return visionPatterns.some(pattern => modelLower.includes(pattern));
   }, [model, provider]);
-  const [extraBodyJson, setExtraBodyJson] = useState<string>(() => {
-    return localStorage.getItem('tasc_ai_extra_body') || '';
-  });
 
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [isTesting, setIsTesting] = useState(false);
@@ -117,6 +173,29 @@ export const AiAssistantView: React.FC<Props> = ({
       isMounted = false;
     };
   }, [provider]);
+
+  // Switch Provider Tab without losing previous settings
+  const handleSelectProvider = (newProvider: AiProviderType) => {
+    // 1. Auto-save current provider state before switching
+    saveProviderConfig(provider, {
+      model,
+      baseUrl,
+      temperature,
+      extraBodyJson
+    });
+
+    // 2. Set new provider
+    setProvider(newProvider);
+    localStorage.setItem('tasc_ai_provider', newProvider);
+
+    // 3. Restore newly selected provider's profile
+    const cfg = getProviderConfig(newProvider);
+    setModel(cfg.model);
+    setBaseUrl(cfg.baseUrl);
+    setTemperature(cfg.temperature);
+    setExtraBodyJson(cfg.extraBodyJson);
+    setTestResult(null);
+  };
 
   // Create Provider Adapter Instance
   const getAdapter = useCallback((): AiProviderAdapter => {
@@ -171,18 +250,41 @@ export const AiAssistantView: React.FC<Props> = ({
   }, [getAdapter]);
 
   const handleSaveSettings = async () => {
+    // 1. Save provider-specific config
+    const currentConfig: ProviderConfig = {
+      model,
+      baseUrl,
+      temperature,
+      extraBodyJson
+    };
+    saveProviderConfig(provider, currentConfig);
+
+    // 2. Save active provider selection
     localStorage.setItem('tasc_ai_provider', provider);
+
+    // 3. Backward-compatible global keys
     localStorage.setItem('tasc_ai_model', model);
     localStorage.setItem('tasc_ai_base_url', baseUrl);
     localStorage.setItem('tasc_ai_temp', temperature.toString());
     localStorage.setItem('tasc_ai_extra_body', extraBodyJson);
 
+    // 4. Save API Key securely
     if (apiKey) {
       await saveApiKey(provider, apiKey);
       setIsKeySaved(true);
     }
 
-    setTestResult({ ok: true, message: 'Settings and API Key successfully saved!' });
+    const providerNames: Record<AiProviderType, string> = {
+      google_gemini: 'Google Gemini',
+      openai: 'OpenAI',
+      groq: 'Groq Cloud',
+      ollama: 'Ollama (Local)',
+      lmstudio: 'LM Studio (Local)',
+      custom: 'Custom Endpoint (NVIDIA NIM)'
+    };
+    const name = providerNames[provider] || provider;
+
+    setTestResult({ ok: true, message: `Configuration for "${name}" saved successfully!` });
     setTimeout(() => setTestResult(null), 3500);
   };
 
@@ -217,17 +319,51 @@ export const AiAssistantView: React.FC<Props> = ({
   };
 
   const handleApplySnippet = (parsed: ParsedSnippet) => {
-    if (parsed.baseUrl) setBaseUrl(parsed.baseUrl);
-    if (parsed.model) setModel(parsed.model);
+    let targetBaseUrl = baseUrl;
+    let targetModel = model;
+    let targetTemp = temperature;
+    let targetExtraBody = extraBodyJson;
+
+    if (parsed.baseUrl) {
+      setBaseUrl(parsed.baseUrl);
+      targetBaseUrl = parsed.baseUrl;
+    }
+    if (parsed.model) {
+      setModel(parsed.model);
+      targetModel = parsed.model;
+    }
     if (parsed.apiKey) {
       setApiKey(parsed.apiKey);
-      saveApiKey('custom', parsed.apiKey);
+      saveApiKey(provider, parsed.apiKey);
       setIsKeySaved(true);
     }
-    if (parsed.temperature !== undefined) setTemperature(parsed.temperature);
-    if (parsed.extraBodyJson) setExtraBodyJson(parsed.extraBodyJson);
+    if (parsed.temperature !== undefined) {
+      setTemperature(parsed.temperature);
+      targetTemp = parsed.temperature;
+    }
+    if (parsed.extraBodyJson) {
+      setExtraBodyJson(parsed.extraBodyJson);
+      targetExtraBody = parsed.extraBodyJson;
+    }
 
-    setTestResult({ ok: true, message: 'Applied snippet parameters to Custom API configuration!' });
+    // Auto-save parsed snippet into current provider configuration
+    saveProviderConfig(provider, {
+      baseUrl: targetBaseUrl,
+      model: targetModel,
+      temperature: targetTemp,
+      extraBodyJson: targetExtraBody
+    });
+
+    const providerNames: Record<AiProviderType, string> = {
+      google_gemini: 'Google Gemini',
+      openai: 'OpenAI',
+      groq: 'Groq Cloud',
+      ollama: 'Ollama (Local)',
+      lmstudio: 'LM Studio (Local)',
+      custom: 'Custom Endpoint (NVIDIA NIM)'
+    };
+    const name = providerNames[provider] || provider;
+    setTestResult({ ok: true, message: `Applied and saved configuration to ${name}!` });
     setTimeout(() => setTestResult(null), 3500);
   };
 
@@ -529,22 +665,8 @@ export const AiAssistantView: React.FC<Props> = ({
                       <button
                         key={p.id}
                         type="button"
-                        onClick={() => {
-                          setProvider(p.id as AiProviderType);
-                          if (p.id === 'google_gemini') setModel('gemini-2.0-flash');
-                          else if (p.id === 'groq') setModel('llama-3.3-70b-versatile');
-                          else if (p.id === 'ollama') {
-                            setBaseUrl('http://localhost:11434');
-                            setModel('llama3.2');
-                          } else if (p.id === 'lmstudio') {
-                            setBaseUrl('http://localhost:1234');
-                            setModel('local-model');
-                          } else if (p.id === 'openai') {
-                            setBaseUrl('https://api.openai.com/v1');
-                            setModel('gpt-4o-mini');
-                          }
-                        }}
-                        className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                        onClick={() => handleSelectProvider(p.id as AiProviderType)}
+                        className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer ${
                           isSelected
                             ? 'bg-indigo-600/20 border-indigo-500 shadow-md ring-1 ring-indigo-500/50'
                             : 'bg-slate-800/60 border-slate-700/60 hover:bg-slate-800 hover:border-slate-600'
@@ -717,10 +839,24 @@ export const AiAssistantView: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={handleSaveSettings}
-                  className="px-5 py-2 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center space-x-2"
+                  className="px-5 py-2 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center space-x-2 cursor-pointer"
                 >
                   <i className="fas fa-floppy-disk"></i>
-                  <span>Save Configuration</span>
+                  <span>
+                    Save {
+                      provider === 'custom'
+                        ? 'NVIDIA NIM / Custom'
+                        : provider === 'lmstudio'
+                        ? 'LM Studio'
+                        : provider === 'ollama'
+                        ? 'Ollama'
+                        : provider === 'openai'
+                        ? 'OpenAI'
+                        : provider === 'groq'
+                        ? 'Groq'
+                        : 'Gemini'
+                    } Settings
+                  </span>
                 </button>
               </div>
 
