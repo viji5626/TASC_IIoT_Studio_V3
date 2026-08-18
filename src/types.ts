@@ -527,12 +527,38 @@ export interface DriverConnection {
   connectionName: string;
   protocol: DriverProtocol;
   enabled: boolean;
-  // OPC UA / OPC DA
+  // OPC UA / OPC DA Advanced Configuration
   endpointUrl?: string;
+  secondaryEndpointUrl?: string;
+  overrideThumbprint?: string;
+  preferredEndpoint?: string;
+  securityFallback?: 'no_security' | 'max_security';
+  disableDomainCheck?: boolean;
+  browsingMode?: 'browse_path' | 'node_id';
+  // OPC UA Security & Encryption
   securityMode?: 'None' | 'Sign' | 'SignAndEncrypt';
-  securityPolicy?: string;
+  securityPolicy?: 'None' | 'Basic128Rsa15' | 'Basic256' | 'Basic256Sha256' | 'Aes128_Sha256_RsaOaep' | 'Aes256_Sha256_RsaPss';
+  // OPC UA Authentication
+  authMode?: 'anonymous' | 'username_password' | 'certificate';
   username?: string;
   password?: string;
+  userCertificateThumbprint?: string;
+  userCertificatePem?: string;
+  userPrivateKeyPem?: string;
+  // OPC UA Subscription & Telemetry
+  enableSubscription?: boolean;
+  subscriptionMode?: 'read_attributes' | 'monitor_items';
+  publishIntervalMs?: number;
+  maxQueueSize?: number;
+  readMaximumAgeMs?: number;
+  maxPointsPerBatch?: number;
+  browseMaxItemsAtATime?: number;
+  workPeriodMs?: number;
+  logComplianceErrors?: boolean;
+  // OPC UA Timeouts
+  requestTimeoutMs?: number;
+  sessionTimeoutMs?: number;
+  connectTimeoutMs?: number;
   // TCP / Modbus TCP Channel Settings
   host?: string;
   port?: number;

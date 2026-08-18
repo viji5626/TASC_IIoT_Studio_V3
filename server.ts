@@ -268,6 +268,91 @@ async function startServer() {
     socket.connect(port, host);
   });
 
+  // ─── OPC UA Security & Policy Helpers ─────────────────────────────────────────
+  function parseOpcUaSecurityMode(mode?: string): MessageSecurityMode {
+    if (mode === 'Sign') return MessageSecurityMode.Sign;
+    if (mode === 'SignAndEncrypt') return MessageSecurityMode.SignAndEncrypt;
+    return MessageSecurityMode.None;
+  }
+
+  function parseOpcUaSecurityPolicy(policy?: string): SecurityPolicy {
+    switch (policy) {
+      case 'Basic128Rsa15': return SecurityPolicy.Basic128Rsa15;
+      case 'Basic256': return SecurityPolicy.Basic256;
+      case 'Basic256Sha256': return SecurityPolicy.Basic256Sha256;
+      case 'Aes128_Sha256_RsaOaep': return SecurityPolicy.Aes128_Sha256_RsaOaep;
+      case 'Aes256_Sha256_RsaPss': return SecurityPolicy.Aes256_Sha256_RsaPss;
+      default: return SecurityPolicy.None;
+    }
+  }
+
+  // ─── OPC UA Advanced Diagnostic / Test Connection Endpoint ─────────────────
+  app.post('/api/opcua/test', async (req, res) => {
+    let endpointUrl = (req.body?.endpointUrl || req.query?.endpointUrl || '').trim();
+    if (!endpointUrl) {
+      return res.status(400).json({ success: false, error: 'Endpoint URL is required (e.g. opc.tcp://127.0.0.1:4840)' });
+    }
+    if (!endpointUrl.startsWith('opc.tcp://')) {
+      endpointUrl = `opc.tcp://${endpointUrl}`;
+    }
+
+    const securityModeStr = req.body?.securityMode || 'None';
+    const securityPolicyStr = req.body?.securityPolicy || 'None';
+    const authMode = req.body?.authMode || 'anonymous';
+    const username = req.body?.username?.trim();
+    const password = req.body?.password;
+    const connectTimeout = Number(req.body?.connectTimeoutMs) || 6000;
+
+    let testClient: any = null;
+    let testSession: any = null;
+
+    try {
+      testClient = OPCUAClient.create({
+        applicationName: 'TASC IIoT Studio Probe',
+        connectionStrategy: { initialDelay: 300, maxRetry: 0, maxDelay: connectTimeout },
+        securityMode: parseOpcUaSecurityMode(securityModeStr),
+        securityPolicy: parseOpcUaSecurityPolicy(securityPolicyStr),
+        endpointMustExist: false,
+        requestedSessionTimeout: 10000
+      });
+
+      const connectPromise = testClient.connect(endpointUrl);
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error(`OPC UA connect timeout after ${connectTimeout}ms`)), connectTimeout));
+      await Promise.race([connectPromise, timeoutPromise]);
+
+      // Test Session creation based on authMode
+      if (authMode === 'username_password' && username && password) {
+        testSession = await testClient.createSession({ type: UserTokenType.UserName, userName: username, password });
+      } else {
+        testSession = await testClient.createSession();
+      }
+
+      // Read root folder / ServerStatus
+      const serverStatus = await testSession.readVariableValue('ns=0;i=2256').catch(() => null);
+
+      res.json({
+        success: true,
+        endpointUrl,
+        securityMode: securityModeStr,
+        securityPolicy: securityPolicyStr,
+        authMode,
+        serverStatus: serverStatus ? 'Online' : 'Connected',
+        message: `Successfully connected and authenticated with OPC UA server at ${endpointUrl}`
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        endpointUrl,
+        error: err.message || 'OPC UA Connection failed'
+      });
+    } finally {
+      try {
+        if (testSession) await testSession.close().catch(() => {});
+        if (testClient) await testClient.disconnect().catch(() => {});
+      } catch {}
+    }
+  });
+
   // ─── Local AI Server (Ollama & LM Studio) Management Endpoints ───────────────
   
   // Helper to probe local HTTP AI endpoints
@@ -1008,6 +1093,7 @@ function invalidateOpcUaClient(endpointUrl: string, connectionId?: string) {
 
 async function getOrCreateOpcUaSession(connection: any): Promise<any> {
   let endpointUrl = (connection?.endpointUrl || connection?.opcUaEndpointUrl || connection?.host || '').trim();
+  const secondaryEndpointUrl = connection?.secondaryEndpointUrl?.trim();
   const connectionId = connection?.connectionId;
 
   if (!endpointUrl) {
@@ -1028,13 +1114,18 @@ async function getOrCreateOpcUaSession(connection: any): Promise<any> {
     throw new Error(`OPC UA connection to ${endpointUrl} is currently connecting...`);
   }
 
+  const securityMode = parseOpcUaSecurityMode(connection?.securityMode);
+  const securityPolicy = parseOpcUaSecurityPolicy(connection?.securityPolicy);
+  const requestedSessionTimeout = Number(connection?.sessionTimeoutMs) || 30000;
+  const connectTimeout = Number(connection?.connectTimeoutMs) || 10000;
+
   const opcClient = OPCUAClient.create({
     applicationName: 'TASC IIoT Studio',
-    connectionStrategy: { initialDelay: 500, maxRetry: 1 },
-    securityMode: MessageSecurityMode.None,
-    securityPolicy: SecurityPolicy.None,
+    connectionStrategy: { initialDelay: 500, maxRetry: 1, maxDelay: connectTimeout },
+    securityMode,
+    securityPolicy,
     endpointMustExist: false,
-    requestedSessionTimeout: 30000
+    requestedSessionTimeout
   });
 
   const entry: OpcUaPoolEntry = {
@@ -1048,12 +1139,30 @@ async function getOrCreateOpcUaSession(connection: any): Promise<any> {
   opcUaPool.set(key, entry);
 
   try {
-    await opcClient.connect(endpointUrl);
+    let connectTarget = endpointUrl;
+    try {
+      await opcClient.connect(connectTarget);
+    } catch (primaryErr: any) {
+      // Redundancy Failover: if secondary endpoint is configured, attempt failover
+      if (secondaryEndpointUrl) {
+        connectTarget = secondaryEndpointUrl.startsWith('opc.tcp://') ? secondaryEndpointUrl : `opc.tcp://${secondaryEndpointUrl}`;
+        console.warn(`[OPC UA] Primary endpoint ${endpointUrl} failed (${primaryErr.message}). Failing over to secondary: ${connectTarget}`);
+        await opcClient.connect(connectTarget);
+      } else {
+        throw primaryErr;
+      }
+    }
+
+    const authMode = connection.authMode || 'anonymous';
     const username = connection.username?.trim();
     const password = connection.password;
-    const session = (username && password)
-      ? await opcClient.createSession({ type: UserTokenType.UserName, userName: username, password })
-      : await opcClient.createSession();
+
+    let session: any;
+    if (authMode === 'username_password' && username && password) {
+      session = await opcClient.createSession({ type: UserTokenType.UserName, userName: username, password });
+    } else {
+      session = await opcClient.createSession();
+    }
 
     entry.session = session;
     entry.connected = true;
