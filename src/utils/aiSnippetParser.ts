@@ -15,6 +15,71 @@ export interface ParsedSnippet {
   warnings: string[];
 }
 
+function extractBalancedDictOrJson(raw: string, keyName: string): string | undefined {
+  const keyRegex = new RegExp(`\\b${keyName}\\s*[:=]`, 'i');
+  const match = raw.match(keyRegex);
+  if (!match || match.index === undefined) return undefined;
+
+  const startSearchIdx = match.index + match[0].length;
+  const startIdx = raw.indexOf('{', startSearchIdx);
+  if (startIdx === -1 || startIdx - startSearchIdx > 15) return undefined;
+
+  let depth = 0;
+  let inString = false;
+  let quoteChar = '';
+  let escape = false;
+
+  for (let i = startIdx; i < raw.length; i++) {
+    const char = raw[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (char === '\\') {
+      escape = true;
+      continue;
+    }
+    if (inString) {
+      if (char === quoteChar) {
+        inString = false;
+      }
+    } else {
+      if (char === '"' || char === "'") {
+        inString = true;
+        quoteChar = char;
+      } else if (char === '{') {
+        depth++;
+      } else if (char === '}') {
+        depth--;
+        if (depth === 0) {
+          const candidate = raw.slice(startIdx, i + 1);
+          // Convert Python dictionary syntax to valid JSON
+          const normalized = candidate
+            .replace(/:\s*True\b/g, ': true')
+            .replace(/:\s*False\b/g, ': false')
+            .replace(/:\s*None\b/g, ': null')
+            .replace(/'([^'\\]*(?:\\.[^'\\]*)*)'/g, '"$1"')
+            .replace(/,\s*([}\]])/g, '$1');
+
+          try {
+            JSON.parse(normalized);
+            return normalized;
+          } catch {
+            try {
+              const simpleReplace = candidate.replace(/'/g, '"').replace(/:\s*True\b/g, ': true').replace(/:\s*False\b/g, ': false');
+              JSON.parse(simpleReplace);
+              return simpleReplace;
+            } catch {
+              return candidate;
+            }
+          }
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
 export function parseApiSnippet(snippet: string): ParsedSnippet {
   const result: ParsedSnippet = {
     warnings: []
@@ -27,7 +92,6 @@ export function parseApiSnippet(snippet: string): ParsedSnippet {
   const raw = snippet.trim();
 
   // 1. Extract Base URL
-  // Match base_url="..." or baseURL: "..." or url "..." or curl url
   const baseUrlMatch =
     raw.match(/base_url\s*=\s*["']([^"']+)["']/i) ||
     raw.match(/baseURL\s*:\s*["']([^"']+)["']/i) ||
@@ -43,7 +107,6 @@ export function parseApiSnippet(snippet: string): ParsedSnippet {
   }
 
   // 2. Extract API Key
-  // Match api_key="..." or apiKey: "..." or Authorization: Bearer ...
   const apiKeyMatch =
     raw.match(/api_key\s*=\s*["']([^"']+)["']/i) ||
     raw.match(/apiKey\s*:\s*["']([^"']+)["']/i) ||
@@ -101,15 +164,10 @@ export function parseApiSnippet(snippet: string): ParsedSnippet {
     result.topP = parseFloat(topPMatch[1]);
   }
 
-  // 5. Extract extra_body / payload if present
-  const extraBodyMatch = raw.match(/extra_body\s*=\s*({[\s\S]+?})/);
-  if (extraBodyMatch) {
-    try {
-      // Clean python-style dict or JSON
-      const jsonCandidate = extraBodyMatch[1].replace(/'/g, '"');
-      JSON.parse(jsonCandidate);
-      result.extraBodyJson = jsonCandidate;
-    } catch {}
+  // 5. Extract extra_body / payload if present (handles nested dicts with Python True/False/None)
+  const extraBodyJson = extractBalancedDictOrJson(raw, 'extra_body');
+  if (extraBodyJson) {
+    result.extraBodyJson = extraBodyJson;
   }
 
   return result;

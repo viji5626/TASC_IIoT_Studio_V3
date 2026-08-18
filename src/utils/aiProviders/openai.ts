@@ -20,7 +20,7 @@ async function fetchWithProxyFallback(url: string, init?: RequestInit): Promise<
     return res;
   } catch (err: any) {
     // If browser CORS or network error ("Failed to fetch"), retry via transparent local backend proxy
-    if (typeof window !== 'undefined' && (err.message?.includes('Failed to fetch') || err.name === 'TypeError')) {
+    if (typeof window !== 'undefined') {
       try {
         const proxyUrl = `/api/ai/proxy?url=${encodeURIComponent(url)}`;
         const headers: Record<string, string> = {
@@ -80,6 +80,20 @@ export function createOpenAiAdapter(config: OpenAiConfig): AiProviderAdapter {
             tool_call_id: msg.toolCallId || 'call_default'
           };
         }
+        if (msg.role === 'assistant' && msg.toolCalls && msg.toolCalls.length > 0) {
+          return {
+            role: 'assistant',
+            content: msg.content || null,
+            tool_calls: msg.toolCalls.map((tc, idx) => ({
+              id: tc.id || `call_${idx}_${Date.now()}`,
+              type: 'function',
+              function: {
+                name: tc.name,
+                arguments: tc.arguments || '{}'
+              }
+            }))
+          };
+        }
         if (msg.role === 'user' && msg.images && msg.images.length > 0) {
           const contentParts: any[] = [{ type: 'text', text: msg.content || '' }];
           for (const img of msg.images) {
@@ -117,7 +131,7 @@ export function createOpenAiAdapter(config: OpenAiConfig): AiProviderAdapter {
         messages: formattedMessages,
         stream: true,
         ...(config.temperature !== undefined ? { temperature: config.temperature } : {}),
-        ...(config.maxTokens !== undefined ? { max_tokens: config.maxTokens } : { max_tokens: 1024 }),
+        ...(config.maxTokens !== undefined ? { max_tokens: config.maxTokens } : { max_tokens: 4096 }),
         ...(config.topP !== undefined ? { top_p: config.topP } : {}),
         ...(formattedTools ? { tools: formattedTools, tool_choice: 'auto' } : {}),
         ...(config.extraBody || {})
@@ -184,11 +198,21 @@ export function createOpenAiAdapter(config: OpenAiConfig): AiProviderAdapter {
               if (!choice) continue;
 
               const delta = choice.delta;
-              if (delta?.content) {
+              if (!delta) continue;
+
+              // Capture reasoning / thinking stream tokens separately (NVIDIA Nemotron, DeepSeek R1, OpenAI o1/o3)
+              const reasoning = delta.reasoning_content || delta.reasoning || delta.thinking;
+              if (reasoning) {
+                yield { reasoningDelta: reasoning, done: false };
+              }
+
+              // Standard user-visible content delta
+              if (delta.content) {
                 yield { delta: delta.content, done: false };
               }
 
-              if (delta?.tool_calls) {
+              // Tool calls streaming accumulation
+              if (delta.tool_calls) {
                 parseDeltaToolCalls(delta.tool_calls, toolCallsAcc);
               }
             } catch {}

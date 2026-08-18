@@ -56,7 +56,41 @@ RESPONSE DISCIPLINE (MANDATORY — FOLLOW STRICTLY):
    - Alarm history log (use get_alarm_history)
    - Deep topic tree analysis (use get_tag_manager_detail)
 7. TABLES: When listing 3+ items, ALWAYS use a markdown table. Keep columns minimal and relevant.
-8. NO FILLER PHRASES: Do not say "Sure!", "Great question!", "Let me help you with that!", "Absolutely!", or any filler. Start directly with the answer.`;
+8. NO FILLER PHRASES: Do not say "Sure!", "Great question!", "Let me help you with that!", "Absolutely!", or any filler. Start directly with the answer.
+9. DO NOT OUTPUT INTERNAL SCRATCHPAD OR THINKING PROCESS AS PART OF THE FINAL ANSWER. Always give the final user answer directly.`;
+}
+
+export function sanitizeModelResponseText(text: string): { cleanText: string; thoughtProcess?: string } {
+  if (!text) return { cleanText: '' };
+
+  let thoughtProcess: string | undefined = undefined;
+  let cleanText = text;
+
+  // 1. Extract explicit <think>...</think> tags if present (e.g. DeepSeek R1, Nemotron, Qwen)
+  const thinkMatch = cleanText.match(/<think>([\s\S]*?)<\/think>/i);
+  if (thinkMatch) {
+    thoughtProcess = thinkMatch[1].trim();
+    cleanText = cleanText.replace(/<think>[\s\S]*?<\/think>/i, '').trim();
+  }
+
+  // 2. Handle unclosed <think> tag if stream was cut
+  if (cleanText.includes('<think>')) {
+    const parts = cleanText.split('<think>');
+    cleanText = parts[0].trim();
+    thoughtProcess = (thoughtProcess ? thoughtProcess + '\n' : '') + parts.slice(1).join('').trim();
+  }
+
+  // 3. Extract raw "Here's a thinking process:" / "Thinking process:" scratchpad blocks if model wrote it as markdown
+  const rawThinkingMatch = cleanText.match(/^(?:Here's a thinking process|Thinking process|Thought process):[\s\S]*?\n\n([\s\S]+)$/i);
+  if (rawThinkingMatch && rawThinkingMatch[1]?.trim()) {
+    thoughtProcess = (thoughtProcess ? thoughtProcess + '\n' : '') + cleanText.slice(0, cleanText.indexOf(rawThinkingMatch[1])).trim();
+    cleanText = rawThinkingMatch[1].trim();
+  }
+
+  return {
+    cleanText: cleanText.trim() || text.trim(),
+    thoughtProcess
+  };
 }
 
 export async function runAiTurn(
@@ -78,16 +112,6 @@ export async function runAiTurn(
     chatSession[0].content = dynamicSystemPrompt;
   }
 
-  // Sliding window: trim history to prevent context overflow and drift.
-  // Keep system prompt (index 0) + last MAX_HISTORY_MESSAGES messages.
-  // This prevents token bloat from accumulated tool results and long conversations.
-  const MAX_HISTORY_MESSAGES = 24;
-  if (chatSession.length > MAX_HISTORY_MESSAGES + 1) {
-    const systemMsg = chatSession[0];
-    const recentMessages = chatSession.slice(-(MAX_HISTORY_MESSAGES));
-    chatSession = [systemMsg, ...recentMessages];
-  }
-
   // Append user message if provided
   if (userMessage.trim() || (images && images.length > 0)) {
     chatSession.push({
@@ -96,6 +120,14 @@ export async function runAiTurn(
       images: images && images.length > 0 ? images : undefined,
       timestamp: timeString
     });
+  }
+
+  // Sliding window: trim history to prevent context overflow and drift.
+  const MAX_HISTORY_MESSAGES = 24;
+  if (chatSession.length > MAX_HISTORY_MESSAGES + 1) {
+    const systemMsg = chatSession[0];
+    const recentMessages = chatSession.slice(-MAX_HISTORY_MESSAGES);
+    chatSession = [systemMsg, ...recentMessages];
   }
 
   let iterations = 0;
@@ -132,7 +164,8 @@ export async function runAiTurn(
 
         if (chunk.delta) {
           currentTurnText += chunk.delta;
-          onDelta(currentTurnText);
+          const { cleanText } = sanitizeModelResponseText(currentTurnText);
+          onDelta(cleanText || currentTurnText);
         }
 
         if (chunk.toolCalls) {
@@ -154,10 +187,10 @@ export async function runAiTurn(
 
     // If model made tool calls, execute them and continue the multi-turn loop
     if (pendingToolCalls && pendingToolCalls.length > 0) {
-      // Append assistant message with tool calls
+      // Store tool-calling assistant message with content: '' to keep context clean for next turn
       chatSession.push({
         role: 'assistant',
-        content: currentTurnText,
+        content: '',
         toolCalls: pendingToolCalls
       });
 
@@ -185,19 +218,22 @@ export async function runAiTurn(
       // Loop continues with tool outputs feeding back to model
     } else {
       // Turn is complete with final text
-      let finalText = currentTurnText.trim();
-      if (!finalText) {
+      let rawFinalText = currentTurnText.trim();
+      if (!rawFinalText) {
         const lastToolMsg = [...chatSession].reverse().find(m => m.role === 'tool');
         if (lastToolMsg?.content) {
-          finalText = String(lastToolMsg.content);
+          rawFinalText = String(lastToolMsg.content);
         } else {
-          finalText = 'No text response received from model. Please verify model status in Settings.';
+          rawFinalText = 'No text response received from model. Please verify model status in Settings.';
         }
       }
 
+      const { cleanText, thoughtProcess } = sanitizeModelResponseText(rawFinalText);
+
       chatSession.push({
         role: 'assistant',
-        content: finalText,
+        content: cleanText || rawFinalText,
+        thoughtProcess,
         timestamp: timeString,
         responseTimeMs: Date.now() - turnStartMs
       });

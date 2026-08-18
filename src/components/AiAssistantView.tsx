@@ -138,15 +138,23 @@ export const AiAssistantView: React.FC<Props> = ({
           extraBodyJson
         });
       case 'openai':
-      default:
+      default: {
+        let parsedExtraBody: Record<string, unknown> | undefined = undefined;
+        if (extraBodyJson) {
+          try {
+            parsedExtraBody = JSON.parse(extraBodyJson);
+          } catch {}
+        }
         return createOpenAiAdapter({
           id: 'openai',
-          label: 'OpenAI',
+          label: baseUrl.includes('nvidia') ? 'NVIDIA NIM' : 'OpenAI Compatible',
           baseUrl: baseUrl || 'https://api.openai.com/v1',
           apiKey,
           model: model || 'gpt-4o-mini',
-          temperature
+          temperature,
+          extraBody: parsedExtraBody
         });
+      }
     }
   }, [provider, apiKey, model, baseUrl, temperature, extraBodyJson]);
 
@@ -660,8 +668,28 @@ export const AiAssistantView: React.FC<Props> = ({
                 />
               </div>
 
-              {/* Custom Snippet Parser for Custom Provider */}
-              {provider === 'custom' && (
+              {/* Extra Body / Payload Parameters for Custom or OpenAI Compatible models */}
+              {(provider === 'custom' || provider === 'openai') && (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
+                      <i className="fas fa-sliders text-indigo-400"></i>
+                      <span>Extra Body / Payload Parameters (JSON):</span>
+                    </label>
+                    <span className="text-[10px] text-slate-500 font-mono">Optional</span>
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={extraBodyJson}
+                    onChange={(e) => setExtraBodyJson(e.target.value)}
+                    placeholder='{"chat_template_kwargs": {"enable_thinking": true}, "reasoning_budget": 16384}'
+                    className="w-full bg-slate-800/90 border border-slate-700 rounded-xl px-3.5 py-2 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-y"
+                  />
+                </div>
+              )}
+
+              {/* Paste & Parse Snippet for Custom or OpenAI Compatible Providers */}
+              {(provider === 'custom' || provider === 'openai') && (
                 <PasteApiSnippet onApply={handleApplySnippet} />
               )}
 

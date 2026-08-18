@@ -7,6 +7,7 @@ export interface ImageAttachment {
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'tool' | 'system';
   content: string;
+  thoughtProcess?: string; // Optional internal Chain-of-Thought / reasoning
   toolCallId?: string;
   toolName?: string;
   toolCalls?: Array<{ id: string; name: string; arguments: string }>;
@@ -17,6 +18,7 @@ export interface ChatMessage {
 
 export interface ChatChunk {
   delta?: string;
+  reasoningDelta?: string;
   toolCalls?: Array<{ id: string; name: string; arguments: string }>;
   done: boolean;
 }

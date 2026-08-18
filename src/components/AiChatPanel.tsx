@@ -374,6 +374,20 @@ export const AiChatPanel: React.FC<Props> = ({
                     </div>
                   )}
 
+                  {/* Collapsible Thought / Reasoning Process (if model output CoT thinking) */}
+                  {msg.thoughtProcess && (
+                    <details className="mb-2 text-[11px] bg-slate-950/70 rounded-xl p-2 border border-slate-700/60 font-sans group/think">
+                      <summary className="cursor-pointer text-amber-400/90 font-semibold flex items-center space-x-1.5 select-none hover:text-amber-300">
+                        <i className="fas fa-lightbulb text-[10px]"></i>
+                        <span>Thought Process</span>
+                        <span className="text-[10px] text-slate-500 font-mono ml-auto group-open/think:rotate-180 transition-transform">▼</span>
+                      </summary>
+                      <div className="mt-1.5 pt-1.5 border-t border-slate-800 text-slate-400 font-mono text-[10px] leading-relaxed whitespace-pre-wrap">
+                        {msg.thoughtProcess}
+                      </div>
+                    </details>
+                  )}
+
                   {/* Render Message Content with Markdown Image Lightbox Support */}
                   <div className="whitespace-pre-wrap">
                     {renderMessageContent(msg.content, (url, alt) => setLightboxImage({ url, alt }))}
