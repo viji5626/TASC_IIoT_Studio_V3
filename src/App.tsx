@@ -48,6 +48,8 @@ import { applyThemeToDocument, getAppTheme } from './utils/theme';
 import { EditionManager, sanitizeAppState } from './utils/EditionManager';
 import { getSampleProject } from './utils/sampleProjectPreset';
 import { ConfirmModal } from './components/ConfirmModal';
+import { FddPredictiveMaintenanceModal } from './components/FddPredictiveMaintenanceModal';
+import { useDeviceCapability } from './utils/deviceDetection';
 import { MultiDriverStatusPill } from './components/MultiDriverStatusPill';
 import {
   saveCommunityState,
@@ -671,6 +673,8 @@ export function App() {
   const [activeAlarms, setActiveAlarms] = useState<ActiveAlarm[]>([]);
   const [isAlarmModalOpen, setIsAlarmModalOpen] = useState(false);
   const [isAlarmHistorianModalOpen, setIsAlarmHistorianModalOpen] = useState(false);
+  const [isFddModalOpen, setIsFddModalOpen] = useState(false);
+  const { isDesktop } = useDeviceCapability();
   const [isVibrateEnabled, setIsVibrateEnabled] = useState(true);
   const [isSoundEnabled, setIsSoundEnabled] = useState(true);
   const [isAutoPopupEnabled, setIsAutoPopupEnabled] = useState(true);
@@ -2353,6 +2357,19 @@ export function App() {
             <span className="hidden md:inline">HISTORIAN</span>
           </button>
 
+          {/* ICONICS FDDWorx & Predictive CBM Button (PC / Desktop Exclusive) */}
+          {isDesktop && (
+            <button
+              type="button"
+              onClick={() => setIsFddModalOpen(true)}
+              className="flex items-center space-x-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold bg-gradient-to-r from-amber-600/20 to-indigo-600/20 text-amber-300 border border-amber-500/50 hover:bg-amber-600/30 transition-all cursor-pointer shadow-sm shrink-0 min-h-[30px]"
+              title="ICONICS FDDWorx Fault Detection, CBM & Predictive Maintenance"
+            >
+              <i className="fas fa-shield-halved text-xs text-amber-400"></i>
+              <span className="hidden lg:inline">FDD / CBM</span>
+            </button>
+          )}
+
           {userRole === 'community' || productEdition === ProductEdition.COMMUNITY ? (
             <div className="flex items-center space-x-1.5 shrink-0">
               {/* Ultra-Compact Community Edition Badge */}
@@ -3338,6 +3355,16 @@ export function App() {
         }}
         isCommunity={userRole === 'community' || productEdition === ProductEdition.COMMUNITY}
       />
+
+      {/* ICONICS FDDWorx Fault Detection, CBM & Predictive Maintenance (Desktop Only) */}
+      {isDesktop && (
+        <FddPredictiveMaintenanceModal
+          isOpen={isFddModalOpen}
+          onClose={() => setIsFddModalOpen(false)}
+          latestValues={latestValues}
+          appState={appState}
+        />
+      )}
 
       {/* AI Copilot FAB — shown on Dashboard and Web HMI only, never for client role */}
       {userRole !== 'client' &&

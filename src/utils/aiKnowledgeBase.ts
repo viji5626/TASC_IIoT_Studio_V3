@@ -42,4 +42,13 @@ export const TASC_SYSTEM_KNOWLEDGE = `
 - **Community Edition**: Free demo mode (1 Dashboard, max 10 Widgets, max 5 Driver Tags).
 - **Engineering Studio (Admin)**: Full unrestricted engineering mode with schema editing, driver creation, tag management, and full project configuration.
 - **Client Runtime (Operator)**: Locked kiosk operator runtime with restricted navigation, hidden edit controls, and PIN protection.
+
+## 4. Fault Detection & Diagnostics (FDD) & Predictive Maintenance (ICONICS FDDWorx Architecture)
+- **FDD Rule Engine**: Evaluates multi-variable boolean and threshold rules (e.g. \`Chiller.DischargeTemp > 85 && Chiller.WaterFlow < 25\`, \`AHU.FilterDiffPressure > 250 && AHU.FanCurrent > 18\`).
+- **Debounce & Deadband**: Time-based debounce (N seconds) and hysteresis deadband prevents false alarms from sensor jitter.
+- **Financial Waste Rate ($/hr)**: Quantifies excess energy consumption (kW) and hourly financial cost impact for every active equipment fault.
+- **AI Root Cause Analysis (RCA)**: Deep statistical evaluation of pre-fault 30-minute historian trends to diagnose probable root causes (e.g., condenser tube fouling, clogged HEPA filters, bearing race fatigue) with confidence rankings and corrective SOP steps.
+- **Predictive Maintenance & RUL**: Linear degradation slope (dX/dt) and remaining useful life (RUL) estimation computed from multi-tier 5-year trend historian rollups.
+- **Maintenance Work Orders & SOP Checklists**: Full maintenance lifecycle management (\`SCHEDULED\`, \`IN_PROGRESS\`, \`COMPLETED\`) with step-by-step verification checklists and spare parts inventory tracking.
+- **PC-Exclusive Smart Execution**: Automatically active on Desktop PCs and parked on Mobile devices to preserve battery and compute resources.
 `;

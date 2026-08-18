@@ -3,6 +3,8 @@ import { ToolDefinition } from './aiProviders/types';
 import { queryHistoricalRange } from './trendHistorianEngine';
 import { getAlarmHistory } from './alarmHistorianEngine';
 import { scanAppTopics } from './topicManager';
+import { getFddState, evaluateAllFddRules, saveFddWorkOrder } from './fddEngine';
+import { runFddRootCauseAnalysis, queryFddNaturalLanguage } from './fddAiDiagnostics';
 
 export interface AiToolsContext {
   latestValues: Record<string, { val: any; time: string; timestampMs?: number; quality?: string }>;
@@ -45,6 +47,11 @@ export function getLiveContextSnapshot(): string {
     `- Driver "${d.connectionName}" [ID: ${d.connectionId}]: Protocol=${d.protocol}, Status=${d.connected ? 'CONNECTED' : 'DISCONNECTED'}`
   ).join('\n');
 
+  const fddState = getFddState();
+  const fddSummary = fddState.activeFaults.length > 0
+    ? `${fddState.activeFaults.length} Active Faults (${fddState.kpis.criticalCount} Critical, Waste Rate: $${fddState.kpis.totalCostPerHour}/hr, ${fddState.kpis.totalEnergyWasteKw} kW excess)`
+    : 'All equipment operating normally (Zero active faults)';
+
   return `
 [LIVE PROJECT SNAPSHOT - CURRENT RUNTIME STATE]
 - Dashboards (${dashboards.length}): ${dashboards.map(db => `"${db.dashboardName}" (${db.dashboardId})`).join(', ') || 'None'}
@@ -54,11 +61,96 @@ export function getLiveContextSnapshot(): string {
 ${driverSummary || '  No drivers configured'}
 - Driver Tags (${driverTags.length} registered): ${goodTagsCount} Good Quality, ${badTagsCount} Bad/Offline
 - Active Real-Time Alarms (${activeAlarms.length}): ${activeAlarms.map(a => `[${a.zone}] ${a.panelName}: ${a.message} (val=${a.value})`).join(', ') || 'No active alarms (Normal)'}
+- FDD & Predictive Health: ${fddSummary} (Plant Avg Health: ${fddState.kpis.avgHealthIndex}%, Open Work Orders: ${fddState.kpis.openWorkOrdersCount})
 - User Role / Mode: ${appState.userRole || 'admin'} (${appState.productEdition || 'engineering'})
 `.trim();
 }
 
 export const AI_TOOL_DEFINITIONS: ToolDefinition[] = [
+  {
+    name: 'fdd_get_active_faults',
+    description: 'Get all active Fault Detection and Diagnostics (FDD) equipment faults with severity, duration, and financial waste rate ($/hr).',
+    parameters: {
+      type: 'object',
+      properties: {
+        severityFilter: {
+          type: 'string',
+          description: 'Optional filter by severity: CRITICAL, HIGH, MEDIUM, LOW, or ALL'
+        }
+      }
+    }
+  },
+  {
+    name: 'fdd_diagnose_fault',
+    description: 'Run deep AI Root Cause Analysis (RCA) on an active equipment fault, analyzing pre-fault telemetry and providing probable causes and SOP recommendations.',
+    parameters: {
+      type: 'object',
+      properties: {
+        faultIdOrAssetName: {
+          type: 'string',
+          description: 'The fault ID (e.g. fault_xxx) or equipment asset name (e.g. Chiller, AHU, Compressor, Fan).'
+        }
+      },
+      required: ['faultIdOrAssetName']
+    }
+  },
+  {
+    name: 'fdd_get_maintenance_schedule',
+    description: 'Query scheduled, in-progress, and completed maintenance work orders with priority and SOP checklists.',
+    parameters: {
+      type: 'object',
+      properties: {
+        statusFilter: {
+          type: 'string',
+          description: 'Optional status filter: SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED, or ALL'
+        }
+      }
+    }
+  },
+  {
+    name: 'fdd_create_work_order',
+    description: 'Create a new scheduled predictive maintenance work order for equipment with priority, due date, SOP checklist, and spare parts.',
+    parameters: {
+      type: 'object',
+      properties: {
+        assetName: {
+          type: 'string',
+          description: 'Name of the equipment asset (e.g. Chiller Unit #1, AHU-02, Main Exhaust Fan #4).'
+        },
+        title: {
+          type: 'string',
+          description: 'Title of the maintenance task (e.g. Condenser Tube Bundle Cleaning, Bearing Re-Greasing).'
+        },
+        priority: {
+          type: 'string',
+          description: 'Priority: CRITICAL, HIGH, MEDIUM, ROUTINE'
+        },
+        dueDaysFromNow: {
+          type: 'number',
+          description: 'Due date offset in days from today (e.g. 3 for 3 days from now).'
+        },
+        assignedTechnician: {
+          type: 'string',
+          description: 'Assigned maintenance engineer or technician.'
+        }
+      },
+      required: ['assetName', 'title']
+    }
+  },
+  {
+    name: 'fdd_query_insights',
+    description: 'Execute a natural language query against the FDD & Predictive Maintenance module.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Natural language question (e.g. "What faults are active?", "Which asset is wasting the most energy?", "Show chiller health").'
+        }
+      },
+      required: ['query']
+    }
+  },
   {
     name: 'get_driver_tags_detail',
     description: 'Get deep real-time details of all industrial driver tags (Modbus registers, OPC UA nodes, data types, live values, quality, health, and parent driver mappings).',
@@ -231,6 +323,143 @@ export async function executeAiTool(name: string, args: Record<string, unknown>)
 
   try {
     switch (name) {
+      case 'fdd_get_active_faults': {
+        const severityFilter = args.severityFilter ? String(args.severityFilter).toUpperCase() : 'ALL';
+        const fddState = getFddState();
+        const active = fddState.activeFaults.filter(f => severityFilter === 'ALL' || f.severity === severityFilter);
+
+        if (active.length === 0) {
+          return JSON.stringify({
+            status: 'NORMAL',
+            message: 'No active FDD faults detected in the system.',
+            activeFaultCount: 0,
+            plantHealthIndex: fddState.kpis.avgHealthIndex,
+            wasteRatePerHour: 0
+          });
+        }
+
+        return JSON.stringify({
+          status: 'FAULTS_ACTIVE',
+          activeFaultCount: active.length,
+          totalFinancialWastePerHour: `$${fddState.kpis.totalCostPerHour}/hr`,
+          totalEnergyWasteKw: `${fddState.kpis.totalEnergyWasteKw} kW`,
+          plantHealthIndex: `${fddState.kpis.avgHealthIndex}%`,
+          activeFaults: active.map(f => ({
+            faultId: f.faultId,
+            asset: f.assetName,
+            severity: f.severity,
+            rule: f.ruleName,
+            durationMinutes: Math.floor(f.durationSeconds / 60),
+            financialWasteRate: `$${f.costPerHour}/hr`,
+            triggerValues: f.triggerValues
+          }))
+        });
+      }
+
+      case 'fdd_diagnose_fault': {
+        const target = String(args.faultIdOrAssetName || '').toLowerCase();
+        const fddState = getFddState();
+        const fault = fddState.activeFaults.find(f => 
+          f.faultId.toLowerCase() === target ||
+          f.assetName.toLowerCase().includes(target) ||
+          f.category.toLowerCase().includes(target)
+        ) || fddState.activeFaults[0];
+
+        if (!fault) {
+          return JSON.stringify({
+            message: `No active fault found matching "${target}". All assets in optimal state.`
+          });
+        }
+
+        const rca = await runFddRootCauseAnalysis(fault);
+        return JSON.stringify({
+          faultId: fault.faultId,
+          assetName: fault.assetName,
+          severity: fault.severity,
+          ruleTriggered: fault.ruleName,
+          durationMinutes: Math.floor(fault.durationSeconds / 60),
+          financialWasteRate: `$${fault.costPerHour}/hr`,
+          rootCauseAnalysis: {
+            probableCauses: rca.probableCauses,
+            immediateCorrectiveActions: rca.immediateActions,
+            preventiveRecommendations: rca.preventiveRecommendations,
+            estimatedCostAvoidance: `$${rca.estimatedCostAvoidance}`
+          }
+        });
+      }
+
+      case 'fdd_get_maintenance_schedule': {
+        const statusFilter = args.statusFilter ? String(args.statusFilter).toUpperCase() : 'ALL';
+        const fddState = getFddState();
+        const orders = fddState.workOrders.filter(w => statusFilter === 'ALL' || w.status === statusFilter);
+
+        return JSON.stringify({
+          totalOrders: orders.length,
+          workOrders: orders.map(o => ({
+            orderId: o.orderId,
+            asset: o.assetName,
+            title: o.title,
+            priority: o.priority,
+            status: o.status,
+            dueDate: o.dueIso.split('T')[0],
+            assignedTo: o.assignedTechnician,
+            checklistItems: o.checklist.length,
+            completedItems: o.checklist.filter(c => c.completed).length
+          }))
+        });
+      }
+
+      case 'fdd_create_work_order': {
+        const assetName = String(args.assetName);
+        const title = String(args.title);
+        const priority = (args.priority ? String(args.priority).toUpperCase() : 'HIGH') as any;
+        const dueDays = typeof args.dueDaysFromNow === 'number' ? args.dueDaysFromNow : 3;
+        const assignedTechnician = args.assignedTechnician ? String(args.assignedTechnician) : 'Senior Maintenance Engineer';
+
+        const nowMs = Date.now();
+        const dueMs = nowMs + dueDays * 24 * 60 * 60 * 1000;
+        const newOrder = {
+          orderId: `wo_${nowMs}`,
+          assetId: `asset_${assetName.toLowerCase().replace(/\s+/g, '_')}`,
+          assetName,
+          title,
+          description: `AI-Generated Predictive Work Order based on Condition-Based Monitoring (CBM) degradation trajectory.`,
+          priority,
+          status: 'SCHEDULED' as const,
+          createdIso: new Date(nowMs).toISOString(),
+          dueIso: new Date(dueMs).toISOString(),
+          assignedTechnician,
+          estimatedDowntimeMinutes: 45,
+          checklist: [
+            { id: 'chk_1', label: 'Lockout/Tagout (LOTO) and safety isolation', completed: false },
+            { id: 'chk_2', label: 'Visual inspection of mechanical seals and bearings', completed: false },
+            { id: 'chk_3', label: 'Perform corrective maintenance per SOP', completed: false },
+            { id: 'chk_4', label: 'Verify post-service baseline vibration and thermal readings', completed: false }
+          ],
+          spareParts: [
+            { partNumber: 'SP-99201', name: 'Synthetic Polyurea Grease Cartridge', quantity: 1 }
+          ]
+        };
+
+        saveFddWorkOrder(newOrder);
+
+        return JSON.stringify({
+          success: true,
+          message: `Work Order "${title}" successfully scheduled for ${assetName} (Due: ${newOrder.dueIso.split('T')[0]}).`,
+          workOrder: newOrder
+        });
+      }
+
+      case 'fdd_query_insights': {
+        const queryText = String(args.query || '');
+        const fddState = getFddState();
+        const answer = queryFddNaturalLanguage(queryText, fddState);
+        return JSON.stringify({
+          query: queryText,
+          markdownAnswer: answer
+        });
+      }
+
       case 'get_driver_tags_detail': {
         const connIdFilter = args.connectionId ? String(args.connectionId) : null;
         const protocolFilter = args.protocol ? String(args.protocol) : null;
