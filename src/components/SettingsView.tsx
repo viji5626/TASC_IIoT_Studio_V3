@@ -4,6 +4,7 @@ import { EditionManager } from '../utils/EditionManager';
 import { APP_THEMES } from '../utils/theme';
 import { CoachMarkOverlay } from './CoachMarkOverlay';
 import { isTourSuppressed } from '../utils/tourRegistry';
+import { useCurrency } from '../utils/currencyManager';
 
 interface SettingsViewProps {
   onBack: () => void;
@@ -57,6 +58,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const [enteredPinForRemove, setEnteredPinForRemove] = useState('');
   const [removePinError, setRemovePinError] = useState('');
   const [isSettingsTourOpen, setIsSettingsTourOpen] = useState(false);
+  const [currency, setCurrency] = useCurrency();
 
   useEffect(() => {
     if (!isTourSuppressed('settings')) {
@@ -321,6 +323,59 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                   </button>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Currency Display Preference */}
+          <div className="py-3 px-2 border-b border-[#1f1f1f] space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <span className="text-sm font-medium text-gray-200">Currency Display ($ / ₹)</span>
+              </div>
+              <span className="text-xs text-sky-400 font-mono font-bold">{currency === '₹' ? '₹ INR (Indian Rupee)' : '$ USD (US Dollar)'}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setCurrency('$')}
+                className={`flex items-center justify-between p-3 rounded-xl border text-left transition-all ${
+                  currency === '$'
+                    ? 'border-sky-500 bg-sky-500/10 text-white'
+                    : 'border-slate-800 bg-[#161616] text-slate-300 hover:border-slate-700'
+                } cursor-pointer`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-sm ${currency === '$' ? 'bg-sky-500 text-slate-950' : 'bg-slate-800 text-slate-300'}`}>
+                    $
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold">US Dollar</div>
+                    <div className="text-[10px] text-slate-400 font-mono">$ USD / hr</div>
+                  </div>
+                </div>
+                {currency === '$' && <i className="fas fa-circle-check text-sky-400 text-sm"></i>}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCurrency('₹')}
+                className={`flex items-center justify-between p-3 rounded-xl border text-left transition-all ${
+                  currency === '₹'
+                    ? 'border-emerald-500 bg-emerald-500/10 text-white'
+                    : 'border-slate-800 bg-[#161616] text-slate-300 hover:border-slate-700'
+                } cursor-pointer`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-sm ${currency === '₹' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300'}`}>
+                    ₹
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold">Indian Rupee</div>
+                    <div className="text-[10px] text-slate-400 font-mono">₹ INR / hr</div>
+                  </div>
+                </div>
+                {currency === '₹' && <i className="fas fa-circle-check text-emerald-400 text-sm"></i>}
+              </button>
             </div>
           </div>
 

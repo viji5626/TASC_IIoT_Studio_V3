@@ -484,6 +484,7 @@ export interface AppState {
   clientInfo?: ClientSessionInfo;
   customTags?: TagRegistryEntry[];
   packageOrigin?: 'community' | 'commercial' | 'engineering';
+  currency?: '$' | '₹';
 
   // Industrial Driver Support (additive)
   driverConnections?: DriverConnection[];

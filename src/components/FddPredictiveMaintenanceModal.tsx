@@ -22,6 +22,7 @@ import { runFddRootCauseAnalysis, queryFddNaturalLanguage } from '../utils/fddAi
 import { AppState } from '../types';
 import { CoachMarkOverlay } from './CoachMarkOverlay';
 import { isTourSuppressed } from '../utils/tourRegistry';
+import { useCurrency } from '../utils/currencyManager';
 
 interface FddPredictiveMaintenanceModalProps {
   isOpen: boolean;
@@ -38,6 +39,7 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
 }) => {
   const [fddState, setFddState] = useState<FddState>(() => getFddState());
   const [isFddTourOpen, setIsFddTourOpen] = useState<boolean>(false);
+  const [currency, setCurrency] = useCurrency();
   const [activeTab, setActiveTab] = useState<'active_faults' | 'asset_tree' | 'trend_overlay' | 'work_orders' | 'rule_builder'>('active_faults');
   const [severityFilter, setSeverityFilter] = useState<string>('ALL');
   const [selectedAssetId, setSelectedAssetId] = useState<string>('asset_chiller_1');
@@ -257,8 +259,38 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
             </div>
           </div>
 
-          {/* Quick Simulation & Action Buttons */}
+          {/* Quick Simulation, Currency Selector & Action Buttons */}
           <div className="flex items-center space-x-2.5">
+            {/* Currency Selector Pill */}
+            <div className="flex items-center bg-slate-950 p-0.5 rounded-xl border border-slate-800 text-xs shadow-inner">
+              <button
+                type="button"
+                onClick={() => setCurrency('$')}
+                className={`px-2 py-1 rounded-lg font-bold text-xs transition-all cursor-pointer flex items-center space-x-1 ${
+                  currency === '$'
+                    ? 'bg-sky-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Display financial metrics in US Dollar ($)"
+              >
+                <span>$</span>
+                <span className="text-[10px] hidden sm:inline">USD</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrency('₹')}
+                className={`px-2 py-1 rounded-lg font-bold text-xs transition-all cursor-pointer flex items-center space-x-1 ${
+                  currency === '₹'
+                    ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Display financial metrics in Indian Rupee (₹)"
+              >
+                <span>₹</span>
+                <span className="text-[10px] hidden sm:inline">INR</span>
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={() => setIsFddTourOpen(true)}
@@ -309,12 +341,12 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
           </div>
 
           <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-2.5 flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
-              <i className="fas fa-dollar-sign"></i>
+            <div className="w-9 h-9 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 font-bold text-sm font-mono">
+              {currency}
             </div>
             <div>
               <div className="text-[10px] text-slate-400 font-semibold uppercase">Financial Waste Rate</div>
-              <div className="text-sm font-bold text-amber-300 font-mono">${fddState.kpis.totalCostPerHour}<span className="text-[10px] text-slate-400">/hr</span></div>
+              <div className="text-sm font-bold text-amber-300 font-mono">{currency}{fddState.kpis.totalCostPerHour}<span className="text-[10px] text-slate-400">/hr</span></div>
             </div>
           </div>
 
@@ -500,10 +532,10 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
                         <div className="text-right">
                           <div className="text-[10px] text-slate-400 uppercase font-semibold">Waste Rate</div>
                           <div className="text-sm font-bold text-amber-300 font-mono">
-                            ${fault.costPerHour}/hr
+                            {currency}{fault.costPerHour}/hr
                           </div>
                           <div className="text-[11px] text-slate-400">
-                            Accumulated: <strong className="text-slate-200 font-mono">${fault.totalCostImpact}</strong>
+                            Accumulated: <strong className="text-slate-200 font-mono">{currency}{fault.totalCostImpact}</strong>
                           </div>
                         </div>
                       </div>
@@ -843,7 +875,7 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
                   <div className="flex items-center space-x-3 text-right">
                     <div>
                       <div className="text-[10px] text-slate-500 uppercase">Debounce / Waste</div>
-                      <div className="text-xs font-mono text-slate-300">{rule.debounceSeconds}s | ${rule.costPerHour}/hr</div>
+                      <div className="text-xs font-mono text-slate-300">{rule.debounceSeconds}s | {currency}{rule.costPerHour}/hr</div>
                     </div>
                     <button
                       type="button"
@@ -1075,7 +1107,7 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Cost ($/hr):</label>
+                    <label className="block text-slate-300 font-semibold mb-1">Cost ({currency}/hr):</label>
                     <input
                       type="number"
                       value={editingRule.costPerHour || 30}
