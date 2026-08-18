@@ -607,6 +607,27 @@ export function deleteFddRule(ruleId: string): void {
 }
 
 /**
+ * Add or update an Equipment Asset.
+ */
+export function saveFddAsset(asset: FddAsset): void {
+  const idx = stateAssets.findIndex(a => a.assetId === asset.assetId);
+  if (idx >= 0) {
+    stateAssets[idx] = { ...stateAssets[idx], ...asset };
+  } else {
+    stateAssets.push(asset);
+  }
+  persistState();
+}
+
+/**
+ * Delete an Equipment Asset.
+ */
+export function deleteFddAsset(assetId: string): void {
+  stateAssets = stateAssets.filter(a => a.assetId !== assetId);
+  persistState();
+}
+
+/**
  * Create or update a Maintenance Work Order.
  */
 export function saveFddWorkOrder(order: FddWorkOrder): void {

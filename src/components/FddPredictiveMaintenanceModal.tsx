@@ -16,7 +16,9 @@ import {
   deleteFddRule,
   saveFddWorkOrder,
   attachFddAiReport,
-  resetFddDefaults
+  resetFddDefaults,
+  saveFddAsset,
+  deleteFddAsset
 } from '../utils/fddEngine';
 import { runFddRootCauseAnalysis, queryFddNaturalLanguage } from '../utils/fddAiDiagnostics';
 import { AppState } from '../types';
@@ -50,6 +52,17 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
   const [activeAiReport, setActiveAiReport] = useState<FddAiDiagnosticReport | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [searchResultMarkdown, setSearchResultMarkdown] = useState<string | null>(null);
+
+  // Asset Form State
+  const [showAssetModal, setShowAssetModal] = useState<boolean>(false);
+  const [editingAsset, setEditingAsset] = useState<Partial<FddAsset>>({
+    name: '',
+    category: 'custom',
+    location: '',
+    primaryTags: {},
+    healthIndex: 100,
+    activeFaultCount: 0
+  });
 
   // Work Order Form State
   const [showNewOrderModal, setShowNewOrderModal] = useState<boolean>(false);
@@ -206,6 +219,31 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
     saveFddRule(rule);
     setFddState(getFddState());
     setShowRuleModal(false);
+  };
+
+  // Save Custom Equipment Asset
+  const handleSaveAsset = () => {
+    if (!editingAsset.name?.trim()) return;
+    const newAsset: FddAsset = {
+      assetId: editingAsset.assetId || `asset_${Date.now()}`,
+      name: editingAsset.name.trim(),
+      category: editingAsset.category || 'custom',
+      location: editingAsset.location?.trim() || 'Main Facility',
+      primaryTags: editingAsset.primaryTags || {},
+      healthIndex: editingAsset.healthIndex ?? 100,
+      activeFaultCount: 0
+    };
+    saveFddAsset(newAsset);
+    setFddState(getFddState());
+    setShowAssetModal(false);
+    setEditingAsset({
+      name: '',
+      category: 'custom',
+      location: '',
+      primaryTags: {},
+      healthIndex: 100,
+      activeFaultCount: 0
+    });
   };
 
   // Simulate Instant Mock Event for Testing
@@ -605,7 +643,33 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
 
         {/* Tab 2: Hierarchical Equipment Asset Tree */}
         {activeTab === 'asset_tree' && (
-          <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            <div className="flex items-center justify-between bg-slate-950/40 p-3.5 rounded-xl border border-slate-800">
+              <div>
+                <h3 className="text-xs font-bold uppercase text-slate-300 tracking-wider">Plant Equipment Inventory</h3>
+                <p className="text-[11px] text-slate-400">Total Monitored Assets: <strong className="text-white">{fddState.assets.length}</strong> (Autonomous Health Scorecard & Telemetry Tag Mappings)</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingAsset({
+                    name: '',
+                    category: 'custom',
+                    location: '',
+                    primaryTags: { temperature: '', pressure: '', vibration: '', current: '' },
+                    healthIndex: 100,
+                    activeFaultCount: 0
+                  });
+                  setShowAssetModal(true);
+                }}
+                className="px-3.5 py-1.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-slate-950 font-bold text-xs rounded-xl shadow-md transition-all flex items-center space-x-1.5 cursor-pointer"
+              >
+                <i className="fas fa-plus"></i>
+                <span>Add Custom Asset</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {fddState.assets.map((asset) => {
               const faults = fddState.activeFaults.filter(f => f.assetId === asset.assetId);
               return (
@@ -618,11 +682,26 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
                       <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-slate-800 text-slate-400">
                         {asset.category.replace('_', ' ')}
                       </span>
-                      <div className="flex items-center space-x-1.5">
-                        <span className="text-[10px] text-slate-400">Health:</span>
-                        <span className={`text-xs font-bold font-mono ${asset.healthIndex >= 85 ? 'text-emerald-400' : asset.healthIndex >= 60 ? 'text-amber-400' : 'text-red-400'}`}>
-                          {asset.healthIndex}%
-                        </span>
+                      <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-[10px] text-slate-400">Health:</span>
+                          <span className={`text-xs font-bold font-mono ${asset.healthIndex >= 85 ? 'text-emerald-400' : asset.healthIndex >= 60 ? 'text-amber-400' : 'text-red-400'}`}>
+                            {asset.healthIndex}%
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`Are you sure you want to delete asset "${asset.name}"?`)) {
+                              deleteFddAsset(asset.assetId);
+                              setFddState(getFddState());
+                            }
+                          }}
+                          className="w-6 h-6 rounded flex items-center justify-center text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                          title="Delete Equipment Asset"
+                        >
+                          <i className="fas fa-trash-can text-[10px]"></i>
+                        </button>
                       </div>
                     </div>
 
@@ -669,7 +748,8 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
               );
             })}
           </div>
-        )}
+        </div>
+      )}
 
         {/* Tab 3: Embedded Fault Trend Overlay */}
         {activeTab === 'trend_overlay' && (
@@ -1140,6 +1220,159 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
                   className="px-4 py-2 bg-gradient-to-r from-sky-500 to-indigo-600 text-white text-xs font-bold rounded-xl"
                 >
                   Save Rule
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* New Custom Asset Modal */}
+        {showAssetModal && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in">
+            <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-500/40 flex items-center justify-center">
+                    <i className="fas fa-cubes-stacked text-sm"></i>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white">Add Equipment Asset</h3>
+                    <p className="text-[11px] text-slate-400">Register new machine to track health score & attach FDD rules</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAssetModal(false)}
+                  className="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center"
+                >
+                  <i className="fas fa-times text-xs"></i>
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs max-h-[60vh] overflow-y-auto pr-1">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Equipment Name *:</label>
+                  <input
+                    type="text"
+                    value={editingAsset.name || ''}
+                    onChange={(e) => setEditingAsset({ ...editingAsset, name: e.target.value })}
+                    placeholder="e.g. Centrifugal Feedwater Pump #3"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none focus:border-sky-500"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Asset Category:</label>
+                    <select
+                      value={editingAsset.category || 'custom'}
+                      onChange={(e) => setEditingAsset({ ...editingAsset, category: e.target.value as any })}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none focus:border-sky-500"
+                    >
+                      <option value="chiller">Chiller / Refrigeration</option>
+                      <option value="ahu">Air Handler Unit (AHU)</option>
+                      <option value="air_washer">Industrial Air Washer</option>
+                      <option value="exhaust_fan">Exhaust Fan</option>
+                      <option value="compressor">Air Compressor</option>
+                      <option value="boiler">Boiler / Steam</option>
+                      <option value="pump">Centrifugal / Water Pump</option>
+                      <option value="transformer">Transformer</option>
+                      <option value="conveyor">Conveyor / Drive</option>
+                      <option value="custom">Custom Machinery</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Plant Location / Area:</label>
+                    <input
+                      type="text"
+                      value={editingAsset.location || ''}
+                      onChange={(e) => setEditingAsset({ ...editingAsset, location: e.target.value })}
+                      placeholder="e.g. Utility Plant - Bay 3"
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none focus:border-sky-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Primary Telemetry Tag Mappings */}
+                <div className="pt-2 border-t border-slate-800 space-y-2">
+                  <label className="block text-slate-400 font-bold uppercase text-[10px] tracking-wider">
+                    Primary Telemetry Tag Mappings (Optional):
+                  </label>
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="text-[11px] text-slate-400 block mb-0.5">Temperature Tag:</span>
+                      <input
+                        type="text"
+                        value={editingAsset.primaryTags?.temperature || ''}
+                        onChange={(e) => setEditingAsset({
+                          ...editingAsset,
+                          primaryTags: { ...editingAsset.primaryTags, temperature: e.target.value }
+                        })}
+                        placeholder="e.g. Pump3.Temp"
+                        className="w-full bg-slate-800 font-mono text-[11px] border border-slate-700 rounded-lg px-2.5 py-1.5 text-sky-300 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-slate-400 block mb-0.5">Vibration Tag:</span>
+                      <input
+                        type="text"
+                        value={editingAsset.primaryTags?.vibration || ''}
+                        onChange={(e) => setEditingAsset({
+                          ...editingAsset,
+                          primaryTags: { ...editingAsset.primaryTags, vibration: e.target.value }
+                        })}
+                        placeholder="e.g. Pump3.Vibration"
+                        className="w-full bg-slate-800 font-mono text-[11px] border border-slate-700 rounded-lg px-2.5 py-1.5 text-sky-300 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-slate-400 block mb-0.5">Pressure Tag:</span>
+                      <input
+                        type="text"
+                        value={editingAsset.primaryTags?.pressure || ''}
+                        onChange={(e) => setEditingAsset({
+                          ...editingAsset,
+                          primaryTags: { ...editingAsset.primaryTags, pressure: e.target.value }
+                        })}
+                        placeholder="e.g. Pump3.Pressure"
+                        className="w-full bg-slate-800 font-mono text-[11px] border border-slate-700 rounded-lg px-2.5 py-1.5 text-sky-300 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-slate-400 block mb-0.5">Motor Current Tag:</span>
+                      <input
+                        type="text"
+                        value={editingAsset.primaryTags?.current || ''}
+                        onChange={(e) => setEditingAsset({
+                          ...editingAsset,
+                          primaryTags: { ...editingAsset.primaryTags, current: e.target.value }
+                        })}
+                        placeholder="e.g. Pump3.Current"
+                        className="w-full bg-slate-800 font-mono text-[11px] border border-slate-700 rounded-lg px-2.5 py-1.5 text-sky-300 outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-800 flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAssetModal(false)}
+                  className="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl hover:bg-slate-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveAsset}
+                  disabled={!editingAsset.name?.trim()}
+                  className="px-4 py-2 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-xl shadow-lg transition-all"
+                >
+                  Save Equipment Asset
                 </button>
               </div>
             </div>
