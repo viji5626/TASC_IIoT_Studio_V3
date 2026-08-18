@@ -6,7 +6,7 @@ const STORAGE_KEY_CURRENCY = 'tasc_currency_symbol';
 const CURRENCY_EVENT = 'tasc_currency_changed';
 
 /**
- * Get active currency symbol from localStorage (defaults to '$')
+ * Get active currency symbol from localStorage (defaults to '₹')
  */
 export function getCurrencySymbol(): CurrencySymbol {
   try {
@@ -17,7 +17,7 @@ export function getCurrencySymbol(): CurrencySymbol {
   } catch (e) {
     // Ignore storage errors
   }
-  return '$';
+  return '₹';
 }
 
 /**
