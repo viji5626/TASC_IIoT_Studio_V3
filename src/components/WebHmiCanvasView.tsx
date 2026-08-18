@@ -2622,7 +2622,14 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       {/* Web HMI Canvas Top Navigation Bar (Hidden in Fullscreen mode to allow full canvas auto-fit) */}
       {/* Web HMI Canvas Main Studio Toolbar */}
       {!isFullscreen && (
-        <div className="bg-slate-900/95 border-b border-slate-800 px-2 sm:px-3 py-1 flex items-center justify-between gap-1.5 shrink-0 z-20 backdrop-blur-md overflow-x-auto no-scrollbar w-full max-w-full touch-scroll overscroll-x-contain min-h-[38px]">
+        <div 
+          onWheel={(e) => {
+            if (e.deltaY !== 0) {
+              e.currentTarget.scrollLeft += e.deltaY;
+            }
+          }}
+          className="bg-slate-900/95 border-b border-slate-800 px-2 sm:px-3 py-1 flex items-center justify-between gap-1.5 shrink-0 z-20 backdrop-blur-md overflow-x-auto custom-horizontal-scrollbar w-full max-w-full touch-scroll overscroll-x-contain min-h-[38px]"
+        >
           {/* HMI Canvas Element Controls */}
           <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0 whitespace-nowrap">
             {effectiveEditMode && (
@@ -2666,7 +2673,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         title="Undo Canvas Action (Ctrl+Z)"
                       >
                         <i className="fas fa-undo text-xs"></i>
-                        <span className="hidden md:inline">Undo</span>
+                        <span className="hidden lg:inline">Undo</span>
                       </button>
 
                       <button
@@ -2681,7 +2688,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         title="Redo Canvas Action (Ctrl+Y)"
                       >
                         <i className="fas fa-redo text-xs"></i>
-                        <span className="hidden md:inline">Redo</span>
+                        <span className="hidden lg:inline">Redo</span>
                       </button>
                     </div>
 
@@ -2696,7 +2703,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                             e.target.value = '';
                           }
                         }}
-                        className="bg-transparent text-xs font-bold text-amber-300 outline-none cursor-pointer max-w-[110px] sm:max-w-none"
+                        className="bg-transparent text-xs font-bold text-amber-300 outline-none cursor-pointer max-w-[100px] sm:max-w-[125px]"
                       >
                         <option value="" disabled className="bg-slate-900 text-slate-400">+ Add Shape...</option>
                         <option value="rectangle" className="bg-slate-900 text-white">🔲 Rectangle</option>
@@ -2719,7 +2726,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       title="Open TASC Symbol Library (Valves, Tanks, Motors, Agitators, Silos, Pumps, Heat Exchangers, Sensors)"
                     >
                       <i className="fas fa-industry text-xs text-sky-400"></i>
-                      <span className="hidden md:inline">Symbol Library</span>
+                      <span className="hidden 2xl:inline">Symbol Library</span>
                       <span className="bg-sky-500/30 text-sky-200 text-[9px] font-extrabold px-1 py-0.2 rounded-md border border-sky-400/30">Symbols</span>
                     </button>
                   </>
@@ -2735,7 +2742,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 {/* Screen Background Color Swatch Picker */}
                 <div className="flex items-center space-x-1 bg-slate-950 px-1.5 py-1 rounded-xl border border-slate-800 shrink-0" title="Screen Background Color">
                   <i className="fas fa-palette text-xs text-sky-400"></i>
-                  <span className="text-[10px] text-slate-400 font-bold hidden xl:inline">Canvas BG:</span>
+                  <span className="text-[10px] text-slate-400 font-bold hidden 2xl:inline">Canvas BG:</span>
                   <input
                     type="color"
                     value={screenBgColor}
@@ -2747,7 +2754,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 {/* Media Import Button */}
                 <label className="px-2 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 hover:border-purple-400 rounded-xl text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shrink-0 shadow-sm" title="Import Image, Animated GIF or SVG Graphic to Canvas">
                   <i className="fas fa-file-image text-xs text-purple-400"></i>
-                  <span className="hidden lg:inline">Media</span>
+                  <span className="hidden xl:inline">Media</span>
                   <input
                     type="file"
                     accept=".jpg,.jpeg,.png,.gif,.svg,image/jpeg,image/png,image/gif,image/svg+xml"
@@ -2791,7 +2798,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   title="Snap to 10px Grid"
                 >
                   <i className="fas fa-border-top-left text-xs"></i>
-                  <span className="hidden xl:inline">Snap 10px</span>
+                  <span className="hidden 2xl:inline">Snap 10px</span>
                 </button>
 
                 {/* Pan / Move Canvas Tool Button */}
@@ -2806,7 +2813,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   title="Pan / Move Canvas (Click Hand tool, Hold Spacebar, or Middle-click / Drag)"
                 >
                   <i className={`fas fa-hand text-xs ${isPanMode || isSpacePressed ? 'text-amber-400' : 'text-slate-400'}`}></i>
-                  <span className="hidden xl:inline">Pan</span>
+                  <span className="hidden 2xl:inline">Pan</span>
                 </button>
 
                 {/* Zoom Level Controls (0.5x to 2.0x) */}
@@ -2882,7 +2889,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 }`}
               >
                 <i className={`fas ${isEditMode ? 'fa-pen-to-square' : 'fa-play'} text-xs`}></i>
-                <span className="hidden sm:inline">{isEditMode ? 'Design Mode' : 'Live HMI Run'}</span>
+                <span className="hidden sm:inline">{isEditMode ? 'Design' : 'Run'}</span>
                 <span className="sm:hidden">{isEditMode ? 'Design' : 'Run'}</span>
               </button>
             )}
@@ -2892,7 +2899,14 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
       {/* Selected Element(s) & Alignment Floating Toolbar */}
       {effectiveEditMode && selectedPanelIds.length > 0 && (
-        <div className="bg-slate-950 border-b border-slate-800 px-2 sm:px-3 py-1 flex items-center justify-between gap-1.5 text-xs z-20 animate-in fade-in shadow-xl overflow-x-auto no-scrollbar w-full max-w-full touch-scroll overscroll-x-contain shrink-0 min-h-[36px]">
+        <div 
+          onWheel={(e) => {
+            if (e.deltaY !== 0) {
+              e.currentTarget.scrollLeft += e.deltaY;
+            }
+          }}
+          className="bg-slate-950 border-b border-slate-800 px-2 sm:px-3 py-1 flex items-center justify-between gap-1.5 text-xs z-20 animate-in fade-in shadow-xl overflow-x-auto custom-horizontal-scrollbar w-full max-w-full touch-scroll overscroll-x-contain shrink-0 min-h-[36px]"
+        >
           <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0 whitespace-nowrap">
             
             {/* Selection Info Badge */}

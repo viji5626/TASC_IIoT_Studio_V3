@@ -365,6 +365,27 @@ input[type=range]::-moz-range-thumb:active {
   scrollbar-width: none;
 }
 
+/* Sleek Ultra-Thin Horizontal Scrollbar for Desktop / PC Toolbars */
+.custom-horizontal-scrollbar {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56, 189, 248, 0.3) transparent;
+}
+.custom-horizontal-scrollbar::-webkit-scrollbar {
+  height: 3px;
+}
+.custom-horizontal-scrollbar::-webkit-scrollbar-track {
+  background: rgba(2, 6, 23, 0.4);
+}
+.custom-horizontal-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.35);
+  border-radius: 9999px;
+  transition: background 0.2s ease;
+}
+.custom-horizontal-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.8);
+}
+
 /* Dynamic Tag-Based Continuous Rotation Animations */
 @keyframes hmi-spin-cw {
   from {

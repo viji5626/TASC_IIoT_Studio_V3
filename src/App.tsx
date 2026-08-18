@@ -2301,7 +2301,14 @@ export function App() {
   return (
     <div className="flex flex-col h-screen w-screen text-slate-200 overflow-hidden font-sans select-none" style={{ backgroundColor: activeThemeObj.bgCanvas }}>
       {/* Top Navbar */}
-      <header className="theme-header h-11 sm:h-[48px] px-2 sm:px-3 border-b border-slate-800 flex items-center justify-between shrink-0 z-40 backdrop-blur-md overflow-x-auto no-scrollbar w-full max-w-full touch-scroll overscroll-x-contain">
+      <header 
+        onWheel={(e) => {
+          if (e.deltaY !== 0) {
+            e.currentTarget.scrollLeft += e.deltaY;
+          }
+        }}
+        className="theme-header h-11 sm:h-[48px] px-2 sm:px-3 border-b border-slate-800 flex items-center justify-between shrink-0 z-40 backdrop-blur-md overflow-x-auto custom-horizontal-scrollbar w-full max-w-full touch-scroll overscroll-x-contain"
+      >
         <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
           
           {/* Sticky Left Brand Container (Hamburger + Logo + Title) */}
@@ -2351,7 +2358,7 @@ export function App() {
             title="Telemetry Inbuilt Parameter Alarms"
           >
             <i className={`fas fa-bell text-xs ${activeAlarms.length > 0 ? 'text-rose-400 animate-bounce' : 'text-slate-400'}`}></i>
-            <span className="hidden md:inline">ALARMS</span>
+            <span className="hidden lg:inline">ALARMS</span>
             {activeAlarms.length > 0 && (
               <span className="bg-rose-500 text-black text-[9px] font-mono font-black px-1.5 py-0.2 rounded-full">
                 {activeAlarms.length}
@@ -2368,7 +2375,7 @@ export function App() {
             title="Industrial Alarm Historian Window (FIFO Storage & Exporter)"
           >
             <i className="fas fa-history text-xs text-indigo-400"></i>
-            <span className="hidden md:inline">HISTORIAN</span>
+            <span className="hidden xl:inline">HISTORIAN</span>
           </button>
 
           {/* TASC FDD & Predictive CBM Button (PC / Desktop Exclusive) */}
@@ -2381,7 +2388,7 @@ export function App() {
               title="TASC FDD Fault Detection, CBM & Predictive Maintenance"
             >
               <i className="fas fa-shield-halved text-xs text-amber-400"></i>
-              <span className="hidden lg:inline">FDD / CBM</span>
+              <span className="hidden xl:inline">FDD / CBM</span>
             </button>
           )}
 
@@ -2398,7 +2405,7 @@ export function App() {
             title="Comprehensive Engineering User Manual & Schematics Book"
           >
             <i className="fas fa-book-bookmark text-xs text-sky-400"></i>
-            <span className="hidden xl:inline">MANUAL</span>
+            <span className="hidden 2xl:inline">MANUAL</span>
           </button>
 
           {userRole === 'community' || productEdition === ProductEdition.COMMUNITY ? (
@@ -2413,7 +2420,7 @@ export function App() {
                 <i className="fas fa-cube text-xs text-emerald-400"></i>
                 <span className="hidden 2xl:inline">COMMUNITY</span>
                 <span className={`text-[9px] px-1 rounded font-mono font-extrabold ${appState.panels.length > 10 ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-slate-950'}`}>
-                  Free Demo ({appState.panels.length}/10W)
+                  Demo ({appState.panels.length}/10W)
                 </span>
               </button>
 
