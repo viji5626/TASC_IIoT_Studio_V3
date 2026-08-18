@@ -49,6 +49,8 @@ import { EditionManager, sanitizeAppState } from './utils/EditionManager';
 import { getSampleProject } from './utils/sampleProjectPreset';
 import { ConfirmModal } from './components/ConfirmModal';
 import { FddPredictiveMaintenanceModal } from './components/FddPredictiveMaintenanceModal';
+import { ProductTourModal } from './components/ProductTourModal';
+import { UserManualView } from './components/UserManualView';
 import { useDeviceCapability } from './utils/deviceDetection';
 import { MultiDriverStatusPill } from './components/MultiDriverStatusPill';
 import {
@@ -674,6 +676,13 @@ export function App() {
   const [isAlarmModalOpen, setIsAlarmModalOpen] = useState(false);
   const [isAlarmHistorianModalOpen, setIsAlarmHistorianModalOpen] = useState(false);
   const [isFddModalOpen, setIsFddModalOpen] = useState(false);
+  const [isTourOpen, setIsTourOpen] = useState<boolean>(() => {
+    try {
+      return !localStorage.getItem('tasc_product_tour_completed');
+    } catch {
+      return false;
+    }
+  });
   const { isDesktop } = useDeviceCapability();
   const [isVibrateEnabled, setIsVibrateEnabled] = useState(true);
   const [isSoundEnabled, setIsSoundEnabled] = useState(true);
@@ -2370,6 +2379,21 @@ export function App() {
             </button>
           )}
 
+          {/* User Manual Handbook Button */}
+          <button
+            type="button"
+            onClick={() => setCurrentView(AppView.USER_MANUAL)}
+            className={`flex items-center space-x-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer shadow-sm shrink-0 min-h-[30px] ${
+              currentView === AppView.USER_MANUAL
+                ? 'bg-sky-500 text-slate-950 shadow-md'
+                : 'bg-slate-800/90 text-slate-300 border border-slate-700 hover:text-white hover:bg-slate-750'
+            }`}
+            title="Comprehensive Engineering User Manual & Schematics Book"
+          >
+            <i className="fas fa-book-bookmark text-xs text-sky-400"></i>
+            <span className="hidden xl:inline">MANUAL</span>
+          </button>
+
           {userRole === 'community' || productEdition === ProductEdition.COMMUNITY ? (
             <div className="flex items-center space-x-1.5 shrink-0">
               {/* Ultra-Compact Community Edition Badge */}
@@ -3138,6 +3162,14 @@ export function App() {
             />
           </AiErrorBoundary>
         )}
+
+        {currentView === AppView.USER_MANUAL && (
+          <UserManualView
+            onBack={() => setCurrentView(AppView.DASHBOARD)}
+            onNavigate={setCurrentView}
+            onOpenTour={() => setIsTourOpen(true)}
+          />
+        )}
       </main>
 
 
@@ -3161,6 +3193,7 @@ export function App() {
         onSwitchRole={handleRequestExitSession}
         onRequestClearAll={handleRequestClearAll}
         onLoadHatcheryDemo={handleLoadHatcheryDemo}
+        onOpenTour={() => setIsTourOpen(true)}
       />
 
       <DashboardMenu 
@@ -3365,6 +3398,16 @@ export function App() {
           appState={appState}
         />
       )}
+
+      {/* Interactive Guided Product Tour & Feature Spotlight */}
+      <ProductTourModal
+        isOpen={isTourOpen}
+        onClose={() => setIsTourOpen(false)}
+        onNavigate={setCurrentView}
+        onOpenFdd={() => setIsFddModalOpen(true)}
+        onOpenAlarms={() => setIsAlarmModalOpen(true)}
+        onOpenHistorian={() => setIsAlarmHistorianModalOpen(true)}
+      />
 
       {/* AI Copilot FAB — shown on Dashboard and Web HMI only, never for client role */}
       {userRole !== 'client' &&

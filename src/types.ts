@@ -39,7 +39,8 @@ export enum AppView {
   DRIVER_TAG_MANAGER = 'driver_tag_manager',
   OPC_UA_BROWSER = 'opc_ua_browser',
   DRIVER_DIAGNOSTICS = 'driver_diagnostics',
-  AI_ASSISTANT = 'ai_assistant'
+  AI_ASSISTANT = 'ai_assistant',
+  USER_MANUAL = 'user_manual'
 }
 
 export interface MqttConnection {

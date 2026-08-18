@@ -21,6 +21,7 @@ interface SidebarProps {
   onSwitchRole?: () => void;
   onRequestClearAll?: () => void;
   onLoadHatcheryDemo?: () => void;
+  onOpenTour?: () => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -40,7 +41,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   clientInfo,
   onSwitchRole,
   onRequestClearAll,
-  onLoadHatcheryDemo
+  onLoadHatcheryDemo,
+  onOpenTour
 }) => {
   const [activeDashMenuId, setActiveDashMenuId] = useState<string | null>(null);
 
@@ -48,6 +50,8 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   const menuItems = isClient ? [
     { id: AppView.CONNECTIONS, icon: 'fa-network-wired', label: 'All Connections' },
+    { id: AppView.USER_MANUAL, icon: 'fa-book-bookmark', label: 'User Manual & Docs' },
+    { id: 'quick_tour', icon: 'fa-wand-magic-sparkles', label: 'Quick Product Tour' },
     { id: AppView.SETTINGS, icon: 'fa-gear', label: 'App Settings' },
   ] : [
     { id: AppView.CONNECTIONS, icon: 'fa-network-wired', label: 'All Connections' },
@@ -59,6 +63,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: AppView.DRIVER_TAG_MANAGER, icon: 'fa-database', label: 'Driver Tag Manager', isDriverSection: true },
     { id: AppView.OPC_UA_BROWSER, icon: 'fa-sitemap', label: 'OPC UA Browser', isDriverSection: true },
     { id: AppView.DRIVER_DIAGNOSTICS, icon: 'fa-stethoscope', label: 'Driver Diagnostics', isDriverSection: true },
+    { id: AppView.USER_MANUAL, icon: 'fa-book-bookmark', label: 'User Manual & Docs' },
+    { id: 'quick_tour', icon: 'fa-wand-magic-sparkles', label: 'Quick Product Tour' },
     { id: AppView.SETTINGS, icon: 'fa-gear', label: 'App Settings' },
     { id: AppView.BACKUP, icon: 'fa-cloud-arrow-up', label: 'Backup & Restore', isLocked: userRole === 'community' },
     { id: 'about', icon: 'fa-circle-info', label: 'About TASC IIoT Studio' },
@@ -170,6 +176,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                   if (item.id === 'about') {
                     alert('TASC IIoT Studio\nA modern, real-time Bento Grid dashboard for monitoring and controlling IIoT hardware devices via MQTT WebSockets.');
                     onClose();
+                  } else if (item.id === 'quick_tour') {
+                    onClose();
+                    if (onOpenTour) onOpenTour();
                   } else {
                     onNavigate(item.id as AppView);
                     if (item.id !== AppView.CONNECTIONS) onClose();
