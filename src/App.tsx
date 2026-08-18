@@ -49,7 +49,7 @@ import { EditionManager, sanitizeAppState } from './utils/EditionManager';
 import { getSampleProject } from './utils/sampleProjectPreset';
 import { ConfirmModal } from './components/ConfirmModal';
 import { FddPredictiveMaintenanceModal } from './components/FddPredictiveMaintenanceModal';
-import { ProductTourModal } from './components/ProductTourModal';
+import { CoachMarkOverlay } from './components/CoachMarkOverlay';
 import { UserManualView } from './components/UserManualView';
 import { useDeviceCapability } from './utils/deviceDetection';
 import { MultiDriverStatusPill } from './components/MultiDriverStatusPill';
@@ -2308,6 +2308,7 @@ export function App() {
           <div className="flex items-center space-x-1.5 shrink-0 sticky left-0 theme-header z-30 pr-1.5">
             <button 
               type="button" 
+              data-tour="sidebar-btn"
               onClick={() => setIsSidebarOpen(true)}
               className="p-1 sm:p-1.5 text-slate-300 hover:text-white rounded-lg hover:bg-slate-800/80 active:scale-95 transition-all shrink-0 cursor-pointer"
               title="Open Menu"
@@ -2324,20 +2325,23 @@ export function App() {
           </div>
 
           {/* Multi-Driver & MQTT Live Connection Status Pill with Multi-Dots & Dropdown Popover */}
-          <MultiDriverStatusPill
-            mqttConnection={activeMqttConnection}
-            allMqttConnections={appState.connections}
-            mqttConnected={mqttConnected}
-            isSimulated={isSimulated}
-            driverConnections={appState.driverConnections}
-            isClient={editionMgr.IsClient() || userRole === 'client' || !!appState.isLockedPackage}
-            onOpenMqttSettings={handleOpenActiveBrokerSettings}
-            onOpenDriverConnections={() => setCurrentView(AppView.DRIVER_CONNECTIONS)}
-          />
+          <div data-tour="drivers-pill">
+            <MultiDriverStatusPill
+              mqttConnection={activeMqttConnection}
+              allMqttConnections={appState.connections}
+              mqttConnected={mqttConnected}
+              isSimulated={isSimulated}
+              driverConnections={appState.driverConnections}
+              isClient={editionMgr.IsClient() || userRole === 'client' || !!appState.isLockedPackage}
+              onOpenMqttSettings={handleOpenActiveBrokerSettings}
+              onOpenDriverConnections={() => setCurrentView(AppView.DRIVER_CONNECTIONS)}
+            />
+          </div>
 
           {/* Inbuilt Alarm Center Bell Button */}
           <button
             type="button"
+            data-tour="alarms-btn"
             onClick={() => setIsAlarmModalOpen(true)}
             className={`flex items-center space-x-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer relative shrink-0 min-h-[30px] ${
               activeAlarms.length > 0
@@ -2358,6 +2362,7 @@ export function App() {
           {/* Alarm Historian Button */}
           <button
             type="button"
+            data-tour="historian-btn"
             onClick={() => setIsAlarmHistorianModalOpen(true)}
             className="flex items-center space-x-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/50 hover:bg-indigo-500/30 transition-all cursor-pointer shadow-sm shrink-0 min-h-[30px]"
             title="Industrial Alarm Historian Window (FIFO Storage & Exporter)"
@@ -2370,6 +2375,7 @@ export function App() {
           {isDesktop && (
             <button
               type="button"
+              data-tour="fdd-btn"
               onClick={() => setIsFddModalOpen(true)}
               className="flex items-center space-x-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold bg-gradient-to-r from-amber-600/20 to-indigo-600/20 text-amber-300 border border-amber-500/50 hover:bg-amber-600/30 transition-all cursor-pointer shadow-sm shrink-0 min-h-[30px]"
               title="ICONICS FDDWorx Fault Detection, CBM & Predictive Maintenance"
@@ -2382,6 +2388,7 @@ export function App() {
           {/* User Manual Handbook Button */}
           <button
             type="button"
+            data-tour="manual-btn"
             onClick={() => setCurrentView(AppView.USER_MANUAL)}
             className={`flex items-center space-x-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer shadow-sm shrink-0 min-h-[30px] ${
               currentView === AppView.USER_MANUAL
@@ -2611,7 +2618,7 @@ export function App() {
               )}
 
               {/* Workstation Mode Switcher Toggle */}
-              <div className="flex items-center p-0.5 bg-slate-950 rounded-lg border border-slate-800 shrink-0 min-h-[30px]">
+              <div data-tour="view-toggle" className="flex items-center p-0.5 bg-slate-950 rounded-lg border border-slate-800 shrink-0 min-h-[30px]">
                 <button
                   type="button"
                   onClick={() => setActiveMode('grid')}
@@ -3399,8 +3406,8 @@ export function App() {
         />
       )}
 
-      {/* Interactive Guided Product Tour & Feature Spotlight */}
-      <ProductTourModal
+      {/* Interactive Coach Mark Screen Overlay Walkthrough */}
+      <CoachMarkOverlay
         isOpen={isTourOpen}
         onClose={() => setIsTourOpen(false)}
         onNavigate={setCurrentView}

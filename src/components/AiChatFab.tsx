@@ -7,7 +7,7 @@ interface Props {
 
 export const AiChatFab: React.FC<Props> = ({ onClick, hasUnread = false }) => {
   return (
-    <div className="fixed bottom-6 right-6 z-[90] flex items-center group select-none">
+    <div data-tour="ai-copilot" className="fixed bottom-6 right-6 z-[90] flex items-center group select-none">
       {/* Tooltip Label */}
       <div className="hidden sm:flex items-center mr-3 px-3 py-1.5 bg-slate-900/95 backdrop-blur-md text-slate-100 text-xs font-semibold rounded-xl border border-indigo-500/40 shadow-2xl opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0 duration-200 pointer-events-none whitespace-nowrap space-x-1.5">
         <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
