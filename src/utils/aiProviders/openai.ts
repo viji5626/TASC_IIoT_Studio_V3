@@ -47,10 +47,27 @@ async function fetchWithProxyFallback(url: string, init?: RequestInit): Promise<
   }
 }
 
+export function normalizeBaseUrl(raw: string): string {
+  let url = (raw || '').trim().replace(/\/+$/, '');
+  if (!url) return 'https://api.openai.com/v1';
+  if (url.endsWith('/chat/completions')) {
+    url = url.replace(/\/chat\/completions$/, '');
+  } else if (url.endsWith('/models')) {
+    url = url.replace(/\/models$/, '');
+  }
+  if (
+    (url.includes('integrate.api.nvidia.com') || url.includes('api.openai.com') || url.includes('api.groq.com/openai')) &&
+    !url.endsWith('/v1')
+  ) {
+    url = `${url}/v1`;
+  }
+  return url;
+}
+
 export function createOpenAiAdapter(config: OpenAiConfig): AiProviderAdapter {
   const adapterId = config.id || 'openai';
   const adapterLabel = config.label || 'OpenAI Compatible';
-  const baseUrl = config.baseUrl.replace(/\/+$/, '');
+  const baseUrl = normalizeBaseUrl(config.baseUrl);
 
   return {
     id: adapterId,
@@ -259,17 +276,52 @@ export function createOpenAiAdapter(config: OpenAiConfig): AiProviderAdapter {
     },
 
     async testConnection(): Promise<{ ok: boolean; error?: string }> {
-      try {
-        const endpoint = `${baseUrl}/models`;
-        const headers: Record<string, string> = { ...(config.customHeaders || {}) };
-        if (config.apiKey) headers['Authorization'] = `Bearer ${config.apiKey}`;
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(config.customHeaders || {})
+      };
+      if (config.apiKey) headers['Authorization'] = `Bearer ${config.apiKey}`;
 
-        const res = await fetchWithProxyFallback(endpoint, { headers });
+      // Stage 1: Try GET /models if not NVIDIA NIM (NVIDIA NIM endpoints are chat-centric)
+      if (!baseUrl.includes('nvidia.com')) {
+        try {
+          const endpoint = `${baseUrl}/models`;
+          const res = await fetchWithProxyFallback(endpoint, { headers });
+          if (res.ok) return { ok: true };
+          if (res.status === 401 || res.status === 403) {
+            return { ok: false, error: `[AUTH_ERROR] Invalid credentials (${res.status})` };
+          }
+        } catch {
+          // Fall through to Stage 2
+        }
+      }
+
+      // Stage 2: Direct minimal Chat Completion test (validates credentials & model inference for NVIDIA NIM, DeepSeek, vLLM)
+      try {
+        const chatEndpoint = `${baseUrl}/chat/completions`;
+        const testPayload: Record<string, any> = {
+          model: config.model || 'nvidia/nemotron-3.5-lightning-30b-a3b',
+          messages: [{ role: 'user', content: 'hi' }],
+          max_tokens: 1,
+          stream: false,
+          ...(config.extraBody || {})
+        };
+
+        const res = await fetchWithProxyFallback(chatEndpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(testPayload)
+        });
+
         if (res.ok) return { ok: true };
 
         const text = await res.text();
         if (res.status === 401 || res.status === 403) {
-          return { ok: false, error: `[AUTH_ERROR] Invalid credentials (${res.status})` };
+          return { ok: false, error: `[AUTH_ERROR] Invalid API Key / Unauthorized (${res.status})` };
+        } else if (res.status === 404) {
+          return { ok: false, error: `[NOT_FOUND] Model "${config.model}" not found on ${baseUrl} (${res.status})` };
+        } else if (res.status === 429) {
+          return { ok: false, error: `[RATE_LIMIT] Rate limit exceeded (${res.status})` };
         }
         return { ok: false, error: `HTTP ${res.status}: ${text.slice(0, 150)}` };
       } catch (err: any) {

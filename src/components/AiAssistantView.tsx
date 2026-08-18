@@ -328,6 +328,12 @@ export const AiAssistantView: React.FC<Props> = ({
   };
 
   const handleApplySnippet = (parsed: ParsedSnippet) => {
+    let activeTargetProvider = provider;
+    if (parsed.baseUrl && parsed.baseUrl.includes('nvidia') && provider !== 'custom' && provider !== 'openai') {
+      activeTargetProvider = 'custom';
+      setProvider('custom');
+    }
+
     let targetBaseUrl = baseUrl;
     let targetModel = model;
     let targetTemp = temperature;
@@ -343,7 +349,7 @@ export const AiAssistantView: React.FC<Props> = ({
     }
     if (parsed.apiKey) {
       setApiKey(parsed.apiKey);
-      saveApiKey(provider, parsed.apiKey);
+      saveApiKey(activeTargetProvider, parsed.apiKey);
       setIsKeySaved(true);
     }
     if (parsed.temperature !== undefined) {
@@ -355,8 +361,8 @@ export const AiAssistantView: React.FC<Props> = ({
       targetExtraBody = parsed.extraBodyJson;
     }
 
-    // Auto-save parsed snippet into current provider configuration
-    saveProviderConfig(provider, {
+    // Auto-save parsed snippet into target provider configuration
+    saveProviderConfig(activeTargetProvider, {
       baseUrl: targetBaseUrl,
       model: targetModel,
       temperature: targetTemp,
@@ -371,7 +377,7 @@ export const AiAssistantView: React.FC<Props> = ({
       lmstudio: 'LM Studio (Local)',
       custom: 'Custom Endpoint (NVIDIA NIM)'
     };
-    const name = providerNames[provider] || provider;
+    const name = providerNames[activeTargetProvider] || activeTargetProvider;
     setTestResult({ ok: true, message: `Applied and saved configuration to ${name}!` });
     setTimeout(() => setTestResult(null), 3500);
   };
