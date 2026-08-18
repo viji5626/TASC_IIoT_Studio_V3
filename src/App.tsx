@@ -2371,14 +2371,14 @@ export function App() {
             <span className="hidden md:inline">HISTORIAN</span>
           </button>
 
-          {/* ICONICS FDDWorx & Predictive CBM Button (PC / Desktop Exclusive) */}
+          {/* TASC FDD & Predictive CBM Button (PC / Desktop Exclusive) */}
           {isDesktop && (
             <button
               type="button"
               data-tour="fdd-btn"
               onClick={() => setIsFddModalOpen(true)}
               className="flex items-center space-x-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold bg-gradient-to-r from-amber-600/20 to-indigo-600/20 text-amber-300 border border-amber-500/50 hover:bg-amber-600/30 transition-all cursor-pointer shadow-sm shrink-0 min-h-[30px]"
-              title="ICONICS FDDWorx Fault Detection, CBM & Predictive Maintenance"
+              title="TASC FDD Fault Detection, CBM & Predictive Maintenance"
             >
               <i className="fas fa-shield-halved text-xs text-amber-400"></i>
               <span className="hidden lg:inline">FDD / CBM</span>
@@ -3396,7 +3396,7 @@ export function App() {
         isCommunity={userRole === 'community' || productEdition === ProductEdition.COMMUNITY}
       />
 
-      {/* ICONICS FDDWorx Fault Detection, CBM & Predictive Maintenance (Desktop Only) */}
+      {/* TASC FDD Fault Detection, CBM & Predictive Maintenance (Desktop Only) */}
       {isDesktop && (
         <FddPredictiveMaintenanceModal
           isOpen={isFddModalOpen}

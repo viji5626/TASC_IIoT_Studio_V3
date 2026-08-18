@@ -153,7 +153,7 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
       assetId: asset.assetId,
       assetName: asset.name,
       title: newOrderTitle.trim(),
-      description: `Predictive Maintenance task created via FDDWorx Manager.`,
+      description: `Predictive Maintenance task created via FDD Predictive Manager.`,
       priority: newOrderPriority,
       status: 'SCHEDULED',
       createdIso: new Date(nowMs).toISOString(),
@@ -285,7 +285,7 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
             <div>
               <div className="flex items-center space-x-2">
                 <h2 className="text-base font-bold text-white tracking-wide">
-                  Fault Detection & Diagnostics (FDDWorx)
+                  Fault Detection & Diagnostics (FDD)
                 </h2>
                 <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-indigo-900/60 border border-indigo-500/50 text-indigo-300 rounded-md uppercase">
                   Predictive CBM

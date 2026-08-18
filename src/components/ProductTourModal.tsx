@@ -128,7 +128,7 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     id: 'fdd_predictive',
-    title: 'Fault Detection & Diagnostics (FDDWorx)',
+    title: 'Fault Detection & Diagnostics (FDD)',
     category: 'Predictive Maintenance',
     badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
     icon: 'fa-shield-halved',

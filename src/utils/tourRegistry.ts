@@ -131,11 +131,11 @@ export const ALL_SUBMODULE_TOURS: Record<string, CoachMarkStep[]> = {
     {
       id: 'fdd_predictive',
       targetSelector: '[data-tour="fdd-btn"]',
-      title: 'Fault Detection & Diagnostics (FDDWorx)',
+      title: 'Fault Detection & Diagnostics (FDD)',
       category: 'Predictive Maintenance',
       badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
       icon: 'fa-shield-halved',
-      description: 'ICONICS FDDWorx compatible predictive engine. Evaluates complex multi-variable rules, calculates hourly energy waste ($/hr), and runs AI Root Cause Analysis (RCA).',
+      description: 'Industrial predictive maintenance engine. Evaluates complex multi-variable rules, calculates hourly energy waste ($/hr or ₹/hr), and runs AI Root Cause Analysis (RCA).',
       keyPoints: [
         'Catch equipment faults before machines break down',
         'Generates automated SOP maintenance work orders'

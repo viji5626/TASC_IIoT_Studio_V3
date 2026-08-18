@@ -43,7 +43,7 @@ export const TASC_SYSTEM_KNOWLEDGE = `
 - **Engineering Studio (Admin)**: Full unrestricted engineering mode with schema editing, driver creation, tag management, and full project configuration.
 - **Client Runtime (Operator)**: Locked kiosk operator runtime with restricted navigation, hidden edit controls, and PIN protection.
 
-## 4. Fault Detection & Diagnostics (FDD) & Predictive Maintenance (ICONICS FDDWorx Architecture)
+## 4. Fault Detection & Diagnostics (FDD) & Predictive Maintenance (TASC FDD Predictive Architecture)
 - **FDD Rule Engine**: Evaluates multi-variable boolean and threshold rules (e.g. \`Chiller.DischargeTemp > 85 && Chiller.WaterFlow < 25\`, \`AHU.FilterDiffPressure > 250 && AHU.FanCurrent > 18\`).
 - **Debounce & Deadband**: Time-based debounce (N seconds) and hysteresis deadband prevents false alarms from sensor jitter.
 - **Financial Waste Rate ($/hr)**: Quantifies excess energy consumption (kW) and hourly financial cost impact for every active equipment fault.

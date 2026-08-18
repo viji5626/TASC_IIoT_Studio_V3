@@ -214,5 +214,5 @@ export function queryFddNaturalLanguage(
   }
 
   // Default overview
-  return `### 🛡️ ICONICS FDDWorx Module Status\n- **Monitored Assets:** ${state.assets.length}\n- **Active Faults:** ${state.kpis.activeCount} (${state.kpis.criticalCount} Critical, ${state.kpis.highCount} High)\n- **Plant Average Health Index:** ${state.kpis.avgHealthIndex}%\n- **Energy Waste Rate:** ${state.kpis.totalEnergyWasteKw} kW (${sym}${state.kpis.totalCostPerHour}/hr)\n- **Open Work Orders:** ${state.kpis.openWorkOrdersCount}`;
+  return `### 🛡️ TASC FDD Predictive Module Status\n- **Monitored Assets:** ${state.assets.length}\n- **Active Faults:** ${state.kpis.activeCount} (${state.kpis.criticalCount} Critical, ${state.kpis.highCount} High)\n- **Plant Average Health Index:** ${state.kpis.avgHealthIndex}%\n- **Energy Waste Rate:** ${state.kpis.totalEnergyWasteKw} kW (${sym}${state.kpis.totalCostPerHour}/hr)\n- **Open Work Orders:** ${state.kpis.openWorkOrdersCount}`;
 }

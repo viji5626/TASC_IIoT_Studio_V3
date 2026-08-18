@@ -67,7 +67,7 @@ export const UserManualView: React.FC<UserManualViewProps> = ({
                   <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl">
                     <span className="inline-block w-5 h-5 rounded-full bg-amber-500 text-slate-950 font-bold mb-1">❸</span>
                     <div className="font-bold text-white">TASC Core Engine</div>
-                    <div className="text-[10px] text-slate-400 mt-1">FDDWorx, Alarms, Trend Historian</div>
+                    <div className="text-[10px] text-slate-400 mt-1">FDD Engine, Alarms, Trend Historian</div>
                   </div>
                   <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl">
                     <span className="inline-block w-5 h-5 rounded-full bg-emerald-500 text-slate-950 font-bold mb-1">❹</span>
@@ -327,18 +327,18 @@ export const UserManualView: React.FC<UserManualViewProps> = ({
     {
       id: 'ch7',
       number: 7,
-      title: 'Fault Detection & Diagnostics (FDDWorx) & Predictive Maintenance',
+      title: 'Fault Detection & Diagnostics (FDD) & Predictive Maintenance',
       category: 'Predictive Maintenance',
       icon: 'fa-shield-halved',
       readTime: '8 min',
-      summary: 'ICONICS FDDWorx compatible multi-variable Boolean rule engine, debounce timing, financial energy waste tracking ($/hr), AI Root Cause Analysis, and Work Orders.',
+      summary: 'Industrial multi-variable Boolean rule engine, debounce timing, financial energy waste tracking ($/hr or ₹/hr), AI Root Cause Analysis, and Work Orders.',
       sections: [
         {
           title: '7.1 Multi-Variable FDD Rule Logic',
           content: (
             <div className="space-y-3 text-xs leading-relaxed text-slate-300">
               <p>
-                Simple threshold alarms only monitor one sensor at a time. <strong>FDDWorx</strong> monitors complex multi-sensor relationships to catch subtle equipment degradation before catastrophic failure occurs.
+                Simple threshold alarms only monitor one sensor at a time. <strong>FDD</strong> monitors complex multi-sensor relationships to catch subtle equipment degradation before catastrophic failure occurs.
               </p>
 
               {/* Annotated FDD Logic Card */}
