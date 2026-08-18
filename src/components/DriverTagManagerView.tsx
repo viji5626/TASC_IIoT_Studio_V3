@@ -1,6 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { AppState, AppView, DriverTag, DriverProtocol, DriverTagDataType, DriverAccessType, ModbusRegisterType } from '../types';
 import { validateDriverTag, exportDriverTagsCsv, parseDriverTagsCsv, parseDriverTagsJson } from '../utils/driverTagManager';
+import { CoachMarkOverlay } from './CoachMarkOverlay';
+import { isTourSuppressed } from '../utils/tourRegistry';
 
 interface DriverTagManagerViewProps {
   onBack?: () => void;
@@ -52,6 +54,13 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
   const tags = appState.driverTags || [];
   const connections = appState.driverConnections || [];
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isTagTourOpen, setIsTagTourOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isTourSuppressed('driver_tag_manager')) {
+      setIsTagTourOpen(true);
+    }
+  }, []);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -208,7 +217,7 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
     <div className="flex-grow overflow-y-auto p-6 max-w-6xl mx-auto space-y-6 w-full">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
+        <div data-tour="tag-header" className="flex items-center space-x-3">
           <button
             type="button"
             onClick={handleBackClick}
@@ -226,6 +235,15 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
         </div>
 
         <div className="flex items-center space-x-3">
+          <button
+            type="button"
+            onClick={() => setIsTagTourOpen(true)}
+            className="flex items-center space-x-1.5 px-3 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-xs font-semibold rounded-xl transition-all cursor-pointer"
+            title="Launch Driver Tag Manager Guided Tour"
+          >
+            <i className="fas fa-wand-magic-sparkles text-indigo-400"></i>
+            <span>Tour</span>
+          </button>
           <input
             type="file"
             ref={fileInputRef}
@@ -252,6 +270,7 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
           </button>
           <button
             type="button"
+            data-tour="tag-add-btn"
             onClick={handleOpenAdd}
             disabled={atLimit}
             className={`flex items-center space-x-2 px-4 py-2 text-white text-sm font-semibold rounded-xl transition-all cursor-pointer ${
@@ -284,7 +303,7 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
       )}
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 items-center bg-slate-800/50 border border-slate-700 p-3.5 rounded-2xl">
+      <div data-tour="tag-search" className="flex flex-wrap gap-3 items-center bg-slate-800/50 border border-slate-700 p-3.5 rounded-2xl">
         <div className="flex-1 min-w-[200px] relative">
           <i className="fas fa-search absolute left-3 top-2.5 text-xs text-slate-400"></i>
           <input
@@ -322,6 +341,7 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
       </div>
 
       {/* Tag Table */}
+      <div data-tour="tag-table">
       {filteredTags.length === 0 ? (
         <div className="bg-slate-800/40 border border-slate-700/80 rounded-2xl p-10 text-center">
           <i className="fas fa-database text-4xl text-violet-400/30 mb-3 block"></i>
@@ -484,6 +504,7 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
           </table>
         </div>
       )}
+      </div>
 
       {/* Add / Edit Modal */}
       {isFormOpen && (
@@ -705,6 +726,13 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Driver Tag Manager Guided Tour Screen Overlay */}
+      <CoachMarkOverlay
+        tourId="driver_tag_manager"
+        isOpen={isTagTourOpen}
+        onClose={() => setIsTagTourOpen(false)}
+      />
     </div>
   );
 };

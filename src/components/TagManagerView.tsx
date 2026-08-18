@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { AppState, TagRegistryEntry, TagType, TagSourceType } from '../types';
 import {
   scanAppTags,
@@ -7,6 +7,8 @@ import {
   exportTagsToCsv,
   parseTagsCsv
 } from '../utils/tagManager';
+import { CoachMarkOverlay } from './CoachMarkOverlay';
+import { isTourSuppressed } from '../utils/tourRegistry';
 
 interface TagManagerViewProps {
   onBack: () => void;
@@ -23,11 +25,18 @@ export const TagManagerView: React.FC<TagManagerViewProps> = ({
   appState,
   onUpdateAppState
 }) => {
+  const [isMqttTagTourOpen, setIsMqttTagTourOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'read' | 'write'>('all');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'detected' | 'imported_manual'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+
+  useEffect(() => {
+    if (!isTourSuppressed('tag_manager')) {
+      setIsMqttTagTourOpen(true);
+    }
+  }, []);
 
   // Selection for Bulk Editor
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
@@ -302,7 +311,7 @@ export const TagManagerView: React.FC<TagManagerViewProps> = ({
       
       {/* Top Header Bar */}
       <header className="bg-slate-900/90 border-b border-slate-800 sticky top-0 z-30 backdrop-blur-md px-4 py-3 sm:px-6 flex items-center justify-between shadow-xl">
-        <div className="flex items-center space-x-3">
+        <div data-tour="mqtt-tag-header" className="flex items-center space-x-3">
           <button
             type="button"
             onClick={onBack}
@@ -328,7 +337,17 @@ export const TagManagerView: React.FC<TagManagerViewProps> = ({
         </div>
 
         {/* Top Header Action Buttons */}
-        <div className="flex items-center space-x-2">
+        <div data-tour="mqtt-tag-actions" className="flex items-center space-x-2">
+          <button
+            type="button"
+            onClick={() => setIsMqttTagTourOpen(true)}
+            className="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer shadow-sm"
+            title="Launch MQTT Tag Manager Guided Tour"
+          >
+            <i className="fas fa-wand-magic-sparkles text-indigo-400"></i>
+            <span>Tour</span>
+          </button>
+
           <button
             type="button"
             onClick={handleExportCsv}
@@ -1178,6 +1197,12 @@ export const TagManagerView: React.FC<TagManagerViewProps> = ({
         </div>
       )}
 
+      {/* MQTT Tag Manager Guided Tour Screen Overlay */}
+      <CoachMarkOverlay
+        tourId="tag_manager"
+        isOpen={isMqttTagTourOpen}
+        onClose={() => setIsMqttTagTourOpen(false)}
+      />
     </div>
   );
 };

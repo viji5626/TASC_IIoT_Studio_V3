@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MqttConnection, Dashboard } from '../types';
+import { CoachMarkOverlay } from './CoachMarkOverlay';
+import { isTourSuppressed } from '../utils/tourRegistry';
 
 interface AddConnectionViewProps {
   onCancel: () => void;
@@ -27,7 +29,14 @@ const AddConnectionView: React.FC<AddConnectionViewProps> = ({ onCancel, onCreat
   });
 
   const [dashboards, setDashboards] = useState<Dashboard[]>(initialDashboards);
+  const [isBrokerTourOpen, setIsBrokerTourOpen] = useState(false);
   const [editingDashId, setEditingDashId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isTourSuppressed('add_connection')) {
+      setIsBrokerTourOpen(true);
+    }
+  }, []);
   const [dashboardForm, setDashboardForm] = useState<Partial<Dashboard>>({
     dashboardName: '',
     prefixTopic: '',
@@ -135,14 +144,26 @@ const AddConnectionView: React.FC<AddConnectionViewProps> = ({ onCancel, onCreat
 
   return (
     <div className="flex-grow flex flex-col bg-slate-950 overflow-y-auto pb-20">
-      <header className="h-16 flex items-center px-6 border-b border-slate-800 bg-slate-900/90 backdrop-blur-md sticky top-0 z-30">
-        <button onClick={onCancel} className="p-2 mr-3 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors">
-          <i className="fas fa-arrow-left text-lg"></i>
-        </button>
-        <div>
-          <h1 className="text-lg font-bold text-white">{initialData ? 'Edit Connection' : 'Add Connection'}</h1>
-          <p className="text-xs text-slate-400">Broker settings & telemetry parameters</p>
+      <header data-tour="broker-header" className="h-16 flex items-center justify-between px-6 border-b border-slate-800 bg-slate-900/90 backdrop-blur-md sticky top-0 z-30">
+        <div className="flex items-center">
+          <button onClick={onCancel} className="p-2 mr-3 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors">
+            <i className="fas fa-arrow-left text-lg"></i>
+          </button>
+          <div>
+            <h1 className="text-lg font-bold text-white">{initialData ? 'Edit Connection' : 'Add Connection'}</h1>
+            <p className="text-xs text-slate-400">Broker settings & telemetry parameters</p>
+          </div>
         </div>
+
+        <button
+          type="button"
+          onClick={() => setIsBrokerTourOpen(true)}
+          className="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer shadow-sm"
+          title="Launch Broker Settings Guided Tour"
+        >
+          <i className="fas fa-wand-magic-sparkles text-indigo-400"></i>
+          <span>Tour</span>
+        </button>
       </header>
 
       <form className="p-6 space-y-6 max-w-xl mx-auto w-full" onSubmit={(e) => e.preventDefault()}>
@@ -376,6 +397,7 @@ const AddConnectionView: React.FC<AddConnectionViewProps> = ({ onCancel, onCreat
           </button>
           <button 
             type="button" 
+            data-tour="broker-test-btn"
             onClick={() => onCreate(formData, dashboards)} 
             className="flex-1 py-3.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold uppercase tracking-wider rounded-2xl text-xs shadow-lg shadow-sky-500/20 transition-all"
           >
@@ -519,6 +541,13 @@ const AddConnectionView: React.FC<AddConnectionViewProps> = ({ onCancel, onCreat
           </div>
         </div>
       )}
+
+      {/* MQTT Broker Settings Guided Tour Screen Overlay */}
+      <CoachMarkOverlay
+        tourId="add_connection"
+        isOpen={isBrokerTourOpen}
+        onClose={() => setIsBrokerTourOpen(false)}
+      />
     </div>
   );
 };

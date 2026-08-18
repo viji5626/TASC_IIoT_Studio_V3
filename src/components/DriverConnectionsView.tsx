@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppState, AppView, DriverConnection, DriverProtocol } from '../types';
+import { CoachMarkOverlay } from './CoachMarkOverlay';
+import { isTourSuppressed } from '../utils/tourRegistry';
 
 interface DriverConnectionsViewProps {
   onBack?: () => void;
@@ -75,6 +77,7 @@ const DriverConnectionsView: React.FC<DriverConnectionsViewProps> = ({
   onDelete
 }) => {
   const connections = appState.driverConnections || [];
+  const [isDriverTourOpen, setIsDriverTourOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingConn, setEditingConn] = useState<Partial<DriverConnection>>(emptyConn());
   const [isEditing, setIsEditing] = useState(false);
@@ -82,6 +85,12 @@ const DriverConnectionsView: React.FC<DriverConnectionsViewProps> = ({
   const [detectedPorts, setDetectedPorts] = useState<Array<{ port: string; name: string; description?: string }>>([]);
   const [isScanningPorts, setIsScanningPorts] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isTourSuppressed('driver_connections')) {
+      setIsDriverTourOpen(true);
+    }
+  }, []);
 
   const scanSerialPorts = async () => {
     setIsScanningPorts(true);
@@ -157,7 +166,7 @@ const DriverConnectionsView: React.FC<DriverConnectionsViewProps> = ({
     <div className="flex-grow overflow-y-auto p-6 max-w-5xl mx-auto w-full">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center space-x-3">
+        <div data-tour="drv-header" className="flex items-center space-x-3">
           <button
             type="button"
             onClick={handleBackClick}
@@ -174,17 +183,30 @@ const DriverConnectionsView: React.FC<DriverConnectionsViewProps> = ({
             <p className="text-xs text-slate-400 mt-0.5">Manage industrial hardware communication channels (OPC UA, Modbus TCP, Modbus RTU, RS-485, RS-232, Serial)</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={handleOpenAdd}
-          className="flex items-center space-x-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold rounded-xl transition-all cursor-pointer"
-        >
-          <i className="fas fa-plus text-xs"></i>
-          <span>Add Connection</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            type="button"
+            onClick={() => setIsDriverTourOpen(true)}
+            className="flex items-center space-x-1.5 px-3 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-xs font-semibold rounded-xl transition-all cursor-pointer"
+            title="Launch Driver Connections Guided Tour"
+          >
+            <i className="fas fa-wand-magic-sparkles text-indigo-400"></i>
+            <span>Tour</span>
+          </button>
+          <button
+            type="button"
+            data-tour="drv-add-btn"
+            onClick={handleOpenAdd}
+            className="flex items-center space-x-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold rounded-xl transition-all cursor-pointer"
+          >
+            <i className="fas fa-plus text-xs"></i>
+            <span>Add Connection</span>
+          </button>
+        </div>
       </div>
 
       {/* Connection List */}
+      <div data-tour="drv-list">
       {connections.length === 0 ? (
         <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-10 text-center">
           <i className="fas fa-plug-circle-bolt text-4xl text-violet-400/30 mb-3 block"></i>
@@ -254,6 +276,7 @@ const DriverConnectionsView: React.FC<DriverConnectionsViewProps> = ({
           ))}
         </div>
       )}
+      </div>
 
       {/* Add/Edit Form Modal */}
       {isFormOpen && (
@@ -733,6 +756,13 @@ const DriverConnectionsView: React.FC<DriverConnectionsViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Driver Connections Guided Tour Screen Overlay */}
+      <CoachMarkOverlay
+        tourId="driver_connections"
+        isOpen={isDriverTourOpen}
+        onClose={() => setIsDriverTourOpen(false)}
+      />
     </div>
   );
 };

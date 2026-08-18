@@ -12,6 +12,8 @@ import {
   HistorianConfig
 } from '../utils/alarmHistorianEngine';
 import { exportAlarmHistoryCSV, exportAlarmHistoryJSON } from '../utils/alarmExporter';
+import { CoachMarkOverlay } from './CoachMarkOverlay';
+import { isTourSuppressed } from '../utils/tourRegistry';
 
 interface AlarmHistorianModalProps {
   isOpen: boolean;
@@ -49,6 +51,7 @@ export const AlarmHistorianModal: React.FC<AlarmHistorianModalProps> = ({
   const [showConfigModal, setShowConfigModal] = useState(false);
 
   const [currentConfig, setCurrentConfig] = useState<HistorianConfig>(getHistorianConfig());
+  const [isAhTourOpen, setIsAhTourOpen] = useState(false);
 
   const refreshData = () => {
     const entries = getAlarmHistory(dashboardId, tabFilter, searchQuery);
@@ -61,6 +64,9 @@ export const AlarmHistorianModal: React.FC<AlarmHistorianModalProps> = ({
     if (isOpen) {
       setCurrentConfig(getHistorianConfig());
       refreshData();
+      if (!isTourSuppressed('alarm_historian')) {
+        setIsAhTourOpen(true);
+      }
       const interval = setInterval(refreshData, 1000);
       return () => clearInterval(interval);
     }
@@ -85,7 +91,7 @@ export const AlarmHistorianModal: React.FC<AlarmHistorianModalProps> = ({
         }`}
       >
         {/* Modal Header */}
-        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950/90 px-3 sm:px-5 py-1.5 sm:py-2.5 border-b border-indigo-500/30 flex items-center justify-between shrink-0">
+        <div data-tour="ah-header" className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950/90 px-3 sm:px-5 py-1.5 sm:py-2.5 border-b border-indigo-500/30 flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-2 sm:space-x-3">
             <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shrink-0">
               <i className="fas fa-history text-xs sm:text-sm"></i>
@@ -108,6 +114,16 @@ export const AlarmHistorianModal: React.FC<AlarmHistorianModalProps> = ({
           </div>
 
           <div className="flex items-center space-x-1.5">
+            <button
+              type="button"
+              onClick={() => setIsAhTourOpen(true)}
+              className="px-2 sm:px-3 py-1 sm:py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/50 rounded-lg text-[10px] sm:text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shadow-sm active:scale-95"
+              title="Launch Alarm Historian Guided Tour"
+            >
+              <i className="fas fa-wand-magic-sparkles text-indigo-400"></i>
+              <span className="hidden sm:inline">Tour</span>
+            </button>
+
             {onOpenLiveAlarms && (
               <button
                 onClick={onOpenLiveAlarms}
@@ -173,6 +189,8 @@ export const AlarmHistorianModal: React.FC<AlarmHistorianModalProps> = ({
             </button>
 
             <button
+              type="button"
+              data-tour="ah-export-btn"
               onClick={() => exportAlarmHistoryCSV(historyEntries)}
               className="px-2 py-0.5 sm:px-3 sm:py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded-md text-[10px] sm:text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer active:scale-95"
               title="Export alarm history to CSV file"
@@ -551,6 +569,13 @@ export const AlarmHistorianModal: React.FC<AlarmHistorianModalProps> = ({
           </div>
         </div>
       )}
+
+      {/* Alarm Historian Guided Tour Screen Overlay */}
+      <CoachMarkOverlay
+        tourId="alarm_historian"
+        isOpen={isAhTourOpen}
+        onClose={() => setIsAhTourOpen(false)}
+      />
     </div>
   );
 };

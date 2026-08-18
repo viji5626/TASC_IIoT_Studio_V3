@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { AppState, ProductEdition } from '../types';
 import {
   scanAppTopics,
@@ -11,6 +11,8 @@ import {
   TopicDirection,
   AffectedWidgetPreview,
 } from '../utils/topicManager';
+import { CoachMarkOverlay } from './CoachMarkOverlay';
+import { isTourSuppressed } from '../utils/tourRegistry';
 
 interface TopicManagerViewProps {
   onBack: () => void;
@@ -26,9 +28,16 @@ export const TopicManagerView: React.FC<TopicManagerViewProps> = ({
   onUpdateAppState,
   userRole,
 }) => {
+  const [isTopicTourOpen, setIsTopicTourOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [directionFilter, setDirectionFilter] = useState<'all' | 'publish' | 'subscribe' | 'both' | 'warnings'>('all');
   const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!isTourSuppressed('topic_manager')) {
+      setIsTopicTourOpen(true);
+    }
+  }, []);
 
   // Modals state
   const [editingTopicEntry, setEditingTopicEntry] = useState<TopicRegistryEntry | null>(null);
@@ -176,7 +185,7 @@ export const TopicManagerView: React.FC<TopicManagerViewProps> = ({
     <div className="flex-grow flex flex-col bg-[#0a0a0a] overflow-y-auto text-slate-100 min-h-screen">
       {/* Header Bar */}
       <header className="h-16 flex items-center justify-between px-4 sm:px-6 border-b border-slate-800 bg-slate-900/90 backdrop-blur-md shrink-0 sticky top-0 z-30">
-        <div className="flex items-center space-x-3">
+        <div data-tour="topic-header" className="flex items-center space-x-3">
           <button
             onClick={onBack}
             className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-all cursor-pointer"
@@ -198,8 +207,20 @@ export const TopicManagerView: React.FC<TopicManagerViewProps> = ({
         </div>
 
         <div className="flex items-center space-x-2">
+          <button
+            type="button"
+            onClick={() => setIsTopicTourOpen(true)}
+            className="py-2 px-3 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-xs font-semibold rounded-xl transition-all flex items-center space-x-1.5 cursor-pointer"
+            title="Launch MQTT Topic Manager Guided Tour"
+          >
+            <i className="fas fa-wand-magic-sparkles text-indigo-400"></i>
+            <span>Tour</span>
+          </button>
+
           {!isReadOnly && (
             <button
+              type="button"
+              data-tour="topic-bulk-replace"
               onClick={() => setIsBulkModalOpen(true)}
               className="py-2 px-3 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-slate-950 font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center space-x-1.5 cursor-pointer"
               title="Bulk replace prefixes, paths, or device IDs"
@@ -210,6 +231,7 @@ export const TopicManagerView: React.FC<TopicManagerViewProps> = ({
           )}
 
           <button
+            type="button"
             onClick={handleExportTopicMap}
             className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl border border-slate-700 transition-all flex items-center space-x-1.5 cursor-pointer"
             title="Export Topic Mapping JSON"
@@ -777,6 +799,13 @@ export const TopicManagerView: React.FC<TopicManagerViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* MQTT Topic Manager Guided Tour Screen Overlay */}
+      <CoachMarkOverlay
+        tourId="topic_manager"
+        isOpen={isTopicTourOpen}
+        onClose={() => setIsTopicTourOpen(false)}
+      />
     </div>
   );
 };

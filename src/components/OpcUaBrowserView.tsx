@@ -1,5 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { AppState, AppView, DriverTag, DriverConnection } from '../types';
+import { CoachMarkOverlay } from './CoachMarkOverlay';
+import { isTourSuppressed } from '../utils/tourRegistry';
 
 interface OpcUaBrowserViewProps {
   onBack?: () => void;
@@ -46,6 +48,13 @@ const OpcUaBrowserView: React.FC<OpcUaBrowserViewProps> = ({ onBack, appState, o
   const [searchQuery, setSearchQuery] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set());
+  const [isOpcTourOpen, setIsOpcTourOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isTourSuppressed('opc_ua_browser')) {
+      setIsOpcTourOpen(true);
+    }
+  }, []);
 
   const opcuaConnections: DriverConnection[] = (appState.driverConnections || []).filter(
     c => c.protocol === 'opcua' && c.enabled
@@ -335,7 +344,7 @@ const OpcUaBrowserView: React.FC<OpcUaBrowserViewProps> = ({ onBack, appState, o
     <div className="p-4 max-w-7xl mx-auto h-full flex flex-col">
 
       {/* Header */}
-      <div className="flex items-center space-x-3 mb-4">
+      <div data-tour="opc-header" className="flex items-center space-x-3 mb-4">
         <button
           type="button"
           onClick={() => {
@@ -354,6 +363,15 @@ const OpcUaBrowserView: React.FC<OpcUaBrowserViewProps> = ({ onBack, appState, o
           <p className="text-sm text-slate-400">Browse OPC UA address space and import nodes as driver tags</p>
         </div>
         <div className="ml-auto flex items-center space-x-2">
+          <button
+            type="button"
+            onClick={() => setIsOpcTourOpen(true)}
+            className="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer shadow-sm"
+            title="Launch OPC UA Browser Guided Tour"
+          >
+            <i className="fas fa-wand-magic-sparkles text-indigo-400"></i>
+            <span>Tour</span>
+          </button>
           <span className={`w-2 h-2 rounded-full ${statusDot}`}></span>
           <span className={`text-xs font-medium ${statusColor}`}>{status.toUpperCase()}</span>
         </div>
@@ -428,7 +446,7 @@ const OpcUaBrowserView: React.FC<OpcUaBrowserViewProps> = ({ onBack, appState, o
         <div className="flex-1 flex gap-4 min-h-0">
 
           {/* Tree pane */}
-          <div className="flex-1 flex flex-col min-h-0 bg-slate-800/30 border border-slate-700 rounded-xl overflow-hidden">
+          <div data-tour="opc-tree" className="flex-1 flex flex-col min-h-0 bg-slate-800/30 border border-slate-700 rounded-xl overflow-hidden">
             <div className="px-3 py-2 border-b border-slate-700 flex items-center space-x-2">
               <i className="fas fa-search text-slate-500 text-xs"></i>
               <input
@@ -549,6 +567,13 @@ const OpcUaBrowserView: React.FC<OpcUaBrowserViewProps> = ({ onBack, appState, o
           </div>
         </div>
       )}
+
+      {/* OPC UA Browser Guided Tour Screen Overlay */}
+      <CoachMarkOverlay
+        tourId="opc_ua_browser"
+        isOpen={isOpcTourOpen}
+        onClose={() => setIsOpcTourOpen(false)}
+      />
     </div>
   );
 };

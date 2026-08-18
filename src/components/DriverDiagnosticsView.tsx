@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppState, AppView } from '../types';
+import { CoachMarkOverlay } from './CoachMarkOverlay';
+import { isTourSuppressed } from '../utils/tourRegistry';
 
 interface DriverDiagnosticsViewProps {
   onBack?: () => void;
@@ -8,15 +10,22 @@ interface DriverDiagnosticsViewProps {
 }
 
 const DriverDiagnosticsView: React.FC<DriverDiagnosticsViewProps> = ({ onBack, appState, onNavigate }) => {
+  const [isDiagTourOpen, setIsDiagTourOpen] = useState(false);
   const connections = appState.driverConnections || [];
   const tags = appState.driverTags || [];
   const driverPanels = (appState.panels || []).filter(p => p.dataSourceMode === 'driver');
+
+  useEffect(() => {
+    if (!isTourSuppressed('driver_diagnostics')) {
+      setIsDiagTourOpen(true);
+    }
+  }, []);
 
   return (
     <div className="flex-grow overflow-y-auto p-6 max-w-5xl mx-auto w-full space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-        <div className="flex items-center space-x-3">
+        <div data-tour="diag-header" className="flex items-center space-x-3">
           <button
             type="button"
             onClick={() => {
@@ -35,6 +44,16 @@ const DriverDiagnosticsView: React.FC<DriverDiagnosticsViewProps> = ({ onBack, a
             <p className="text-xs text-slate-400">Live connection health, tag configuration audit, and widget bindings</p>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={() => setIsDiagTourOpen(true)}
+          className="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer shadow-sm"
+          title="Launch Driver Diagnostics Guided Tour"
+        >
+          <i className="fas fa-wand-magic-sparkles text-indigo-400"></i>
+          <span>Tour</span>
+        </button>
       </div>
 
       {/* Summary KPI Cards */}
@@ -275,6 +294,13 @@ const DriverDiagnosticsView: React.FC<DriverDiagnosticsViewProps> = ({ onBack, a
           </div>
         )}
       </div>
+
+      {/* Driver Diagnostics Guided Tour Screen Overlay */}
+      <CoachMarkOverlay
+        tourId="driver_diagnostics"
+        isOpen={isDiagTourOpen}
+        onClose={() => setIsDiagTourOpen(false)}
+      />
     </div>
   );
 };

@@ -15,6 +15,8 @@ import { AiChatPanel } from './AiChatPanel';
 import { PasteApiSnippet } from './PasteApiSnippet';
 import { ParsedSnippet } from '../utils/aiSnippetParser';
 import { LocalAiServerControl } from './LocalAiServerControl';
+import { CoachMarkOverlay } from './CoachMarkOverlay';
+import { isTourSuppressed } from '../utils/tourRegistry';
 
 interface Props {
   onBack?: () => void;
@@ -148,8 +150,15 @@ export const AiAssistantView: React.FC<Props> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [streamingText, setStreamingText] = useState<string>('');
   const [sessionRevision, setSessionRevision] = useState(0);
+  const [isAiTourOpen, setIsAiTourOpen] = useState(false);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!isTourSuppressed('ai_assistant')) {
+      setIsAiTourOpen(true);
+    }
+  }, []);
 
   // Always keep tools context updated with live telemetry
   useEffect(() => {
@@ -523,7 +532,7 @@ export const AiAssistantView: React.FC<Props> = ({
         </header>
       ) : (
         /* Full Workstation View Header for Side Menu AI Assistant */
-        <header className="bg-slate-900 border-b border-slate-800 px-4 sm:px-6 py-3 flex items-center justify-between shrink-0 sticky top-0 z-30">
+        <header data-tour="ai-header" className="bg-slate-900 border-b border-slate-800 px-4 sm:px-6 py-3 flex items-center justify-between shrink-0 sticky top-0 z-30">
           <div className="flex items-center space-x-3">
             {onBack && (
               <button
@@ -572,6 +581,16 @@ export const AiAssistantView: React.FC<Props> = ({
 
           {/* Right Section: Clear Chat Button & Tab Switcher */}
           <div className="flex items-center space-x-2.5">
+            <button
+              type="button"
+              onClick={() => setIsAiTourOpen(true)}
+              className="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer shadow-sm"
+              title="Launch AI Copilot Guided Tour"
+            >
+              <i className="fas fa-wand-magic-sparkles text-indigo-400"></i>
+              <span>Tour</span>
+            </button>
+
             {activeTab === 'chat' && (
               <button
                 type="button"
@@ -651,7 +670,7 @@ export const AiAssistantView: React.FC<Props> = ({
                 <label className="text-xs font-semibold uppercase tracking-wider text-slate-300 block mb-2">
                   Select Provider:
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                <div data-tour="ai-provider-tabs" className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                   {[
                     { id: 'google_gemini', label: 'Google Gemini', desc: 'Flash 2.0 / Pro', icon: 'fa-google' },
                     { id: 'openai', label: 'OpenAI', desc: 'GPT-4o / Mini', icon: 'fa-cube' },
@@ -876,6 +895,15 @@ export const AiAssistantView: React.FC<Props> = ({
           </div>
         )}
       </div>
+
+      {/* AI Assistant Guided Tour Screen Overlay */}
+      <CoachMarkOverlay
+        tourId="ai_assistant"
+        isOpen={isAiTourOpen}
+        onClose={() => setIsAiTourOpen(false)}
+      />
     </div>
   );
 };
+
+export default AiAssistantView;

@@ -20,6 +20,8 @@ import {
 } from '../utils/fddEngine';
 import { runFddRootCauseAnalysis, queryFddNaturalLanguage } from '../utils/fddAiDiagnostics';
 import { AppState } from '../types';
+import { CoachMarkOverlay } from './CoachMarkOverlay';
+import { isTourSuppressed } from '../utils/tourRegistry';
 
 interface FddPredictiveMaintenanceModalProps {
   isOpen: boolean;
@@ -35,6 +37,7 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
   appState
 }) => {
   const [fddState, setFddState] = useState<FddState>(() => getFddState());
+  const [isFddTourOpen, setIsFddTourOpen] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'active_faults' | 'asset_tree' | 'trend_overlay' | 'work_orders' | 'rule_builder'>('active_faults');
   const [severityFilter, setSeverityFilter] = useState<string>('ALL');
   const [selectedAssetId, setSelectedAssetId] = useState<string>('asset_chiller_1');
@@ -82,10 +85,13 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
     return () => clearInterval(interval);
   }, [isOpen, latestValues]);
 
-  // Sync state on open
+  // Sync state on open & trigger FDD tour if not suppressed
   useEffect(() => {
     if (isOpen) {
       setFddState(getFddState());
+      if (!isTourSuppressed('fdd')) {
+        setIsFddTourOpen(true);
+      }
     }
   }, [isOpen]);
 
@@ -255,6 +261,16 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
           <div className="flex items-center space-x-2.5">
             <button
               type="button"
+              onClick={() => setIsFddTourOpen(true)}
+              className="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 text-xs font-semibold rounded-xl transition-colors flex items-center space-x-1.5 cursor-pointer"
+              title="Launch FDD & Predictive Maintenance Guided Tour"
+            >
+              <i className="fas fa-wand-magic-sparkles text-indigo-400"></i>
+              <span>Tour</span>
+            </button>
+            <button
+              type="button"
+              data-tour="fdd-sim-btn"
               onClick={handleSimulateMockFault}
               className="px-3 py-1.5 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/40 text-amber-300 text-xs font-semibold rounded-xl transition-colors flex items-center space-x-1.5 cursor-pointer"
               title="Inject simulated chiller fault to test live FDD detection & RCA"
@@ -281,7 +297,7 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
         </div>
 
         {/* KPI Executive Bar */}
-        <div className="bg-slate-900/90 border-b border-slate-800/80 px-6 py-3 grid grid-cols-2 sm:grid-cols-5 gap-3 shrink-0">
+        <div data-tour="fdd-kpis" className="bg-slate-900/90 border-b border-slate-800/80 px-6 py-3 grid grid-cols-2 sm:grid-cols-5 gap-3 shrink-0">
           <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-2.5 flex items-center space-x-3">
             <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${fddState.kpis.activeCount > 0 ? 'bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse' : 'bg-emerald-500/20 text-emerald-400'}`}>
               <i className="fas fa-triangle-exclamation"></i>
@@ -334,7 +350,7 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
         </div>
 
         {/* Natural Language Query Bar */}
-        <div className="bg-slate-950/40 px-6 py-2.5 border-b border-slate-800/80 flex items-center space-x-2">
+        <div data-tour="fdd-nlp-search" className="bg-slate-950/40 px-6 py-2.5 border-b border-slate-800/80 flex items-center space-x-2">
           <i className="fas fa-sparkles text-indigo-400 text-sm"></i>
           <input
             type="text"
@@ -370,7 +386,7 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
         )}
 
         {/* Navigation Tabs */}
-        <div className="px-6 border-b border-slate-800 flex items-center space-x-1 shrink-0 bg-slate-950/30">
+        <div data-tour="fdd-tabs" className="px-6 border-b border-slate-800 flex items-center space-x-1 shrink-0 bg-slate-950/30">
           {[
             { id: 'active_faults', label: 'Active Faults & Cost Matrix', icon: 'fa-triangle-exclamation', count: fddState.activeFaults.length },
             { id: 'asset_tree', label: 'Hierarchical Asset Tree', icon: 'fa-sitemap' },
@@ -1089,6 +1105,13 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
             </div>
           </div>
         )}
+
+        {/* FDD Guided Tour Screen Overlay */}
+        <CoachMarkOverlay
+          tourId="fdd"
+          isOpen={isFddTourOpen}
+          onClose={() => setIsFddTourOpen(false)}
+        />
 
       </div>
     </div>

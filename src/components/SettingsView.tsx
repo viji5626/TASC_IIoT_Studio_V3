@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppState, MqttConnection, ProductEdition } from '../types';
 import { EditionManager } from '../utils/EditionManager';
 import { APP_THEMES } from '../utils/theme';
+import { CoachMarkOverlay } from './CoachMarkOverlay';
+import { isTourSuppressed } from '../utils/tourRegistry';
 
 interface SettingsViewProps {
   onBack: () => void;
@@ -54,6 +56,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const [showRemovePinConfirm, setShowRemovePinConfirm] = useState(false);
   const [enteredPinForRemove, setEnteredPinForRemove] = useState('');
   const [removePinError, setRemovePinError] = useState('');
+  const [isSettingsTourOpen, setIsSettingsTourOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isTourSuppressed('settings')) {
+      setIsSettingsTourOpen(true);
+    }
+  }, []);
 
   const fallbackState: AppState = appState || {
     userRole: 'gate',
@@ -98,11 +107,23 @@ const SettingsView: React.FC<SettingsViewProps> = ({
 
   return (
     <div className="flex-grow flex flex-col bg-[#0a0a0a] overflow-y-auto">
-      <header className="h-16 flex items-center px-4 border-b border-[#222] bg-[#121212] shrink-0">
-        <button onClick={onBack} className="p-2 mr-4 text-gray-400 hover:text-white">
-          <i className="fas fa-arrow-left text-lg"></i>
+      <header data-tour="settings-header" className="h-16 flex items-center justify-between px-4 border-b border-[#222] bg-[#121212] shrink-0">
+        <div className="flex items-center">
+          <button onClick={onBack} className="p-2 mr-4 text-gray-400 hover:text-white">
+            <i className="fas fa-arrow-left text-lg"></i>
+          </button>
+          <h1 className="text-lg font-bold text-white">App Settings</h1>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIsSettingsTourOpen(true)}
+          className="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer shadow-sm"
+          title="Launch App Settings Guided Tour"
+        >
+          <i className="fas fa-wand-magic-sparkles text-indigo-400"></i>
+          <span>Tour</span>
         </button>
-        <h1 className="text-lg font-bold text-white">App Settings</h1>
       </header>
 
       <div className="p-6 space-y-6 max-w-xl mx-auto w-full">
@@ -114,7 +135,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         )}
 
         {/* Security PIN Settings */}
-        <div className="bg-[#121212] p-5 rounded-2xl border border-sky-500/30 space-y-4">
+        <div data-tour="settings-pin" className="bg-[#121212] p-5 rounded-2xl border border-sky-500/30 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2.5">
               <i className="fas fa-shield-halved text-sky-400 text-base shrink-0"></i>
@@ -603,6 +624,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* App Settings Guided Tour Screen Overlay */}
+      <CoachMarkOverlay
+        tourId="settings"
+        isOpen={isSettingsTourOpen}
+        onClose={() => setIsSettingsTourOpen(false)}
+      />
     </div>
   );
 };

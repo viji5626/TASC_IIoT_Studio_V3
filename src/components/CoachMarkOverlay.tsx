@@ -1,147 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { AppView } from '../types';
-
-export interface CoachMarkStep {
-  id: string;
-  targetSelector: string;
-  title: string;
-  category: string;
-  badgeColor: string;
-  icon: string;
-  description: string;
-  keyPoints?: string[];
-  preferredPlacement?: 'bottom' | 'top' | 'left' | 'right' | 'auto';
-  targetView?: AppView;
-  specialAction?: 'fdd' | 'alarms' | 'historian' | 'manual';
-  actionLabel?: string;
-}
-
-export const COACH_MARK_STEPS: CoachMarkStep[] = [
-  {
-    id: 'sidebar_menu',
-    targetSelector: '[data-tour="sidebar-btn"]',
-    title: 'Main Navigation & Settings Menu',
-    category: 'Navigation',
-    badgeColor: 'bg-sky-500/20 text-sky-300 border-sky-500/40',
-    icon: 'fa-bars',
-    description: 'Access all system modules from the slide-out menu: MQTT Broker settings, Driver Connections, Tag Managers, OPC UA Browser, System Backups, and App Settings.',
-    keyPoints: [
-      'Switch between screens and dashboard configurations',
-      'Manage user roles (Admin vs Operator Client)'
-    ],
-    preferredPlacement: 'bottom'
-  },
-  {
-    id: 'driver_connections',
-    targetSelector: '[data-tour="drivers-pill"]',
-    title: 'Live Driver & MQTT Connections',
-    category: 'Hardware Communication',
-    badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
-    icon: 'fa-network-wired',
-    description: 'Live communication status pill showing real-time connectivity to Modbus TCP/RTU PLCs, OPC UA servers, and MQTT message brokers with multi-color status dots.',
-    keyPoints: [
-      'Click to view individual driver health and latency',
-      'Quick switch between live and simulated telemetry'
-    ],
-    preferredPlacement: 'bottom'
-  },
-  {
-    id: 'alarm_center',
-    targetSelector: '[data-tour="alarms-btn"]',
-    title: 'Real-Time Alarms & Safety Trips',
-    category: 'Safety & Alerts',
-    badgeColor: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
-    icon: 'fa-bell',
-    description: 'Instant visual pulsating alerts and audible sirens whenever sensor parameters exceed critical safety thresholds or equipment trip tags activate.',
-    keyPoints: [
-      'Displays total active real-time alarm count',
-      'One-click operator acknowledgment with audit logging'
-    ],
-    preferredPlacement: 'bottom',
-    specialAction: 'alarms',
-    actionLabel: 'Open Alarms'
-  },
-  {
-    id: 'historian_window',
-    targetSelector: '[data-tour="historian-btn"]',
-    title: 'Alarm Historian & Audit Log',
-    category: 'Historical Logging',
-    badgeColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
-    icon: 'fa-history',
-    description: 'Persistent FIFO alarm lifecycle historian stored directly in browser IndexedDB. Tracks exact trigger timestamps, trip duration, and operator acknowledgments.',
-    keyPoints: [
-      'Multi-day filtering and search by zone or severity',
-      'One-click export to CSV & Excel audit reports'
-    ],
-    preferredPlacement: 'bottom',
-    specialAction: 'historian',
-    actionLabel: 'View Historian'
-  },
-  {
-    id: 'fdd_predictive',
-    targetSelector: '[data-tour="fdd-btn"]',
-    title: 'Fault Detection & Diagnostics (FDDWorx)',
-    category: 'Predictive Maintenance',
-    badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-    icon: 'fa-shield-halved',
-    description: 'ICONICS FDDWorx compatible predictive engine. Evaluates complex multi-variable rules, calculates hourly energy waste ($/hr), and runs AI Root Cause Analysis (RCA).',
-    keyPoints: [
-      'Catch equipment faults before machines break down',
-      'Generates automated SOP maintenance work orders'
-    ],
-    preferredPlacement: 'bottom',
-    specialAction: 'fdd',
-    actionLabel: 'Open FDD'
-  },
-  {
-    id: 'user_manual',
-    targetSelector: '[data-tour="manual-btn"]',
-    title: 'Engineering User Manual & Handbook',
-    category: 'Documentation',
-    badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
-    icon: 'fa-book-bookmark',
-    description: 'Complete book-style user manual with 11 indexed chapters, interactive schematics with numbered markers, protocol tables, and troubleshooting FAQs.',
-    keyPoints: [
-      'Searchable index of all system features & guides',
-      'Printable hardcopy and PDF export ready'
-    ],
-    preferredPlacement: 'bottom',
-    targetView: AppView.USER_MANUAL,
-    actionLabel: 'Read Manual'
-  },
-  {
-    id: 'view_switcher',
-    targetSelector: '[data-tour="view-toggle"]',
-    title: 'Bento Grid & SCADA Canvas Switcher',
-    category: 'HMI Visualization',
-    badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
-    icon: 'fa-table-cells-large',
-    description: 'Switch between the responsive modular Bento Grid layout and the absolute Web HMI Canvas featuring animated fluid pipes, tanks, and rotating pumps.',
-    keyPoints: [
-      'Toggle layout modes on the fly',
-      'Select active HMI screen from the screen dropdown'
-    ],
-    preferredPlacement: 'bottom'
-  },
-  {
-    id: 'ai_copilot_fab',
-    targetSelector: '[data-tour="ai-copilot"]',
-    title: 'AI Industrial Copilot',
-    category: 'AI Assistant',
-    badgeColor: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
-    icon: 'fa-wand-magic-sparkles',
-    description: 'Your 24/7 intelligent engineering assistant. Ask questions in plain English to query live telemetry, diagnose PLC trips, or analyze blueprint photos.',
-    keyPoints: [
-      'Supports NVIDIA NIM, Google Gemini, and Local Ollama',
-      'Speech dictation with automatic filler word removal'
-    ],
-    preferredPlacement: 'top',
-    targetView: AppView.AI_ASSISTANT,
-    actionLabel: 'Chat with AI'
-  }
-];
+import { CoachMarkStep, ALL_SUBMODULE_TOURS, isTourSuppressed, setTourSuppressed } from '../utils/tourRegistry';
 
 interface CoachMarkOverlayProps {
+  tourId?: string;
+  steps?: CoachMarkStep[];
   isOpen: boolean;
   onClose: () => void;
   onNavigate?: (view: AppView) => void;
@@ -158,6 +21,8 @@ interface RectState {
 }
 
 export const CoachMarkOverlay: React.FC<CoachMarkOverlayProps> = ({
+  tourId = 'global',
+  steps: customSteps,
   isOpen,
   onClose,
   onNavigate,
@@ -168,22 +33,38 @@ export const CoachMarkOverlay: React.FC<CoachMarkOverlayProps> = ({
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [cutoutRect, setCutoutRect] = useState<RectState | null>(null);
   const [cardPos, setCardPos] = useState<{ top: number; left: number }>({ top: 120, left: 100 });
+  const [dontShowAgain, setDontShowAgain] = useState<boolean>(false);
   const cardRef = useRef<HTMLDivElement>(null);
 
-  // Available visible steps (filtered if certain elements e.g. FDD desktop button are not rendered)
+  // Determine active steps from registry or props
+  const allSteps = useMemo(() => {
+    return customSteps || ALL_SUBMODULE_TOURS[tourId] || ALL_SUBMODULE_TOURS.global;
+  }, [customSteps, tourId]);
+
+  // Filter available steps that currently exist in DOM
   const availableSteps = useMemo(() => {
-    return COACH_MARK_STEPS.filter(step => {
-      // If document is available, verify target exists or will exist
-      if (typeof document === 'undefined') return true;
+    if (!isOpen) return allSteps;
+    if (typeof document === 'undefined') return allSteps;
+
+    const visible = allSteps.filter(step => {
       const el = document.querySelector(step.targetSelector);
       return !!el;
     });
-  }, [isOpen]);
 
-  const activeSteps = availableSteps.length > 0 ? availableSteps : COACH_MARK_STEPS;
-  const currentStep = activeSteps[Math.min(currentStepIndex, activeSteps.length - 1)] || COACH_MARK_STEPS[0];
+    return visible.length > 0 ? visible : allSteps;
+  }, [isOpen, allSteps]);
+
+  const currentStep = availableSteps[Math.min(currentStepIndex, availableSteps.length - 1)] || allSteps[0];
   const isFirst = currentStepIndex === 0;
-  const isLast = currentStepIndex === activeSteps.length - 1;
+  const isLast = currentStepIndex === availableSteps.length - 1;
+
+  // Reset index and suppress checkbox state when opened
+  useEffect(() => {
+    if (isOpen) {
+      setCurrentStepIndex(0);
+      setDontShowAgain(isTourSuppressed(tourId));
+    }
+  }, [isOpen, tourId]);
 
   // Measure and position the cutout and floating card
   const updatePosition = useCallback(() => {
@@ -246,23 +127,28 @@ export const CoachMarkOverlay: React.FC<CoachMarkOverlayProps> = ({
     }
   }, [isOpen, currentStep]);
 
+  // Handle Resize & Scroll events strictly while isOpen is true
   useEffect(() => {
     if (!isOpen) return;
 
-    // Run measurement on mount and step change
     updatePosition();
-    const timer = setTimeout(updatePosition, 50);
+    const timer = setTimeout(updatePosition, 60);
 
-    window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition, true);
+    const onResize = () => updatePosition();
+    const onScroll = () => updatePosition();
 
+    window.addEventListener('resize', onResize);
+    window.addEventListener('scroll', onScroll, true);
+
+    // Guaranteed complete listener teardown
     return () => {
       clearTimeout(timer);
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('scroll', onScroll, true);
     };
   }, [isOpen, currentStepIndex, updatePosition]);
 
+  // Zero-DOM Return when suppressed or closed
   if (!isOpen) return null;
 
   const handleNext = () => {
@@ -280,10 +166,12 @@ export const CoachMarkOverlay: React.FC<CoachMarkOverlayProps> = ({
   };
 
   const handleComplete = () => {
-    try {
-      localStorage.setItem('tasc_product_tour_completed', 'true');
-    } catch (e) {
-      console.warn('Unable to persist tour state:', e);
+    // Only permanently suppress if the user checked "Don't show me next time"
+    if (dontShowAgain) {
+      setTourSuppressed(tourId, true);
+    } else {
+      // If unchecked, leave unsuppressed so browser reminds them next time
+      setTourSuppressed(tourId, false);
     }
     onClose();
   };
@@ -307,7 +195,7 @@ export const CoachMarkOverlay: React.FC<CoachMarkOverlayProps> = ({
       {/* SVG Mask for Dark Backdrop Blur + Cutout Window */}
       <svg className="fixed inset-0 w-full h-full pointer-events-none z-[141]">
         <defs>
-          <mask id="coach-mark-cutout-mask">
+          <mask id={`coach-mark-mask-${tourId}`}>
             {/* Opaque white background */}
             <rect x="0" y="0" width="100%" height="100%" fill="white" />
             {/* Cutout transparent hole */}
@@ -332,7 +220,7 @@ export const CoachMarkOverlay: React.FC<CoachMarkOverlayProps> = ({
           width="100%"
           height="100%"
           fill="rgba(2, 6, 23, 0.78)"
-          mask="url(#coach-mark-cutout-mask)"
+          mask={`url(#coach-mark-mask-${tourId})`}
           className="backdrop-blur-[3px] pointer-events-auto cursor-pointer"
           onClick={handleNext}
         />
@@ -349,7 +237,6 @@ export const CoachMarkOverlay: React.FC<CoachMarkOverlayProps> = ({
           }}
           className="fixed rounded-2xl ring-2 ring-sky-400 shadow-[0_0_25px_rgba(56,189,248,0.6)] pointer-events-none z-[142] transition-all duration-300 ease-out"
         >
-          {/* Subtle animated pulsating corner accents */}
           <span className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-sky-300 rounded-tl"></span>
           <span className="absolute -top-1 -right-1 w-3 h-3 border-t-2 border-r-2 border-sky-300 rounded-tr"></span>
           <span className="absolute -bottom-1 -left-1 w-3 h-3 border-b-2 border-l-2 border-sky-300 rounded-bl"></span>
@@ -373,7 +260,7 @@ export const CoachMarkOverlay: React.FC<CoachMarkOverlayProps> = ({
               {currentStep.category}
             </span>
             <span className="text-xs font-mono text-slate-400">
-              <strong className="text-white">{currentStepIndex + 1}</strong> of {activeSteps.length}
+              <strong className="text-white">{currentStepIndex + 1}</strong> of {availableSteps.length}
             </span>
           </div>
 
@@ -413,11 +300,24 @@ export const CoachMarkOverlay: React.FC<CoachMarkOverlayProps> = ({
           </div>
         )}
 
+        {/* "Don't show me next time" checkbox */}
+        <div className="pt-1 flex items-center justify-between">
+          <label className="flex items-center space-x-2 text-xs text-slate-400 hover:text-slate-300 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={dontShowAgain}
+              onChange={(e) => setDontShowAgain(e.target.checked)}
+              className="rounded border-slate-700 bg-slate-800 text-sky-500 focus:ring-0 cursor-pointer"
+            />
+            <span>Don't show this tour next time</span>
+          </label>
+        </div>
+
         {/* Footer Controls: Dots, Prev, Next, Action */}
         <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2">
           {/* Step Dots */}
           <div className="flex items-center space-x-1">
-            {activeSteps.map((s, idx) => (
+            {availableSteps.map((s, idx) => (
               <button
                 key={s.id}
                 type="button"
