@@ -969,9 +969,13 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
                     onChange={(e) => setNewOrderAssetId(e.target.value)}
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"
                   >
-                    {fddState.assets.map(a => (
-                      <option key={a.assetId} value={a.assetId}>{a.name}</option>
-                    ))}
+                    {fddState.assets.length === 0 ? (
+                      <option value="custom_asset">General Plant Asset (Custom)</option>
+                    ) : (
+                      fddState.assets.map(a => (
+                        <option key={a.assetId} value={a.assetId}>{a.name}</option>
+                      ))
+                    )}
                   </select>
                 </div>
 
@@ -1059,15 +1063,19 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
                       setEditingRule({
                         ...editingRule,
                         assetId: e.target.value,
-                        assetName: a?.name || '',
+                        assetName: a?.name || (e.target.value === 'custom_asset' ? 'General Plant Asset' : ''),
                         category: a?.category || 'custom'
                       });
                     }}
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"
                   >
-                    {fddState.assets.map(a => (
-                      <option key={a.assetId} value={a.assetId}>{a.name}</option>
-                    ))}
+                    {fddState.assets.length === 0 ? (
+                      <option value="custom_asset">General Plant Asset (Custom)</option>
+                    ) : (
+                      fddState.assets.map(a => (
+                        <option key={a.assetId} value={a.assetId}>{a.name}</option>
+                      ))
+                    )}
                   </select>
                 </div>
 
