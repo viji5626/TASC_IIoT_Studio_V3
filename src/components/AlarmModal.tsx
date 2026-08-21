@@ -43,10 +43,9 @@ export const AlarmModal: React.FC<AlarmModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[400] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div 
-        className={`bg-[#0f141d] border-2 border-rose-500/60 rounded-2xl shadow-2xl overflow-hidden flex flex-col transition-all ${
-          isMaximized ? 'w-full h-full max-w-none max-h-none rounded-none' : 'w-full max-w-6xl h-[88vh]'
-        }`}
+      <div
+        className={`bg-[#0f141d] border-2 border-rose-500/60 rounded-2xl shadow-2xl overflow-hidden flex flex-col transition-all ${isMaximized ? 'w-full h-full max-w-none max-h-none rounded-none' : 'w-full max-w-6xl h-[88vh]'
+          }`}
       >
         {/* Modal Header */}
         <div className="bg-gradient-to-r from-slate-950 via-rose-950/80 to-amber-950/90 px-3 sm:px-5 py-1.5 sm:py-2.5 border-b border-rose-500/40 flex items-center justify-between shrink-0">
@@ -80,11 +79,10 @@ export const AlarmModal: React.FC<AlarmModalProps> = ({
                     triggerClickHaptic();
                     onToggleAutoPopup();
                   }}
-                  className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded flex items-center space-x-1 font-bold transition-all cursor-pointer ${
-                    isAutoPopupEnabled
+                  className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded flex items-center space-x-1 font-bold transition-all cursor-pointer ${isAutoPopupEnabled
                       ? 'bg-indigo-500/25 text-indigo-300 border border-indigo-500/40 shadow-sm'
                       : 'text-slate-500 hover:text-slate-300'
-                  }`}
+                    }`}
                   title="Toggle Auto Pop-up on New Alarm Trigger"
                 >
                   <i className={`fas ${isAutoPopupEnabled ? 'fa-window-restore text-indigo-400' : 'fa-window-maximize text-slate-500'} text-[10px]`}></i>
@@ -99,11 +97,10 @@ export const AlarmModal: React.FC<AlarmModalProps> = ({
                     triggerClickHaptic();
                     onToggleSound();
                   }}
-                  className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded flex items-center space-x-1 font-bold transition-all cursor-pointer ${
-                    isSoundEnabled
+                  className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded flex items-center space-x-1 font-bold transition-all cursor-pointer ${isSoundEnabled
                       ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 shadow-sm'
                       : 'text-slate-500 hover:text-slate-300'
-                  }`}
+                    }`}
                   title="Toggle Industrial Alarm Sound Siren"
                 >
                   <i className={`fas ${isSoundEnabled ? 'fa-volume-high text-emerald-400 animate-pulse' : 'fa-volume-xmark text-slate-500'} text-[10px]`}></i>
@@ -122,11 +119,10 @@ export const AlarmModal: React.FC<AlarmModalProps> = ({
                     }
                     onToggleVibrate();
                   }}
-                  className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded flex items-center space-x-1 font-bold transition-all cursor-pointer ${
-                    isVibrateEnabled
+                  className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded flex items-center space-x-1 font-bold transition-all cursor-pointer ${isVibrateEnabled
                       ? 'bg-amber-500/25 text-amber-300 border border-amber-500/40 shadow-sm'
                       : 'text-slate-500 hover:text-slate-300'
-                  }`}
+                    }`}
                   title="Toggle 5-Second Mobile Haptic Vibration"
                 >
                   <i className={`fas ${isVibrateEnabled ? 'fa-mobile-retro text-amber-400 animate-pulse' : 'fa-mobile-retro text-slate-500'} text-[10px]`}></i>
@@ -178,22 +174,20 @@ export const AlarmModal: React.FC<AlarmModalProps> = ({
           <div className="flex items-center space-x-1 bg-slate-900 rounded-lg p-0.5 border border-slate-800">
             <button
               onClick={() => setViewMode('CARDS')}
-              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
-                viewMode === 'CARDS'
+              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${viewMode === 'CARDS'
                   ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
                   : 'text-slate-500 hover:text-slate-300'
-              }`}
+                }`}
             >
               <i className="fas fa-table-cells-large mr-1 text-[9px]"></i>
               Cards
             </button>
             <button
               onClick={() => setViewMode('TABLE')}
-              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
-                viewMode === 'TABLE'
+              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${viewMode === 'TABLE'
                   ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
                   : 'text-slate-500 hover:text-slate-300'
-              }`}
+                }`}
             >
               <i className="fas fa-table-list mr-1 text-[9px]"></i>
               Table
@@ -228,25 +222,23 @@ export const AlarmModal: React.FC<AlarmModalProps> = ({
                 return (
                   <div
                     key={alarm.alarmKey}
-                    className={`rounded-xl p-3 border transition-all relative overflow-hidden flex flex-col justify-between space-y-2 shadow-lg ${
-                      isTrip
+                    className={`rounded-xl p-3 border transition-all relative overflow-hidden flex flex-col justify-between space-y-2 shadow-lg ${isTrip
                         ? isUnack
                           ? 'bg-gradient-to-br from-rose-950/90 via-slate-900 to-slate-950 border-rose-500 shadow-rose-950/50 ring-1 ring-rose-500/60 animate-pulse'
                           : 'bg-slate-900/90 border-rose-900/60 opacity-80'
                         : isUnack
-                        ? 'bg-gradient-to-br from-amber-950/80 via-slate-900 to-slate-950 border-amber-500 shadow-amber-950/40'
-                        : 'bg-slate-900/90 border-amber-900/60 opacity-80'
-                    }`}
+                          ? 'bg-gradient-to-br from-amber-950/80 via-slate-900 to-slate-950 border-amber-500 shadow-amber-950/40'
+                          : 'bg-slate-900/90 border-amber-900/60 opacity-80'
+                      }`}
                   >
                     {/* Card Header */}
                     <div className="flex items-start justify-between gap-1.5">
                       <div className="flex items-start space-x-2 overflow-hidden">
                         <div
-                          className={`mt-0.5 w-6 h-6 rounded-lg flex items-center justify-center shrink-0 text-xs font-black ${
-                            isTrip
+                          className={`mt-0.5 w-6 h-6 rounded-lg flex items-center justify-center shrink-0 text-xs font-black ${isTrip
                               ? 'bg-rose-500 text-black shadow-md shadow-rose-500/50'
                               : 'bg-amber-500 text-black shadow-md shadow-amber-500/50'
-                          }`}
+                            }`}
                         >
                           <i className={`fas ${isTrip ? 'fa-skull-crossbones' : 'fa-triangle-exclamation'}`}></i>
                         </div>
@@ -260,11 +252,10 @@ export const AlarmModal: React.FC<AlarmModalProps> = ({
 
                       {/* Alarm Type Chip */}
                       <span
-                        className={`text-[9px] font-mono font-black px-1.5 py-0.5 rounded border uppercase shrink-0 ${
-                          isTrip
+                        className={`text-[9px] font-mono font-black px-1.5 py-0.5 rounded border uppercase shrink-0 ${isTrip
                             ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
                             : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                        }`}
+                          }`}
                       >
                         {alarm.alarmType}
                       </span>
@@ -337,11 +328,10 @@ export const AlarmModal: React.FC<AlarmModalProps> = ({
                     <tr key={alarm.alarmKey} className="hover:bg-slate-800/40 transition-colors">
                       <td className="p-2.5">
                         <span
-                          className={`px-1.5 py-0.5 rounded font-mono font-black text-[9px] uppercase border ${
-                            alarm.alarmType === 'TRIP'
+                          className={`px-1.5 py-0.5 rounded font-mono font-black text-[9px] uppercase border ${alarm.alarmType === 'TRIP'
                               ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
                               : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                          }`}
+                            }`}
                         >
                           {alarm.alarmType}
                         </span>

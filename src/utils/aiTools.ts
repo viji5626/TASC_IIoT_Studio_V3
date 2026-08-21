@@ -5,6 +5,14 @@ import { getAlarmHistory } from './alarmHistorianEngine';
 import { scanAppTopics } from './topicManager';
 import { getFddState, evaluateAllFddRules, saveFddWorkOrder } from './fddEngine';
 import { runFddRootCauseAnalysis, queryFddNaturalLanguage } from './fddAiDiagnostics';
+import {
+  savePlantKnowledgeNote,
+  saveLearnedAlias,
+  getAllPlantKnowledgeNotes,
+  getAllLearnedAliases,
+  getPrecomputedChunk
+} from './aiMemoryStore';
+import { validateTagAlias } from './aiAliasValidator';
 
 export interface AiToolsContext {
   latestValues: Record<string, { val: any; time: string; timestampMs?: number; quality?: string }>;
@@ -311,6 +319,192 @@ export const AI_TOOL_DEFINITIONS: ToolDefinition[] = [
         }
       },
       required: ['prompt']
+    }
+  },
+  {
+    name: 'suggest_report_additions',
+    description: 'Before generating a report, assess the user request and propose 3 intelligent additions the user may not have considered. Returns structured suggestions for the user to select from. Always call this FIRST when a user asks to generate a report, before calling generate_report.',
+    parameters: {
+      type: 'object',
+      properties: {
+        requestId: {
+          type: 'string',
+          description: 'A unique ID string for this report request (e.g. uuid or timestamp string).'
+        },
+        title: {
+          type: 'string',
+          description: 'Brief descriptive title for the report (e.g. "Chiller 1 Weekly Energy Report").'
+        },
+        fromMs: {
+          type: 'number',
+          description: 'Report start time as Unix millisecond timestamp.'
+        },
+        toMs: {
+          type: 'number',
+          description: 'Report end time as Unix millisecond timestamp.'
+        },
+        requestedTags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'List of historian pen IDs or tag names the user requested.'
+        },
+        resolution: {
+          type: 'string',
+          description: 'Aggregation resolution: raw, 1min, 1hour, 1day.'
+        },
+        includeAlarms: {
+          type: 'boolean',
+          description: 'Whether to include alarm events in the report.'
+        },
+        includeFdd: {
+          type: 'boolean',
+          description: 'Whether to include FDD fault analysis in the report.'
+        },
+        suggestions: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'number' },
+              title: { type: 'string' },
+              description: { type: 'string' },
+              addsTags: { type: 'array', items: { type: 'string' } },
+              addsSection: { type: 'string' }
+            }
+          },
+          description: 'Array of exactly 3 suggestion objects (id: 1, 2, 3) that would enhance this report.'
+        }
+      },
+      required: ['requestId', 'title', 'fromMs', 'toMs', 'requestedTags', 'resolution', 'suggestions']
+    }
+  },
+  {
+    name: 'generate_report',
+    description: 'Generate a rich industrial report from historian data with AI narrative, charts, statistics, and alarm log. Call this after the user has reviewed and selected from the suggestions returned by suggest_report_additions. Returns a status object; the report HTML is generated client-side and a download link is shown in the chat.',
+    parameters: {
+      type: 'object',
+      properties: {
+        requestId: {
+          type: 'string',
+          description: 'The same requestId from the suggest_report_additions call.'
+        },
+        title: {
+          type: 'string',
+          description: 'Final report title.'
+        },
+        fromMs: { type: 'number', description: 'Start time Unix ms.' },
+        toMs: { type: 'number', description: 'End time Unix ms.' },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Final list of historian pen IDs or tag names to include (after merging selected suggestions).'
+        },
+        resolution: { type: 'string', description: 'raw | 1min | 1hour | 1day' },
+        includeAlarms: { type: 'boolean' },
+        includeFdd: { type: 'boolean' },
+        selectedSuggestionIds: {
+          type: 'array',
+          items: { type: 'number' },
+          description: 'IDs of suggestions the user selected (e.g. [1, 3]).'
+        },
+        aiSummary: {
+          type: 'string',
+          description: 'AI-authored executive summary paragraph for the report (2-4 sentences).'
+        },
+        aiResults: {
+          type: 'string',
+          description: 'AI-authored results and recommendations section for the report (3-6 bullet points or paragraph).'
+        }
+      },
+      required: ['requestId', 'title', 'fromMs', 'toMs', 'tags', 'resolution', 'aiSummary', 'aiResults']
+    }
+  },
+  {
+    name: 'remember_plant_knowledge',
+    description: 'Save permanent plant operational knowledge, equipment setpoint rules, standard operating procedures (SOP), or technician notes into local on-premise AI memory.',
+    parameters: {
+      type: 'object',
+      properties: {
+        category: {
+          type: 'string',
+          description: 'Category: energy | hvac | electrical | safety | production | general'
+        },
+        topic: {
+          type: 'string',
+          description: 'Short descriptive title or equipment name (e.g. "Chiller-1 Operating Temperature", "Shift 1 Schedule").'
+        },
+        note: {
+          type: 'string',
+          description: 'The detailed knowledge or rule text to permanently remember.'
+        },
+        tagsLinked: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional list of related tag IDs or names.'
+        }
+      },
+      required: ['category', 'topic', 'note']
+    }
+  },
+  {
+    name: 'learn_tag_alias',
+    description: 'Map a colloquial operator nickname or plant vernacular term to a specific physical PLC/SCADA tag ID.',
+    parameters: {
+      type: 'object',
+      properties: {
+        alias: {
+          type: 'string',
+          description: 'The colloquial nickname used by operators (e.g. "Main Incomer", "Inlet Pressure", "Line 1 Speed").'
+        },
+        tagId: {
+          type: 'string',
+          description: 'The physical tag ID or historian pen ID (e.g. "htag_123", "modbus_holding_40001").'
+        },
+        tagName: {
+          type: 'string',
+          description: 'Readable physical tag name.'
+        },
+        notes: {
+          type: 'string',
+          description: 'Optional engineering notes regarding this alias mapping.'
+        }
+      },
+      required: ['alias', 'tagId', 'tagName']
+    }
+  },
+  {
+    name: 'query_learned_knowledge',
+    description: 'Search learned plant SOP notes, operating rules, and tag aliases from local AI memory.',
+    parameters: {
+      type: 'object',
+      properties: {
+        category: {
+          type: 'string',
+          description: 'Optional category filter: energy | hvac | electrical | safety | production | general'
+        },
+        searchQuery: {
+          type: 'string',
+          description: 'Optional keyword to search across topics, notes, and aliases.'
+        }
+      }
+    }
+  },
+  {
+    name: 'get_precomputed_telemetry_chunk',
+    description: 'Retrieve pre-aggregated statistical summaries (Min, Max, Avg, Delta) in sub-10ms from local precomputed chunk storage.',
+    parameters: {
+      type: 'object',
+      properties: {
+        tagId: {
+          type: 'string',
+          description: 'The tag ID to look up.'
+        },
+        date: {
+          type: 'string',
+          description: 'Optional ISO date string (YYYY-MM-DD).'
+        }
+      },
+      required: ['tagId']
     }
   }
 ];
@@ -784,8 +978,175 @@ ${connections.map(c => `- **${c.connectionName}** (${c.brokerAddress}:${c.port})
         });
       }
 
+      case 'suggest_report_additions': {
+        // This tool causes the UI to render suggestion cards in the chat.
+        // The actual suggestion logic is authored by the AI in the tool call arguments.
+        // We just confirm receipt and instruct the AI to display them.
+        const reqId = String(args.requestId || '');
+        const suggestions = (args.suggestions as any[]) || [];
+        const title = String(args.title || 'Report');
+        const fromMs = Number(args.fromMs || 0);
+        const toMs = Number(args.toMs || Date.now());
+        const requestedTags = (args.requestedTags as string[]) || [];
+        const resolution = String(args.resolution || '1hour');
+        const includeAlarms = Boolean(args.includeAlarms);
+        const includeFdd = Boolean(args.includeFdd);
+
+        // Return a special marker that the UI will intercept to render suggestion cards
+        return JSON.stringify({
+          __reportSuggestion: true,
+          requestId: reqId,
+          title,
+          fromMs,
+          toMs,
+          requestedTags,
+          resolution,
+          includeAlarms,
+          includeFdd,
+          suggestions: suggestions.slice(0, 3),
+          instructions: 'The suggestion cards have been displayed to the user. Wait for them to select suggestions in the chat. Do NOT generate the report yet.'
+        });
+      }
+
+      case 'generate_report': {
+        // This tool causes the UI to trigger report generation client-side.
+        // Return a special marker that the UI's aiTools handler intercepts.
+        const reqId = String(args.requestId || '');
+        const title = String(args.title || 'Industrial Report');
+        const fromMs = Number(args.fromMs || 0);
+        const toMs = Number(args.toMs || Date.now());
+        const tags = (args.tags as string[]) || [];
+        const resolution = String(args.resolution || '1hour');
+        const includeAlarms = Boolean(args.includeAlarms ?? true);
+        const includeFdd = Boolean(args.includeFdd ?? false);
+        const selectedSuggestionIds = (args.selectedSuggestionIds as number[]) || [];
+        const aiSummary = String(args.aiSummary || '');
+        const aiResults = String(args.aiResults || '');
+
+        if (!title || !fromMs || !toMs || tags.length === 0) {
+          return JSON.stringify({ error: 'Missing required parameters: title, fromMs, toMs, or tags.' });
+        }
+
+        return JSON.stringify({
+          __generateReport: true,
+          requestId: reqId,
+          title,
+          fromMs,
+          toMs,
+          tags,
+          resolution,
+          includeAlarms,
+          includeFdd,
+          selectedSuggestionIds,
+          aiSummary,
+          aiResults,
+          instructions: 'The report is being generated. A download link will appear in the chat momentarily.'
+        });
+      }
+
+      case 'remember_plant_knowledge': {
+        const category = (String(args.category || 'general').toLowerCase()) as any;
+        const topic = String(args.topic || 'Plant Note');
+        const note = String(args.note || '');
+        const tagsLinked = (args.tagsLinked as string[]) || [];
+
+        if (!note) {
+          return JSON.stringify({ error: 'Note text cannot be empty.' });
+        }
+
+        const saved = await savePlantKnowledgeNote({
+          category,
+          topic,
+          note,
+          tagsLinked,
+          author: 'AI Copilot'
+        });
+
+        return JSON.stringify({
+          success: true,
+          message: `Plant knowledge note "${topic}" permanently recorded in local memory.`,
+          record: saved
+        });
+      }
+
+      case 'learn_tag_alias': {
+        const alias = String(args.alias || '').trim();
+        const tagId = String(args.tagId || '').trim();
+        const tagName = String(args.tagName || tagId).trim();
+        const notes = args.notes ? String(args.notes) : undefined;
+
+        if (!alias || !tagId) {
+          return JSON.stringify({ error: 'Alias and tagId are required.' });
+        }
+
+        const saved = await saveLearnedAlias({
+          alias,
+          tagId,
+          tagName,
+          source: 'operator_chat',
+          confidence: 1.0,
+          notes
+        });
+
+        const validation = validateTagAlias(saved, ctx.appState);
+
+        return JSON.stringify({
+          success: true,
+          message: `Learned tag alias: "${alias}" ➔ ${tagName} (${tagId}).`,
+          status: validation.status,
+          record: saved
+        });
+      }
+
+      case 'query_learned_knowledge': {
+        const categoryFilter = args.category ? String(args.category).toLowerCase() : null;
+        const searchQuery = args.searchQuery ? String(args.searchQuery).toLowerCase() : '';
+
+        const [notes, aliases] = await Promise.all([
+          getAllPlantKnowledgeNotes(),
+          getAllLearnedAliases()
+        ]);
+
+        const filteredNotes = notes
+          .filter(n => !categoryFilter || n.category === categoryFilter)
+          .filter(n => !searchQuery || n.topic.toLowerCase().includes(searchQuery) || n.note.toLowerCase().includes(searchQuery));
+
+        const filteredAliases = aliases
+          .filter(a => !searchQuery || a.alias.toLowerCase().includes(searchQuery) || a.tagName.toLowerCase().includes(searchQuery));
+
+        return JSON.stringify({
+          notesCount: filteredNotes.length,
+          notes: filteredNotes.slice(0, 10),
+          aliasesCount: filteredAliases.length,
+          aliases: filteredAliases.slice(0, 10)
+        });
+      }
+
+      case 'get_precomputed_telemetry_chunk': {
+        const tagId = String(args.tagId || '');
+        const dateStr = args.date ? String(args.date) : new Date().toISOString().slice(0, 10);
+        const chunkKey = `chunk_${tagId}_1d_${dateStr}`;
+
+        const chunk = await getPrecomputedChunk(chunkKey);
+        if (!chunk) {
+          return JSON.stringify({
+            status: 'NOT_FOUND',
+            message: `No precomputed telemetry chunk found for tag ${tagId} on ${dateStr}. Please use query_historian for on-demand aggregation.`
+          });
+        }
+
+        return JSON.stringify({
+          status: 'FOUND',
+          chunkKey: chunk.chunkKey,
+          tagId: chunk.tagId,
+          stats: chunk.stats,
+          generatedAt: chunk.generatedAt
+        });
+      }
+
       default:
         return JSON.stringify({ error: `Unknown tool name: ${name}` });
+
     }
   } catch (err: any) {
     return JSON.stringify({ error: `Tool execution failed: ${err.message}` });

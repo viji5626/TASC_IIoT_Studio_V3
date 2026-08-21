@@ -6,6 +6,9 @@ const PROTOCOL_BADGES: Record<DriverProtocol, { label: string; color: string }> 
   opcda:      { label: 'OPC DA',   color: 'bg-blue-500/15 text-blue-300 border-blue-500/25' },
   modbus_tcp: { label: 'Modbus',   color: 'bg-amber-500/15 text-amber-300 border-amber-500/25' },
   modbus_rtu: { label: 'Modbus',   color: 'bg-amber-500/15 text-amber-300 border-amber-500/25' },
+  iec61850:   { label: 'IEC 61850',color: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25' },
+  s7:         { label: 'Siemens S7',color: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/25' },
+  melsec:     { label: 'MELSEC',   color: 'bg-rose-500/15 text-rose-300 border-rose-500/25' },
   rs485:      { label: 'RS-485',   color: 'bg-orange-500/15 text-orange-300 border-orange-500/25' },
   rs232:      { label: 'RS-232',   color: 'bg-amber-600/15 text-amber-300 border-amber-500/25' },
   usb_serial: { label: 'USB',      color: 'bg-green-500/15 text-green-300 border-green-500/25' },
@@ -57,6 +60,15 @@ const DriverTagSelector: React.FC<DriverTagSelectorProps> = ({
   };
 
   const getAddressPreview = (tag: DriverTag): string => {
+    if (tag.protocol === 'iec61850' || tag.iecPath) {
+      return tag.iecPath || `${tag.logicalDevice || 'LD0'}/${tag.logicalNode || 'MMXU1'}.${tag.dataObject || 'TotW'}.${tag.dataAttribute || 'mag.f'}`;
+    }
+    if (tag.protocol === 's7' || tag.s7Address) {
+      return tag.s7Address || `DB${tag.dbNumber || 1}.DBD${tag.byteOffset || 0}`;
+    }
+    if (tag.protocol === 'melsec' || tag.melsecAddress) {
+      return tag.melsecAddress || `D${tag.address ?? 100}`;
+    }
     if (tag.nodeId) return tag.nodeId;
     if (tag.itemId) return tag.itemId;
     if (tag.address !== undefined) {

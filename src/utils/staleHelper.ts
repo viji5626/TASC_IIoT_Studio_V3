@@ -19,20 +19,24 @@ export function getPanelTelemetryStatus(
   latestValues: Record<string, { val: any; time: string; timestampMs?: number; quality?: string }> = {},
   nowMs: number = Date.now()
 ): TelemetryStatusResult {
-  // Static, decorative, clock, shape, or non-telemetry elements are never marked offline
+  // Find any active dynamic rule tag/topic binding on this panel
+  const dynamicTagKey = panel.dynamics?.find(d => d.enabled && (d.driverTagId || d.topic))?.driverTagId 
+    || panel.dynamics?.find(d => d.enabled && (d.driverTagId || d.topic))?.topic;
+
+  const hasDataBinding = Boolean(panel.topic?.trim() || panel.driverTagId || dynamicTagKey);
+
+  // Static, decorative, clock, or non-telemetry elements without bindings are never marked offline
   const isStaticOrNonTelemetry =
     panel.type === 'static_text' ||
     (panel.type as string) === 'static_text' ||
     (panel.type as string) === 'label' ||
-    panel.type === 'shape' ||
     panel.type === 'clock' ||
     panel.type === 'screen_jump' ||
     panel.type === 'alarm_log' ||
-    (panel.type === 'image' && !panel.topic && !panel.driverTagId);
+    (panel.type === 'image' && !hasDataBinding) ||
+    (!hasDataBinding);
 
-  const hasNoDataBinding = !panel.topic?.trim() && !panel.driverTagId;
-
-  if (isStaticOrNonTelemetry || hasNoDataBinding) {
+  if (isStaticOrNonTelemetry || !hasDataBinding) {
     return {
       hasData: true,
       isStale: false,
@@ -48,10 +52,23 @@ export function getPanelTelemetryStatus(
     dataKey = panel.driverTagId;
   } else if (panel.topic && panel.topic.trim()) {
     dataKey = panel.topic.trim();
+  } else if (dynamicTagKey) {
+    dataKey = dynamicTagKey.trim();
   }
 
   // Lookup in latestValues store
   let liveData = dataKey ? (latestValues[dataKey] || latestValues[panel.panelId]) : latestValues[panel.panelId];
+
+  // Try finding by clean key, case-insensitive or tag_panel_ prefix if not found directly
+  if (!liveData && dataKey) {
+    const cleanKey = dataKey.trim().toLowerCase();
+    for (const [k, v] of Object.entries(latestValues)) {
+      if (k.toLowerCase() === cleanKey || k.toLowerCase() === `tag_panel_${cleanKey}`) {
+        liveData = v;
+        break;
+      }
+    }
+  }
 
   // Also check clean topic format
   if (!liveData && panel.topic) {

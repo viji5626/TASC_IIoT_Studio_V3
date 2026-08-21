@@ -9,7 +9,9 @@ import {
   PanelType,
   MqttMessageLog,
   ProductEdition,
-  ActiveAlarm
+  ActiveAlarm,
+  HistorianTag,
+  HistorianConfig
 } from './types';
 import PanelCard from './components/PanelCard';
 import BentoGrid from './components/BentoGrid';
@@ -33,6 +35,7 @@ import ExitSessionModal from './components/ExitSessionModal';
 import ClearAllModal from './components/ClearAllModal';
 import TopicManagerView from './components/TopicManagerView';
 import TagManagerView from './components/TagManagerView';
+import { HistorianTrendView } from './components/HistorianTrendView';
 import DriverConnectionsView from './components/DriverConnectionsView';
 import DriverTagManagerView from './components/DriverTagManagerView';
 import OpcUaBrowserView from './components/OpcUaBrowserView';
@@ -51,6 +54,10 @@ import { ConfirmModal } from './components/ConfirmModal';
 import { FddPredictiveMaintenanceModal } from './components/FddPredictiveMaintenanceModal';
 import { CoachMarkOverlay } from './components/CoachMarkOverlay';
 import { UserManualView } from './components/UserManualView';
+import { ReportingView } from './components/ReportingView';
+import { initReportScheduler, getUnreadScheduledCount } from './utils/reportScheduler';
+import { initAiMemoryWorker } from './utils/aiChunkingWorker';
+
 import { useDeviceCapability } from './utils/deviceDetection';
 import { MultiDriverStatusPill } from './components/MultiDriverStatusPill';
 import {
@@ -77,8 +84,6 @@ import { AiChatDrawer } from './components/AiChatDrawer';
 import { AiErrorBoundary } from './components/AiErrorBoundary';
 import { triggerHaptic, stopHaptic, initMobileHapticPriming, triggerAckHaptic } from './utils/hapticFeedback';
 
-const sampleInitial = getSampleProject('conn_demo', undefined, undefined, true);
-
 const INITIAL_STATE: AppState = {
   connections: [
     {
@@ -94,9 +99,18 @@ const INITIAL_STATE: AppState = {
       connected: false
     }
   ],
-  dashboards: sampleInitial.dashboards,
-  panels: sampleInitial.panels,
+  dashboards: [
+    {
+      dashboardId: 'dash_main',
+      dashboardName: 'Main Dashboard',
+      connectionId: 'conn_demo',
+      isHome: true,
+      themeColor: '#38bdf8'
+    }
+  ],
+  panels: [],
   driverConnections: [
+
     {
       connectionId: 'conn_modbus_local',
       connectionName: 'Local Modbus TCP Server',
@@ -108,6 +122,7 @@ const INITIAL_STATE: AppState = {
       connected: false
     }
   ],
+
   driverTags: [
     {
       tagId: 'tag_modbus_reg0',
@@ -123,7 +138,17 @@ const INITIAL_STATE: AppState = {
       enabled: true,
       unit: ''
     }
-  ]
+  ],
+  historianConfig: {
+    enabled: true,
+    logIntervalSeconds: 10,
+    retentionValue: 30,
+    retentionUnit: 'DAYS',
+    logStorageCapMb: 1000,
+    archiveAfterMonths: 1,
+    archiveClusterDuration: '1_WEEK'
+  },
+  historianTags: []
 };
 
 export function App() {
@@ -502,7 +527,11 @@ export function App() {
       return () => clearTimeout(timer);
     }
   }, [userRole, productEdition, appState.isLockedPackage, currentView]);
+
+  const { isDesktop, isMobile } = useDeviceCapability();
   const [activeMode, setActiveMode] = useState<'grid' | 'hmi'>('grid');
+
+
   const [isEngineeringChoiceOpen, setIsEngineeringChoiceOpen] = useState(false);
   const [activeConnectionId, setActiveConnectionId] = useState<string>(
     appState.connections[0]?.connectionId || ''
@@ -527,9 +556,105 @@ export function App() {
   const [isLayoutMode, setIsLayoutMode] = useState(false);
   const [selectedPanelId, setSelectedPanelId] = useState<string | null>(null);
 
+  const [unreadScheduledReports, setUnreadScheduledReports] = useState<number>(0);
+
+  // Initialize Background Report Scheduler Engine & unread tracking
+  useEffect(() => {
+    initReportScheduler();
+    setUnreadScheduledReports(getUnreadScheduledCount());
+
+    const onScheduledReportEvent = () => {
+      setUnreadScheduledReports(getUnreadScheduledCount());
+    };
+
+    window.addEventListener('tasc_scheduled_report_event', onScheduledReportEvent);
+    return () => window.removeEventListener('tasc_scheduled_report_event', onScheduledReportEvent);
+  }, []);
+
   // Auto-dismiss locked notice after 5 seconds
   useEffect(() => {
     initMobileHapticPriming();
+  }, []);
+
+  // Initialize Dedicated Client-Side AI Memory & Pre-Chunking Worker
+  useEffect(() => {
+    const cleanup = initAiMemoryWorker();
+    return cleanup;
+  }, []);
+
+
+
+  // Auto-initialize HistorianConfig and auto-migrate legacy LineGraph pens into historianTags if empty
+  useEffect(() => {
+    setAppState(prev => {
+      let changed = false;
+      let newHistConfig = prev.historianConfig;
+      if (!newHistConfig) {
+        newHistConfig = {
+          enabled: true,
+          logIntervalSeconds: 10,
+          retentionValue: 30,
+          retentionUnit: 'DAYS',
+          logStorageCapMb: 1000,
+          archiveAfterMonths: 1,
+          archiveClusterDuration: '1_WEEK'
+        };
+        changed = true;
+      }
+
+      let newHistTags = prev.historianTags || [];
+      if (newHistTags.length === 0 && prev.panels && prev.panels.length > 0) {
+        const migrated: HistorianTag[] = [];
+        prev.panels.forEach(p => {
+          if (p.type === PanelType.LINE_GRAPH) {
+            if (p.pens && p.pens.length > 0) {
+              p.pens.forEach((pen, i) => {
+                if (pen.topic || pen.driverTagId) {
+                  migrated.push({
+                    id: pen.id || `htag_${Date.now()}_${i}`,
+                    name: pen.name || `Trend Pen ${i + 1}`,
+                    sourceType: pen.driverTagId ? 'driver' : 'mqtt',
+                    topic: pen.topic,
+                    jsonPath: pen.jsonPath,
+                    driverTagId: pen.driverTagId,
+                    unit: pen.unit,
+                    color: pen.color,
+                    enabled: pen.loggingEnabled !== false,
+                    createdAt: new Date().toISOString()
+                  });
+                }
+              });
+            } else if (p.topic || p.driverTagId) {
+              migrated.push({
+                id: `htag_${Date.now()}_0`,
+                name: p.title || 'Trend Signal',
+                sourceType: p.driverTagId ? 'driver' : 'mqtt',
+                topic: p.topic,
+                jsonPath: p.jsonPath,
+                driverTagId: p.driverTagId,
+                unit: p.unit,
+                color: p.color || '#38bdf8',
+                enabled: true,
+                createdAt: new Date().toISOString()
+              });
+            }
+          }
+        });
+        if (migrated.length > 0) {
+          newHistTags = migrated;
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        return {
+          ...prev,
+          historianConfig: newHistConfig,
+          historianTags: newHistTags
+        };
+      }
+      return prev;
+    });
   }, []);
 
   useEffect(() => {
@@ -683,8 +808,8 @@ export function App() {
       return false;
     }
   });
-  const { isDesktop } = useDeviceCapability();
   const [isVibrateEnabled, setIsVibrateEnabled] = useState(true);
+
   const [isSoundEnabled, setIsSoundEnabled] = useState(true);
   const [isAutoPopupEnabled, setIsAutoPopupEnabled] = useState(true);
   const [acknowledgedAlarms, setAcknowledgedAlarms] = useState<Record<string, boolean>>({});
@@ -956,7 +1081,7 @@ export function App() {
       const lastGoodValue = hasNewValue ? update.value : (update.lastGoodValue ?? existingTag?.lastGoodValue ?? existingPanel?.lastGoodValue);
       const lastGoodTimestamp = hasNewValue ? (update.timestamp || new Date().toISOString()) : (update.lastGoodTimestamp || existingTag?.lastGoodTimestamp || existingPanel?.lastGoodTimestamp);
 
-      return {
+      const nextState: Record<string, any> = {
         ...prev,
         [update.panelId]: {
           val: panelVal,
@@ -975,6 +1100,19 @@ export function App() {
           lastGoodTimestamp
         }
       };
+
+      if (update.tagName) {
+        nextState[update.tagName] = {
+          val: tagVal,
+          time: timeStr,
+          timestampMs: tagTimestamp,
+          quality: update.quality || 'good',
+          lastGoodValue,
+          lastGoodTimestamp
+        };
+      }
+
+      return nextState;
     });
 
     setAppState(prev => {
@@ -984,13 +1122,18 @@ export function App() {
       const hasNewValue = update.value !== null && update.value !== undefined;
 
       const updatedTags = prev.driverTags.map(t => {
-        if (t.tagId === update.tagId || t.tagName === update.tagId) {
-          changed = true;
+        if (t.tagId === update.tagId || t.tagName === update.tagId || (update.tagName && t.tagName === update.tagName)) {
+          const newQuality = (update.quality || 'good') as any;
+          const newRuntime = isBad ? ('bad' as const) : ('healthy' as const);
+          const newVal = hasNewValue ? update.value : (isBad ? null : t.lastValue);
+          if (t.quality !== newQuality || t.runtimeState !== newRuntime || t.lastValue !== newVal) {
+            changed = true;
+          }
           return {
             ...t,
-            quality: (update.quality || 'good') as any,
-            runtimeState: isBad ? ('bad' as const) : ('healthy' as const),
-            lastValue: hasNewValue ? update.value : (isBad ? null : t.lastValue),
+            quality: newQuality,
+            runtimeState: newRuntime,
+            lastValue: newVal,
             lastGoodValue: hasNewValue ? update.value : (update.lastGoodValue ?? t.lastGoodValue),
             lastGoodTimestamp: hasNewValue ? (update.timestamp || new Date().toISOString()) : (update.lastGoodTimestamp ?? t.lastGoodTimestamp),
             lastTimestamp: update.timestamp || new Date().toISOString()
@@ -1013,6 +1156,21 @@ export function App() {
           [update.panelId]: [...(prev[update.panelId] || []), newPt].slice(-3600)
         };
 
+        // 1. Centralized Historian Engine continuous logging
+        const histCfg = appStateRef.current.historianConfig;
+        const globalHistEnabled = histCfg?.enabled !== false;
+        const globalInterval = histCfg?.logIntervalSeconds || 10;
+
+        if (globalHistEnabled && appStateRef.current.historianTags) {
+          appStateRef.current.historianTags.forEach(ht => {
+            if (ht.enabled !== false && ht.sourceType === 'driver' && (ht.driverTagId === update.tagId || ht.id === update.tagId)) {
+              const effectiveInterval = ht.useCustomInterval && ht.customIntervalSeconds ? ht.customIntervalSeconds : globalInterval;
+              enqueueTelemetryPoint(ht.id, ht.driverTagId || ht.id, numVal, effectiveInterval, ht.id);
+            }
+          });
+        }
+
+        // 2. Legacy panel pen updates and backwards compatibility
         (appStateRef.current.panels || []).forEach(p => {
           if (p.pens && p.pens.length > 0) {
             p.pens.forEach(pen => {
@@ -1281,6 +1439,40 @@ export function App() {
         });
       }
     });
+
+    // 3. Centralized Historian Engine continuous logging for MQTT Tags
+    const histCfg = appStateRef.current.historianConfig;
+    const globalHistEnabled = histCfg?.enabled !== false;
+    const globalInterval = histCfg?.logIntervalSeconds || 10;
+
+    if (globalHistEnabled && appStateRef.current.historianTags) {
+      let parsedPayload: any = null;
+      try {
+        parsedPayload = JSON.parse(payloadStr);
+      } catch {
+        parsedPayload = payloadStr;
+      }
+
+      appStateRef.current.historianTags.forEach(ht => {
+        if (ht.enabled !== false && ht.sourceType === 'mqtt' && ht.topic) {
+          if (mqttWildcardMatch(ht.topic, topic)) {
+            let histNum: number | null = null;
+            if (ht.jsonPath) {
+              const val = getJsonValue(payloadStr, ht.jsonPath);
+              if (typeof val === 'number') histNum = val;
+              else if (val !== undefined) histNum = parseFloat(String(val));
+            } else {
+              if (typeof parsedPayload === 'number') histNum = parsedPayload;
+              else histNum = parseFloat(String(parsedPayload ?? payloadStr));
+            }
+            if (histNum !== null && !isNaN(histNum)) {
+              const effectiveInterval = ht.useCustomInterval && ht.customIntervalSeconds ? ht.customIntervalSeconds : globalInterval;
+              enqueueTelemetryPoint(ht.id, ht.topic, histNum, effectiveInterval, ht.id);
+            }
+          }
+        }
+      });
+    }
   }, []);
 
   // MQTT Connection Manager
@@ -1382,20 +1574,34 @@ export function App() {
     });
   }, [mqttConnected, appState.panels, activeDashboard?.prefixTopic, isSimulated]);
 
+  // Reconnect handler: resets the subscription dedupe key and triggers state update
+  // so the subscription useEffect re-fires and sends a fresh subscribe to the backend.
+  const [bridgeReconnectCount, setBridgeReconnectCount] = useState(0);
+
+  const handleDriverBridgeReconnect = useCallback(() => {
+    console.log('[DriverBridge] Reconnected — forcing re-subscription.');
+    lastSubscribedKeyRef.current = ''; // clear dedupe ref
+    setBridgeReconnectCount(c => c + 1); // trigger effect execution
+  }, []);
+
   // Driver Bridge Lifecycle — connects/disconnects independently of MQTT
   useEffect(() => {
     // Create the bridge client once
     if (!driverBridgeClientRef.current) {
-      driverBridgeClientRef.current = new DriverBridgeClient(processDriverTagValue, handleDriverConnectionHealth);
+      driverBridgeClientRef.current = new DriverBridgeClient(
+        processDriverTagValue,
+        handleDriverConnectionHealth,
+        handleDriverBridgeReconnect
+      );
     }
     driverBridgeClientRef.current.connect();
 
     return () => {
       driverBridgeClientRef.current?.disconnect();
     };
-  }, [processDriverTagValue, handleDriverConnectionHealth]);
+  }, [processDriverTagValue, handleDriverConnectionHealth, handleDriverBridgeReconnect]);
 
-  // Sync driver-mode subscriptions to the bridge whenever panels, tags, or connections change
+  // Sync driver-mode subscriptions to the bridge whenever panels, tags, connections change or WS reconnects
   useEffect(() => {
     const bridge = driverBridgeClientRef.current;
     if (!bridge) return;
@@ -1450,7 +1656,7 @@ export function App() {
     } else {
       bridge.unsubscribeAll();
     }
-  }, [activePanels, appState.driverTags, appState.driverConnections]);
+  }, [activePanels, appState.driverTags, appState.driverConnections, bridgeReconnectCount]);
 
   // Demo Data Simulation Engine
   useEffect(() => {
@@ -2215,6 +2421,13 @@ export function App() {
         onLoadSavedClientSetup={handleLoadSavedClientSetup}
         onLoadSavedCommunitySetup={handleLoadSavedCommunitySetup}
         onSelectCommunityMode={() => {
+          const freshDash: Dashboard = {
+            dashboardId: 'dash_main',
+            dashboardName: 'Main Dashboard',
+            connectionId: 'conn_demo',
+            isHome: true,
+            themeColor: '#10b981'
+          };
           setUserRole('community');
           setProductEdition(ProductEdition.COMMUNITY);
           setAppState(prev => sanitizeAppState({
@@ -2222,12 +2435,22 @@ export function App() {
             userRole: 'community',
             productEdition: ProductEdition.COMMUNITY,
             packageOrigin: 'community',
-            isLockedPackage: false
+            isLockedPackage: false,
+            dashboards: prev.dashboards.length > 0 && prev.panels.length === 0 ? prev.dashboards : [freshDash],
+            panels: []
           }));
+          setActiveDashboardId(prev => prev || 'dash_main');
           setIsEngineeringChoiceOpen(true);
           setCurrentView(AppView.DASHBOARD);
         }}
         onLoginAdmin={() => {
+          const freshDash: Dashboard = {
+            dashboardId: 'dash_main',
+            dashboardName: 'Main Dashboard',
+            connectionId: 'conn_demo',
+            isHome: true,
+            themeColor: '#0ea5e9'
+          };
           setUserRole('admin');
           setProductEdition(ProductEdition.ENGINEERING);
           setAppState(prev => ({
@@ -2235,11 +2458,16 @@ export function App() {
             userRole: 'admin',
             productEdition: ProductEdition.ENGINEERING,
             packageOrigin: 'engineering',
-            isLockedPackage: false
+            isLockedPackage: false,
+            dashboards: prev.dashboards.length > 0 && prev.panels.length === 0 ? prev.dashboards : [freshDash],
+            panels: []
           }));
+          setActiveDashboardId(prev => prev || 'dash_main');
           setIsEngineeringChoiceOpen(true);
           setCurrentView(AppView.DASHBOARD);
         }}
+
+
         onImportClientPackage={(newAppState, clientName, expiresAt, preferredWorkstationMode) => {
           const finalState: AppState = {
             ...newAppState,
@@ -2303,13 +2531,18 @@ export function App() {
       {/* Top Navbar */}
       <header 
         onWheel={(e) => {
-          if (e.deltaY !== 0) {
+          if (isMobile && e.deltaY !== 0) {
             e.currentTarget.scrollLeft += e.deltaY;
           }
         }}
-        className="theme-header h-11 sm:h-[48px] px-2 sm:px-3 border-b border-slate-800 flex items-center justify-between shrink-0 z-40 backdrop-blur-md overflow-x-auto custom-horizontal-scrollbar w-full max-w-full touch-scroll overscroll-x-contain"
+        className={`theme-header px-2 sm:px-3 border-b border-slate-800 flex items-center justify-between z-40 backdrop-blur-md w-full max-w-full ${
+          isDesktop
+            ? 'flex-wrap min-h-[48px] py-1 gap-y-1.5 overflow-visible'
+            : 'h-11 sm:h-[48px] overflow-x-auto custom-horizontal-scrollbar touch-scroll overscroll-x-contain shrink-0'
+        }`}
       >
-        <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+        <div className={`flex items-center gap-1.5 sm:gap-2 ${isDesktop ? 'flex-wrap' : 'shrink-0'}`}>
+
           
           {/* Sticky Left Brand Container (Hamburger + Logo + Title) */}
           <div className="flex items-center space-x-1.5 shrink-0 sticky left-0 theme-header z-30 pr-1.5">
@@ -2404,9 +2637,33 @@ export function App() {
             }`}
             title="Comprehensive Engineering User Manual & Schematics Book"
           >
-            <i className="fas fa-book-bookmark text-xs text-sky-400"></i>
+            <i className="fas fa-book-bookmark text-xs text-sky-400" />
             <span className="hidden 2xl:inline">MANUAL</span>
           </button>
+
+          {/* Reports Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setCurrentView(AppView.REPORTING);
+              setUnreadScheduledReports(0);
+            }}
+            className={`flex items-center space-x-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer shadow-sm shrink-0 min-h-[30px] ${
+              currentView === AppView.REPORTING
+                ? 'bg-sky-500 text-slate-950 shadow-md'
+                : 'bg-slate-800/90 text-slate-300 border border-slate-700 hover:text-white hover:bg-slate-750'
+            }`}
+            title="Reports — Template Ingestion, Automated Schedules & AI Reports"
+          >
+            <i className="fas fa-chart-bar text-xs text-sky-400" />
+            <span className="hidden 2xl:inline">REPORTS</span>
+            {unreadScheduledReports > 0 && (
+              <span className="ml-1 px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 font-black text-[9px] animate-pulse">
+                {unreadScheduledReports}
+              </span>
+            )}
+          </button>
+
 
           {userRole === 'community' || productEdition === ProductEdition.COMMUNITY ? (
             <div className="flex items-center space-x-1.5 shrink-0">
@@ -2708,7 +2965,8 @@ export function App() {
 
 
         {/* Right Toolbar */}
-        <div className="flex items-center space-x-1.5">
+        <div className={`flex items-center gap-1.5 ${isDesktop ? 'flex-wrap' : 'shrink-0'}`}>
+
           {currentView === AppView.DASHBOARD && activeMode === 'grid' && (
             <>
               {!isFullscreen && (
@@ -3108,6 +3366,16 @@ export function App() {
           />
         )}
 
+        {currentView === AppView.HISTORIAN_TREND && (
+          <HistorianTrendView
+            onBack={() => setCurrentView(AppView.DASHBOARD)}
+            appState={appState}
+            onUpdateAppState={(newState) => setAppState(newState)}
+            onNavigate={setCurrentView}
+            latestValues={latestValues}
+          />
+        )}
+
         {currentView === AppView.DRIVER_CONNECTIONS && (
           <DriverConnectionsView
             onBack={() => setCurrentView(AppView.DASHBOARD)}
@@ -3184,9 +3452,15 @@ export function App() {
             onOpenTour={() => setIsTourOpen(true)}
           />
         )}
+
+        {currentView === AppView.REPORTING && (
+          <ReportingView
+            onBack={() => setCurrentView(AppView.DASHBOARD)}
+            onNavigate={setCurrentView}
+          />
+        )}
+
       </main>
-
-
 
       {/* Modals and Drawers */}
       <Sidebar 
@@ -3266,6 +3540,12 @@ export function App() {
         onClose={() => setEditingPanel(null)}
         onSave={handleSavePanel}
         appState={appState}
+        onAddHistorianTag={(newTag) => {
+          setAppState(prev => ({
+            ...prev,
+            historianTags: [...(prev.historianTags || []).filter(t => t.id !== newTag.id), newTag]
+          }));
+        }}
       />
 
       {editingDashboard && (

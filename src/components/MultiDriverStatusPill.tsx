@@ -6,7 +6,7 @@ export interface DriverStatusItem {
   id: string;
   name: string;
   protocol: string;
-  protocolType: 'mqtt' | 'modbus_tcp' | 'modbus_rtu' | 'opcua' | 's7' | 'custom';
+  protocolType: 'mqtt' | 'modbus_tcp' | 'modbus_rtu' | 'opcua' | 'iec61850' | 's7' | 'melsec' | 'custom';
   endpoint: string;
   status: 'connected' | 'connecting' | 'disconnected' | 'simulated';
   lastError?: string;
@@ -130,7 +130,10 @@ export const MultiDriverStatusPill: React.FC<MultiDriverStatusPillProps> = ({
       let protocolType: DriverStatusItem['protocolType'] = 'custom';
       const proto = (d.protocol || '').toLowerCase();
 
-      if (proto.includes('opcua') || proto.includes('opc')) {
+      if (proto.includes('iec61850') || proto.includes('61850')) {
+        protocolType = 'iec61850';
+        endpoint = `${d.host || '127.0.0.1'}:${d.port || d.mmsPort || 102} (IED: ${d.iedName || 'IED1'})`;
+      } else if (proto.includes('opcua') || proto.includes('opc')) {
         protocolType = 'opcua';
         endpoint = d.endpointUrl || `opc.tcp://${d.host || '127.0.0.1'}:${d.port || 4840}`;
       } else if (proto.includes('rtu') || proto.includes('serial') || proto.includes('rs485')) {
@@ -141,13 +144,16 @@ export const MultiDriverStatusPill: React.FC<MultiDriverStatusPillProps> = ({
         endpoint = `${d.host || '127.0.0.1'}:${d.port || 502}${d.unitId !== undefined ? ` (Unit ${d.unitId})` : ''}`;
       } else if (proto.includes('s7')) {
         protocolType = 's7';
-        endpoint = `${d.host || '127.0.0.1'}:${d.port || 102}`;
+        endpoint = `${d.host || '127.0.0.1'}:${d.port || 102} (Rack ${d.rack ?? 0}, Slot ${d.slot ?? 1})`;
+      } else if (proto.includes('melsec') || proto.includes('slmp') || proto.includes('mc')) {
+        protocolType = 'melsec';
+        endpoint = `${d.host || '127.0.0.1'}:${d.port || 5007} (${d.melsecSeries?.toUpperCase() || 'MELSEC'})`;
       } else {
         protocolType = 'custom';
         endpoint = d.endpointUrl || `${d.host || '127.0.0.1'}:${d.port || 502}`;
       }
 
-      const isConn = d.connected || d.connectionState === 'connected';
+      const isConn = (d.connectionState === 'connected') || (!d.connectionState && Boolean(d.connected));
       const isConnecting = d.connectionState === 'connecting' || d.connectionState === 'reconnecting';
 
       items.push({
@@ -178,10 +184,13 @@ export const MultiDriverStatusPill: React.FC<MultiDriverStatusPillProps> = ({
   const isAllOffline = onlineCount === 0;
 
   // Text summary beside the dots
-  const summaryLabel = (() => {
-    if (isSimulated) return 'SIM';
+  const summaryText = (() => {
     if (totalCount === 1) {
-      return driverItems[0].status === 'connected' ? 'CONNECTED' : 'OFFLINE';
+      const single = driverItems[0];
+      if (single.status === 'connected') return `${single.protocol} CONNECTED`;
+      if (single.status === 'connecting') return `${single.protocol} CONNECTING`;
+      if (single.status === 'simulated') return `${single.protocol} SIMULATED`;
+      return `${single.protocol} OFFLINE`;
     }
     if (isAllOnline) return 'CONNECTED';
     if (isAllOffline) return 'OFFLINE';
@@ -198,8 +207,12 @@ export const MultiDriverStatusPill: React.FC<MultiDriverStatusPillProps> = ({
         return 'fas fa-microchip text-amber-400';
       case 'opcua':
         return 'fas fa-cube text-purple-400';
+      case 'iec61850':
+        return 'fas fa-bolt text-emerald-400';
       case 's7':
-        return 'fas fa-industry text-blue-400';
+        return 'fas fa-industry text-cyan-400';
+      case 'melsec':
+        return 'fas fa-microchip text-rose-400';
       default:
         return 'fas fa-plug text-slate-400';
     }
@@ -215,8 +228,12 @@ export const MultiDriverStatusPill: React.FC<MultiDriverStatusPillProps> = ({
         return 'bg-amber-500/10 text-amber-300 border-amber-500/30';
       case 'opcua':
         return 'bg-purple-500/10 text-purple-300 border-purple-500/30';
+      case 'iec61850':
+        return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30';
       case 's7':
-        return 'bg-blue-500/10 text-blue-300 border-blue-500/30';
+        return 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30';
+      case 'melsec':
+        return 'bg-rose-500/10 text-rose-300 border-rose-500/30';
       default:
         return 'bg-slate-800 text-slate-300 border-slate-700';
     }

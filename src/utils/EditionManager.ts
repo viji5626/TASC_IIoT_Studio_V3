@@ -227,7 +227,10 @@ export function sanitizeAppState(state: AppState): AppState {
     dashboards,
     panels,
     isLocked: isCommunity ? false : state.isLocked,
-    driverConnections: (state.driverConnections || []),
+    driverConnections: (state.driverConnections || []).map(c => ({
+      ...c,
+      reopenSockets: c.reopenSockets === true
+    })),
     driverTags: (state.driverTags || [])
   };
 }

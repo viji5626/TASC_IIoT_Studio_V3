@@ -17,6 +17,9 @@ import {
   UserTokenType
 } from 'node-opcua';
 import jsmodbus from 'jsmodbus';
+import { Iec61850Driver } from './src/drivers/iec61850/iec61850Driver';
+import { SiemensS7Driver } from './src/drivers/siemens_s7/siemensS7Driver';
+import { MelsecDriver } from './src/drivers/mitsubishi_melsec/melsecDriver';
 
 const PORT = 3000;
 
@@ -526,6 +529,69 @@ async function startServer() {
     }
   });
 
+  // IEC 61850 Test Connection & Model Discovery Endpoints
+  app.post('/api/iec61850/test', async (req, res) => {
+    try {
+      const conn = req.body;
+      const result = await Iec61850Driver.getInstance().testConnection(conn);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'Connection test failed' });
+    }
+  });
+
+  app.post('/api/iec61850/browse', async (req, res) => {
+    try {
+      const conn = req.body;
+      const nodes = await Iec61850Driver.getInstance().browseIedModel(conn);
+      res.json({ success: true, nodes });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'Browse failed' });
+    }
+  });
+
+  // Siemens S7 (Snap7) Test & Browse Endpoints
+  app.post('/api/s7/test', async (req, res) => {
+    try {
+      const conn = req.body;
+      const result = await SiemensS7Driver.getInstance().testConnection(conn);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'S7 connection test failed' });
+    }
+  });
+
+  app.post('/api/s7/browse', async (req, res) => {
+    try {
+      const conn = req.body;
+      const nodes = await SiemensS7Driver.getInstance().browseS7Blocks(conn);
+      res.json({ success: true, nodes });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'S7 browse failed' });
+    }
+  });
+
+  // Mitsubishi MELSEC (MC Protocol) Test & Browse Endpoints
+  app.post('/api/melsec/test', async (req, res) => {
+    try {
+      const conn = req.body;
+      const result = await MelsecDriver.getInstance().testConnection(conn);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'MELSEC connection test failed' });
+    }
+  });
+
+  app.post('/api/melsec/browse', async (req, res) => {
+    try {
+      const conn = req.body;
+      const nodes = await MelsecDriver.getInstance().browseMelsecDevices(conn);
+      res.json({ success: true, nodes });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'MELSEC browse failed' });
+    }
+  });
+
   // Attach WebSocket server for TCP-MQTT bridging, Driver bridge, and OPC UA Browser
   const wss = new WebSocketServer({ noServer: true });
   const driverWss = new WebSocketServer({ noServer: true });
@@ -555,13 +621,29 @@ interface ModbusClientEntry {
   connected: boolean;
   connecting: boolean;
   connectionId?: string;
-  createdAt: number;  // Date.now() when socket was created — used for forced reconnect
+  createdAt: number;
+  lastHealthCheck?: number;
 }
 
-// Force-reconnect Modbus TCP sockets older than this to detect server restarts.
-// On localhost, TCP connections can survive a server stop/start on the same port,
-// causing jsmodbus to return stale cached data from the old server session.
-const MAX_MODBUS_CONNECTION_AGE_MS = 10_000;  // 10 seconds
+function checkPortOpen(host: string, port: number, timeoutMs = 250): Promise<boolean> {
+  return new Promise((resolve) => {
+    const s = new net.Socket();
+    s.setTimeout(timeoutMs);
+    s.on('connect', () => {
+      s.destroy();
+      resolve(true);
+    });
+    s.on('error', () => {
+      s.destroy();
+      resolve(false);
+    });
+    s.on('timeout', () => {
+      s.destroy();
+      resolve(false);
+    });
+    s.connect(port, host);
+  });
+}
 
 interface DriverConnectionHealth {
   connectionId: string;
@@ -584,24 +666,31 @@ function updateConnectionHealth(connectionId: string, patch: Partial<DriverConne
     consecutiveFailureCount: 0
   };
   const updated = { ...current, ...patch };
+
+  const stateChanged = current.connectionState !== updated.connectionState;
+  const errorChanged = current.lastError !== updated.lastError;
+  const shouldBroadcast = stateChanged || errorChanged || (patch.consecutiveFailureCount !== undefined && patch.consecutiveFailureCount % 10 === 0);
+
   connectionHealthMap.set(connectionId, updated);
 
-  const payload = JSON.stringify({
-    type: 'connection_health',
-    connectionId: updated.connectionId,
-    connectionState: updated.connectionState,
-    lastConnectedAt: updated.lastConnectedAt,
-    lastDisconnectedAt: updated.lastDisconnectedAt,
-    lastError: updated.lastError,
-    retryCount: updated.retryCount,
-    consecutiveFailureCount: updated.consecutiveFailureCount
-  });
+  if (shouldBroadcast) {
+    const payload = JSON.stringify({
+      type: 'connection_health',
+      connectionId: updated.connectionId,
+      connectionState: updated.connectionState,
+      lastConnectedAt: updated.lastConnectedAt,
+      lastDisconnectedAt: updated.lastDisconnectedAt,
+      lastError: updated.lastError,
+      retryCount: updated.retryCount,
+      consecutiveFailureCount: updated.consecutiveFailureCount
+    });
 
-  driverWss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(payload);
-    }
-  });
+    driverWss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(payload);
+      }
+    });
+  }
 }
 
 const modbusPool = new Map<string, ModbusClientEntry>();
@@ -613,16 +702,16 @@ function normalizeHost(inputHost?: string): string {
   return inputHost.trim();
 }
 
-function invalidateModbusClient(rawHost: string, port: number, unitId: number = 1, connectionId?: string) {
+function invalidateModbusClient(rawHost: string, port: number, unitId: number = 1, connectionId?: string, isError: boolean = true, errMsg?: string) {
   const host = normalizeHost(rawHost);
   const key = `${host}:${port}:${unitId}`;
   const entry = modbusPool.get(key);
   const targetConnId = connectionId || entry?.connectionId;
-  if (targetConnId) {
+  if (targetConnId && isError) {
     updateConnectionHealth(targetConnId, {
       connectionState: 'disconnected',
       lastDisconnectedAt: new Date().toISOString(),
-      lastError: 'Modbus TCP server disconnected'
+      lastError: errMsg || 'Modbus TCP server disconnected'
     });
   }
   if (entry) {
@@ -630,9 +719,7 @@ function invalidateModbusClient(rawHost: string, port: number, unitId: number = 
     entry.connecting = false;
     try {
       entry.socket.destroy();
-    } catch (e) {
-      // Ignore socket destroy errors
-    }
+    } catch (_e) { /* ignore */ }
     modbusPool.delete(key);
   }
   modbusQueues.delete(key);
@@ -646,6 +733,16 @@ function getOrCreateModbusClient(rawHost: string, port: number, unitId: number =
   if (existing && existing.connected && existing.client) {
     // Check if underlying socket was destroyed or closed by OS/network
     if (existing.socket && !existing.socket.destroyed && existing.socket.writable) {
+      const now = Date.now();
+      if (!existing.lastHealthCheck || (now - existing.lastHealthCheck > 2000)) {
+        existing.lastHealthCheck = now;
+        checkPortOpen(host, port, 300).then((isOpen) => {
+          if (!isOpen) {
+            console.warn(`[ModbusTCP] Port ${host}:${port} is no longer open (server stopped) — invalidating socket`);
+            invalidateModbusClient(host, port, unitId, connectionId, true, 'Modbus TCP server stopped listening');
+          }
+        }).catch(() => {});
+      }
       if (connectionId) existing.connectionId = connectionId;
       return Promise.resolve(existing.client);
     } else {
@@ -713,12 +810,12 @@ function getOrCreateModbusClient(rawHost: string, port: number, unitId: number =
 
       socket.on('close', (hadError) => {
         console.log(`[ModbusTCP] Connection closed to ${host}:${port} (hadError: ${hadError})`);
-        invalidateModbusClient(host, port, unitId, connectionId);
+        invalidateModbusClient(host, port, unitId, connectionId, true, 'Modbus TCP connection closed');
       });
 
       socket.on('end', () => {
         console.log(`[ModbusTCP] Server at ${host}:${port} sent FIN — connection ending`);
-        invalidateModbusClient(host, port, unitId, connectionId);
+        invalidateModbusClient(host, port, unitId, connectionId, true, 'Modbus server closed connection');
       });
 
       // Dedicated error listener directly on client instance to catch protocol errors
@@ -910,7 +1007,7 @@ async function readModbusTag(tag: any, connection: any): Promise<any> {
   const dwordSwap = tag?.dwordSwap !== undefined ? tag.dwordSwap : (connection?.dwordSwap || false);
   const recvTimeoutMs = Math.max(300, Number(connection?.recvTimeoutMs || connection?.timeout) || 1000);
   const sendRecvDelayMs = Number(connection?.sendRecvDelayMs) || 0;
-  const maxRetries = Math.max(0, Number(connection?.frameRetryCount) || 0);
+  const maxRetries = Math.max(0, Number(connection?.frameRetryCount ?? 1));
 
   if (sendRecvDelayMs > 0) {
     await new Promise(r => setTimeout(r, sendRecvDelayMs));
@@ -988,11 +1085,11 @@ async function readModbusTag(tag: any, connection: any): Promise<any> {
         }
 
         const parsed = applyModbusSwaps(buf, dataType, byteSwap, wordSwap, dwordSwap);
+        console.log(`[ModbusDebug] tag="${tag.tagName || tag.tagId}" addr=${tag.address} -> regAddr=${registerAddr} unitId=${unitId} rawValues=`, res.response.body?.values, 'parsed=', parsed);
 
-        // When reopenSockets is true (default for single-socket channels & simulators),
-        // release the socket after read pass so server stop/start is detected instantly
-        if (connection?.reopenSockets !== false) {
-          invalidateModbusClient(host, port, unitId, connectionId);
+        // Only release socket after read if reopenSockets is explicitly enabled in connection settings
+        if (connection?.reopenSockets === true) {
+          invalidateModbusClient(host, port, unitId, connectionId, false);
         }
 
         return parsed;
@@ -1319,8 +1416,8 @@ async function writeOpcUaTag(tag: any, connection: any, value: any): Promise<voi
                     quality = 'good';
                     qualityText = 'Good';
                     readCount++;
-                    // Log first read and then every 50th read for diagnostics
-                    if (readCount === 1 || readCount % 50 === 0) {
+                    // Log first read, value changes, and then every 50th read for diagnostics
+                    if (readCount === 1 || val !== subLastGoodValue || readCount % 50 === 0) {
                       console.log(`[DriverBridge] ✓ Read #${readCount} for "${sub.tag?.tagName || sub.tagId}" addr=${sub.tag?.address}: value=${val}`);
                     }
                     // On success: reset failure counter, update last-good
@@ -1369,6 +1466,99 @@ async function writeOpcUaTag(tag: any, connection: any, value: any): Promise<voi
                       console.warn(`[DriverBridge] OPC UA read failed for tag ${sub.tag?.tagName || sub.tagId}:`, err.message);
                     }
                   }
+                } else if (protocol === 'iec61850') {
+                  try {
+                    val = await Iec61850Driver.getInstance().readTag(sub.tag, sub.connection);
+                    quality = 'good';
+                    qualityText = 'Good';
+                    subConsecutiveFailures = 0;
+                    subLastGoodValue = val;
+                    subLastGoodTimestamp = now;
+                    if (connectionId) {
+                      updateConnectionHealth(connectionId, {
+                        connectionState: 'connected',
+                        consecutiveFailureCount: 0,
+                        lastError: undefined
+                      });
+                    }
+                  } catch (err: any) {
+                    subConsecutiveFailures++;
+                    quality = 'bad';
+                    val = null;
+                    qualityText = 'IEC 61850 read error';
+                    if (subConsecutiveFailures <= 3 || subConsecutiveFailures % 20 === 0) {
+                      console.warn(`[DriverBridge] IEC 61850 read failed for tag ${sub.tag?.tagName || sub.tagId}:`, err.message);
+                    }
+                    if (connectionId) {
+                      updateConnectionHealth(connectionId, {
+                        connectionState: 'disconnected',
+                        consecutiveFailureCount: subConsecutiveFailures,
+                        lastError: err.message
+                      });
+                    }
+                  }
+                } else if (protocol === 's7') {
+                  try {
+                    val = await SiemensS7Driver.getInstance().readTag(sub.tag, sub.connection);
+                    quality = 'good';
+                    qualityText = 'Good';
+                    subConsecutiveFailures = 0;
+                    subLastGoodValue = val;
+                    subLastGoodTimestamp = now;
+                    if (connectionId) {
+                      updateConnectionHealth(connectionId, {
+                        connectionState: 'connected',
+                        consecutiveFailureCount: 0,
+                        lastError: undefined
+                      });
+                    }
+                  } catch (err: any) {
+                    subConsecutiveFailures++;
+                    quality = 'bad';
+                    val = null;
+                    qualityText = 'Siemens S7 read error';
+                    if (subConsecutiveFailures <= 3 || subConsecutiveFailures % 20 === 0) {
+                      console.warn(`[DriverBridge] S7 read failed for tag ${sub.tag?.tagName || sub.tagId}:`, err.message);
+                    }
+                    if (connectionId) {
+                      updateConnectionHealth(connectionId, {
+                        connectionState: 'disconnected',
+                        consecutiveFailureCount: subConsecutiveFailures,
+                        lastError: err.message
+                      });
+                    }
+                  }
+                } else if (protocol === 'melsec') {
+                  try {
+                    val = await MelsecDriver.getInstance().readTag(sub.tag, sub.connection);
+                    quality = 'good';
+                    qualityText = 'Good';
+                    subConsecutiveFailures = 0;
+                    subLastGoodValue = val;
+                    subLastGoodTimestamp = now;
+                    if (connectionId) {
+                      updateConnectionHealth(connectionId, {
+                        connectionState: 'connected',
+                        consecutiveFailureCount: 0,
+                        lastError: undefined
+                      });
+                    }
+                  } catch (err: any) {
+                    subConsecutiveFailures++;
+                    quality = 'bad';
+                    val = null;
+                    qualityText = 'MELSEC read error';
+                    if (subConsecutiveFailures <= 3 || subConsecutiveFailures % 20 === 0) {
+                      console.warn(`[DriverBridge] MELSEC read failed for tag ${sub.tag?.tagName || sub.tagId}:`, err.message);
+                    }
+                    if (connectionId) {
+                      updateConnectionHealth(connectionId, {
+                        connectionState: 'disconnected',
+                        consecutiveFailureCount: subConsecutiveFailures,
+                        lastError: err.message
+                      });
+                    }
+                  }
                 } else {
                   quality = 'bad';
                   val = null;
@@ -1378,6 +1568,7 @@ async function writeOpcUaTag(tag: any, connection: any, value: any): Promise<voi
                 if (ws.readyState === WebSocket.OPEN) {
                   ws.send(JSON.stringify({
                     tagId: sub.tagId,
+                    tagName: sub.tag?.tagName,
                     panelId: sub.panelId,
                     value: val,
                     quality,
@@ -1413,6 +1604,18 @@ async function writeOpcUaTag(tag: any, connection: any, value: any): Promise<voi
             writeOpcUaTag(msg.tag, msg.connection, msg.value)
               .then(() => console.log(`[DriverBridge] OPC UA write success: nodeId=${msg.tag.nodeId || msg.tag.address}, value=${msg.value}`))
               .catch((err: any) => console.error(`[DriverBridge] OPC UA write failed:`, err.message));
+          } else if (msg.tag && msg.connection && protocol === 'iec61850') {
+            Iec61850Driver.getInstance().writeTag(msg.tag, msg.connection, msg.value)
+              .then(() => console.log(`[DriverBridge] IEC 61850 write success: path=${msg.tag.iecPath || msg.tag.address}, value=${msg.value}`))
+              .catch((err: any) => console.error(`[DriverBridge] IEC 61850 write failed:`, err.message));
+          } else if (msg.tag && msg.connection && protocol === 's7') {
+            SiemensS7Driver.getInstance().writeTag(msg.tag, msg.connection, msg.value)
+              .then(() => console.log(`[DriverBridge] Siemens S7 write success: address=${msg.tag.s7Address || msg.tag.address}, value=${msg.value}`))
+              .catch((err: any) => console.error(`[DriverBridge] Siemens S7 write failed:`, err.message));
+          } else if (msg.tag && msg.connection && protocol === 'melsec') {
+            MelsecDriver.getInstance().writeTag(msg.tag, msg.connection, msg.value)
+              .then(() => console.log(`[DriverBridge] Mitsubishi MELSEC write success: address=${msg.tag.melsecAddress || msg.tag.address}, value=${msg.value}`))
+              .catch((err: any) => console.error(`[DriverBridge] Mitsubishi MELSEC write failed:`, err.message));
           }
         }
 

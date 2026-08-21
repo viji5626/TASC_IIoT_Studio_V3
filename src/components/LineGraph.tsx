@@ -301,7 +301,7 @@ const LineGraph: React.FC<LineGraphProps> = ({
 
     const isHistRange = (['30M', '1H', '8H', '1D', '1W', '1MO', '1Y', '5Y', 'ALL'] as string[]).includes(range);
 
-    if (panel?.enableHistorianLogging && isHistRange) {
+    if (isHistRange) {
       const nowMs = Date.now();
       let durationMs = 30 * 60 * 1000;
       if (range === '1H') durationMs = 60 * 60 * 1000;
@@ -345,25 +345,23 @@ const LineGraph: React.FC<LineGraphProps> = ({
     const toMs = new Date(customTo).getTime();
     if (isNaN(fromMs) || isNaN(toMs)) return;
 
-    if (panel?.enableHistorianLogging) {
-      setHistLoading(true);
-      const topics: string[] = [];
-      if (panel?.pens && panel.pens.length > 0) {
-        panel.pens.forEach(p => topics.push(p.id || p.topic));
-      } else if (panel?.topic) {
-        topics.push(panel.topic);
-      }
-      const results: Record<string, { t: number; v: number }[]> = {};
-      for (const topic of topics) {
-        const rawPts = await queryHistoricalRange(topic, fromMs, toMs);
-        results[topic] = rawPts.map(p => ({ t: p.t, v: p.v }));
-      }
-      const gaps = await queryGapRecords(fromMs, toMs);
-      setGapZones(gaps.map(g => ({ gapStartMs: g.gapStartMs, gapEndMs: g.gapEndMs })));
-      setHistoricalData(results);
-      setHistoryMode('historical');
-      setHistLoading(false);
+    setHistLoading(true);
+    const topics: string[] = [];
+    if (panel?.pens && panel.pens.length > 0) {
+      panel.pens.forEach(p => topics.push(p.id || p.topic));
+    } else if (panel?.topic) {
+      topics.push(panel.topic);
     }
+    const results: Record<string, { t: number; v: number }[]> = {};
+    for (const topic of topics) {
+      const rawPts = await queryHistoricalRange(topic, fromMs, toMs);
+      results[topic] = rawPts.map(p => ({ t: p.t, v: p.v }));
+    }
+    const gaps = await queryGapRecords(fromMs, toMs);
+    setGapZones(gaps.map(g => ({ gapStartMs: g.gapStartMs, gapEndMs: g.gapEndMs })));
+    setHistoricalData(results);
+    setHistoryMode('historical');
+    setHistLoading(false);
   };
 
   const penSeries = useMemo(() => {

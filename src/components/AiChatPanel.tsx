@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ChatMessage, ImageAttachment } from '../utils/aiProviders/types';
 import { createSpeechDictation, SpeechDictationController } from '../utils/speechFilter';
 import { CommunityAiQuotaStatus } from '../utils/aiQuotaManager';
+import { PendingReportRequest, MultiAgentEvent } from '../types';
 
 interface Props {
   messages: ChatMessage[];
@@ -15,6 +16,12 @@ interface Props {
   supportsVision?: boolean;
   isCommunity?: boolean;
   quotaStatus?: CommunityAiQuotaStatus;
+  // Report generation props
+  pendingReport?: PendingReportRequest | null;
+  reportDownloads?: Array<{ jobId: string; title: string; html: string; excelWb?: any }>;
+  onReportSuggestionSelected?: (selectedIds: number[]) => void;
+  onDownloadReport?: (html: string, title: string) => void;
+  onDownloadExcel?: (jobId: string, title: string) => void;
 }
 
 function formatResponseTime(ms?: number): string | null {
@@ -90,7 +97,12 @@ export const AiChatPanel: React.FC<Props> = ({
   onCancelRequest,
   supportsVision = true,
   isCommunity = false,
-  quotaStatus
+  quotaStatus,
+  pendingReport = null,
+  reportDownloads = [],
+  onReportSuggestionSelected,
+  onDownloadReport,
+  onDownloadExcel
 }) => {
   const isQuotaLocked = Boolean(isCommunity && quotaStatus?.isLocked);
 
@@ -98,6 +110,7 @@ export const AiChatPanel: React.FC<Props> = ({
   const [attachments, setAttachments] = useState<ImageAttachment[]>([]);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [lightboxImage, setLightboxImage] = useState<{ url: string; alt: string } | null>(null);
+  const [agentActivity, setAgentActivity] = useState<MultiAgentEvent | null>(null);
 
   // Dictation State
   const [isListening, setIsListening] = useState(false);
@@ -128,7 +141,19 @@ export const AiChatPanel: React.FC<Props> = ({
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, streamingText, activeToolName, isLoading]);
+  }, [messages, streamingText, activeToolName, isLoading, agentActivity]);
+
+  // Subscribe to Multi-Agent Activity Events
+  useEffect(() => {
+    const handleAgentEvent = (e: any) => {
+      if (e.detail) {
+        setAgentActivity(e.detail);
+      }
+    };
+
+    window.addEventListener('tasc_agent_activity', handleAgentEvent);
+    return () => window.removeEventListener('tasc_agent_activity', handleAgentEvent);
+  }, []);
 
   const handleSend = () => {
     if (isQuotaLocked) {
@@ -417,6 +442,17 @@ export const AiChatPanel: React.FC<Props> = ({
           </div>
         )}
 
+        {/* Live Multi-Agent Specialist Activity */}
+        {agentActivity && isLoading && (
+          <div className="flex items-center space-x-2.5 px-3.5 py-2 bg-indigo-950/60 border border-indigo-500/40 rounded-xl text-indigo-200 text-xs w-fit shadow-md animate-pulse">
+            <i className="fas fa-microchip text-indigo-400 text-xs" />
+            <div className="flex items-center space-x-1.5">
+              <strong className="text-indigo-300">[{agentActivity.agentName}]</strong>
+              <span className="text-slate-300">{agentActivity.actionDescription}</span>
+            </div>
+          </div>
+        )}
+
         {/* Tool Activity Indicator */}
         {activeToolName && (
           <div className="flex items-center space-x-2 px-3 py-2 bg-indigo-950/40 border border-indigo-500/30 rounded-xl text-indigo-300 text-xs w-fit">
@@ -424,6 +460,7 @@ export const AiChatPanel: React.FC<Props> = ({
             <span>Executing industrial tool: <strong className="font-mono text-indigo-200">{activeToolName}</strong>...</span>
           </div>
         )}
+
 
         {/* General Loading Spinner */}
         {isLoading && !streamingText && !activeToolName && (
@@ -446,6 +483,118 @@ export const AiChatPanel: React.FC<Props> = ({
 
         <div ref={messagesEndRef} />
       </div>
+
+      {/* ── Report Suggestion Cards ─────────────────────────────────────────── */}
+      {pendingReport && pendingReport.status === 'suggesting' && pendingReport.suggestions.length > 0 && (
+        <div className="shrink-0 border-t border-slate-700/60 bg-slate-900/95 px-4 py-3">
+          <div className="flex items-center space-x-2 mb-2.5">
+            <div className="w-6 h-6 rounded-md bg-indigo-600/30 border border-indigo-500/40 flex items-center justify-center">
+              <i className="fas fa-lightbulb text-indigo-300 text-xs" />
+            </div>
+            <span className="text-xs font-semibold text-indigo-300">AI Report Enhancements — Select additions for <em className="text-slate-300">"{pendingReport.title}"</em></span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+            {pendingReport.suggestions.map(s => {
+              const isSelected = pendingReport.selectedSuggestionIds.includes(s.id);
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => {
+                    const prev = pendingReport.selectedSuggestionIds;
+                    const next = isSelected ? prev.filter(x => x !== s.id) : [...prev, s.id];
+                    onReportSuggestionSelected?.(next);
+                  }}
+                  className={`text-left rounded-xl px-3 py-2.5 border transition-all text-xs ${
+                    isSelected
+                      ? 'bg-indigo-600/25 border-indigo-500/60 text-indigo-200'
+                      : 'bg-slate-800/80 border-slate-700/60 text-slate-300 hover:border-indigo-500/40 hover:bg-slate-800'
+                  }`}
+                >
+                  <div className="flex items-start space-x-2">
+                    <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 mt-0.5 text-[10px] font-bold ${
+                      isSelected ? 'bg-indigo-500 text-white' : 'bg-slate-700 text-slate-400'
+                    }`}>{s.id}</div>
+                    <div>
+                      <p className="font-semibold leading-tight">{s.title}</p>
+                      <p className="text-slate-400 text-[11px] mt-0.5 leading-relaxed">{s.description}</p>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={() => {
+                const selectedIds = pendingReport.selectedSuggestionIds;
+                const selectionText = selectedIds.length === 0
+                  ? 'none, proceed with base data only'
+                  : `Include suggestion${selectedIds.length > 1 ? 's' : ''} ${selectedIds.join(' and ')}`;
+                onSendMessage(selectionText);
+              }}
+              className="text-xs px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold transition-colors flex items-center space-x-1.5"
+            >
+              <i className="fas fa-file-chart-column" />
+              <span>Generate Report{pendingReport.selectedSuggestionIds.length > 0 ? ` (+${pendingReport.selectedSuggestionIds.length} enhancements)` : ''}</span>
+            </button>
+            <span className="text-xs text-slate-500">or reply in chat to select</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Report Download Cards ───────────────────────────────────────────── */}
+      {reportDownloads.length > 0 && (
+        <div className="shrink-0 border-t border-emerald-700/40 bg-emerald-950/30 px-4 py-3">
+          {reportDownloads.slice(-2).map(rd => (
+            <div key={rd.jobId} className="flex items-center justify-between bg-slate-800/80 border border-emerald-500/30 rounded-xl px-3 py-2.5 mb-2">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-7 h-7 rounded-lg bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center">
+                  <i className="fas fa-file-chart-line text-emerald-400 text-xs" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-emerald-300">{rd.title}</p>
+                  <p className="text-[11px] text-slate-500">AI Report ready — HTML (charts & analysis) + Excel</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const blob = new Blob([rd.html], { type: 'text/html;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    window.open(url, '_blank');
+                    setTimeout(() => URL.revokeObjectURL(url), 15000);
+                  }}
+                  className="text-xs px-2 py-1.5 rounded-lg bg-indigo-700 hover:bg-indigo-600 text-white transition-colors"
+                  title="View HTML Report in new tab"
+                >
+                  <i className="fas fa-eye mr-1" />View
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDownloadReport?.(rd.html, rd.title)}
+                  className="text-xs px-2 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white transition-colors"
+                  title="Download as HTML"
+                >
+                  <i className="fas fa-file-code mr-1" />HTML
+                </button>
+                {rd.excelWb && (
+                  <button
+                    type="button"
+                    onClick={() => onDownloadExcel?.(rd.jobId, rd.title)}
+                    className="text-xs px-2 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-600 text-white transition-colors"
+                    title="Download as Excel workbook"
+                  >
+                    <i className="fas fa-file-excel mr-1" />Excel
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Attachment Previews Bar */}
       {attachments.length > 0 && (

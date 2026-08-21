@@ -1,6 +1,8 @@
 import { AiProviderAdapter, ChatMessage, ImageAttachment } from './aiProviders/types';
-import { AI_TOOL_DEFINITIONS, executeAiTool, getLiveContextSnapshot } from './aiTools';
+import { AI_TOOL_DEFINITIONS, executeAiTool, getLiveContextSnapshot, getAiToolsContext } from './aiTools';
 import { TASC_SYSTEM_KNOWLEDGE } from './aiKnowledgeBase';
+import { gatherMultiAgentEvidence } from './aiMultiAgentEngine';
+import { recordQueryPattern } from './aiMemoryStore';
 
 export const MAX_TOOL_ITERATIONS = 6;
 
@@ -10,10 +12,10 @@ export function clearChatSession(): void {
   chatSession = [];
 }
 
-export function buildDynamicSystemPrompt(): string {
+export function buildDynamicSystemPrompt(extraLearnedEvidence?: string): string {
   const liveSnapshot = getLiveContextSnapshot();
 
-  return `You are the TASC IIoT Studio AI Assistant — an intelligent, deeply context-aware industrial IoT, SCADA, and Web-HMI engineering copilot.
+  let prompt = `You are the TASC IIoT Studio AI Assistant — an intelligent, deeply context-aware industrial IoT, SCADA, and Web-HMI engineering copilot.
 You have full comprehensive architectural knowledge of every module, UI/UX screen, side menu item, communication driver, tag manager, and system setting in TASC IIoT Studio, as well as real-time tool execution capabilities.
 
 ==================================================
@@ -24,16 +26,25 @@ ${TASC_SYSTEM_KNOWLEDGE}
 ==================================================
 REAL-TIME RUNTIME PROJECT CONTEXT SNAPSHOT
 ==================================================
-${liveSnapshot}
+${liveSnapshot}`;
 
+  if (extraLearnedEvidence) {
+    prompt += `\n\n==================================================
+LEARNED PLANT KNOWLEDGE & SPECIALIST EVIDENCE
 ==================================================
+${extraLearnedEvidence}`;
+  }
+
+  prompt += `\n\n==================================================
 OPERATIONAL GUIDELINES:
 ==================================================
-1. Context Awareness: You already know the exact state of this project from the snapshot above (drivers, total tags, bad/good quality count, dashboards, and alarms).
+1. Context Awareness: You already know the exact state of this project from the snapshot and specialist evidence above (drivers, total tags, bad/good quality count, dashboards, alarms, and learned plant SOP rules).
 2. Deep Feature Familiarity:
    - When asked about Drivers, use \`get_driver_tags_detail\` or \`get_driver_diagnostics\` to inspect Modbus/OPC UA/Serial registers, live values, and health.
    - When asked about MQTT Topics or Tags, use \`get_tag_manager_detail\` to inspect the full topic tree and bindings.
    - When asked about Live Values, use \`get_live_tag_value\` or \`get_driver_tags_detail\`.
+   - When asked to remember plant SOPs or rules, use \`remember_plant_knowledge\`.
+   - When asked to remember tag aliases or nicknames, use \`learn_tag_alias\`.
    - When asked about Settings / Modes, refer to the knowledge base and \`get_system_settings_and_info\`.
    - When asked about Alarms, use \`get_active_alarms\` or \`get_alarm_history\`.
 3. Output Quality:
@@ -57,7 +68,19 @@ RESPONSE DISCIPLINE (MANDATORY — FOLLOW STRICTLY):
    - Deep topic tree analysis (use get_tag_manager_detail)
 7. TABLES: When listing 3+ items, ALWAYS use a markdown table. Keep columns minimal and relevant.
 8. NO FILLER PHRASES: Do not say "Sure!", "Great question!", "Let me help you with that!", "Absolutely!", or any filler. Start directly with the answer.
-9. DO NOT OUTPUT INTERNAL SCRATCHPAD OR THINKING PROCESS AS PART OF THE FINAL ANSWER. Always give the final user answer directly.`;
+9. DO NOT OUTPUT INTERNAL SCRATCHPAD OR THINKING PROCESS AS PART OF THE FINAL ANSWER. Always give the final user answer directly.
+
+==================================================
+REPORT GENERATION WORKFLOW (MANDATORY):
+==================================================
+When a user asks to generate a report (any phrasing like "give me a report", "generate report", "export data report", "create analysis report"):
+STEP 1 — Call \`suggest_report_additions\` FIRST. Assess the request and provide EXACTLY 3 smart suggestions the user may not have considered but that would make the report more insightful. Examples: energy deviation analysis, benchmark comparison vs. last week, OEE efficiency score, cross-tag correlation, alarm rate trend, peak demand analysis, equipment runtime hours, etc. Each suggestion must have: id (1/2/3), title (short), description (1-2 sentences explaining value).
+STEP 2 — In your response AFTER calling suggest_report_additions, tell the user: "I have prepared 3 enhancement suggestions for your report. Please select which to include — type '1', '2', '3', '1 and 2', 'all 3', etc. Or reply 'none' to proceed with just the base data."
+STEP 3 — WAIT for user's selection reply. After they reply selecting suggestions, call \`generate_report\` with the final combined tag list, resolution, and write concise aiSummary and aiResults text.
+STEP 4 — Tell the user the report is generating and a download link will appear.
+NEVER skip the suggestion step. NEVER call generate_report without first calling suggest_report_additions and receiving user selection.`;
+
+  return prompt;
 }
 
 export function sanitizeModelResponseText(text: string): { cleanText: string; thoughtProcess?: string } {
@@ -104,15 +127,27 @@ export async function runAiTurn(
   const turnStartMs = Date.now();
   const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  // Update dynamic system prompt with fresh live snapshot
-  const dynamicSystemPrompt = buildDynamicSystemPrompt();
+  // 1. Run deterministic multi-agent specialists to collect evidence in <5ms
+  const ctx = getAiToolsContext();
+  let multiAgentEvidence = '';
+  if (ctx && userMessage.trim()) {
+    try {
+      multiAgentEvidence = await gatherMultiAgentEvidence(userMessage, ctx);
+      recordQueryPattern(userMessage, 'general', []);
+    } catch (e) {
+      console.warn('[AiOrchestrator] Multi-agent gathering error:', e);
+    }
+  }
+
+  // 2. Update dynamic system prompt with fresh live snapshot & specialist evidence
+  const dynamicSystemPrompt = buildDynamicSystemPrompt(multiAgentEvidence);
   if (chatSession.length === 0 || chatSession[0].role !== 'system') {
     chatSession = [{ role: 'system', content: dynamicSystemPrompt }, ...chatSession.filter(m => m.role !== 'system')];
   } else {
     chatSession[0].content = dynamicSystemPrompt;
   }
 
-  // Append user message if provided
+  // 3. Append user message if provided
   if (userMessage.trim() || (images && images.length > 0)) {
     chatSession.push({
       role: 'user',
@@ -121,6 +156,7 @@ export async function runAiTurn(
       timestamp: timeString
     });
   }
+
 
   // Sliding window: trim history to prevent context overflow and drift.
   const MAX_HISTORY_MESSAGES = 24;

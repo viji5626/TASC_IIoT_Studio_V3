@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Panel, PanelType, AppState } from '../types';
+import { Panel, PanelType, AppState, SvgSubPartConfig, DynamicBehaviorRule, DynamicPropertyType } from '../types';
 import KeypadModal from './KeypadModal';
 import { SymbolLibraryModal, IndustrialSymbolItem, convertSvgToPngDataUrl } from './SymbolLibraryModal';
 import { DynamicIndustrialSymbol } from './DynamicIndustrialSymbol';
@@ -13,7 +13,9 @@ import { getPanelTelemetryStatus } from '../utils/staleHelper';
 import { AlarmHistorianWidget } from './AlarmHistorianWidget';
 import { EditionManager } from '../utils/EditionManager';
 import { ColorBoxPopover } from './ColorBoxPopover';
-import { getDynamicElementTransform, evaluateMotionDynamics, evaluateRotationDynamics, getEffectiveMotionPathPoints } from '../utils/dynamicsHelper';
+import { getDynamicElementTransform, evaluateMotionDynamics, evaluateRotationDynamics, getEffectiveMotionPathPoints, evaluatePanelDynamics } from '../utils/dynamicsHelper';
+import { useDeviceCapability } from '../utils/deviceDetection';
+import { HmiCanvasLeftDock } from './HmiCanvasLeftDock';
 
 interface WebHmiCanvasViewProps {
   appState: AppState;
@@ -272,11 +274,15 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   onEditPanel,
   onDeletePanel
 }) => {
+  const { isDesktop, isMobile } = useDeviceCapability();
   const isClientMode = appState.userRole === 'client' || appState.productEdition === 'client' || !!appState.isLockedPackage;
 
   const [isEditMode, setIsEditMode] = useState(!isClientMode);
   const [gridSnap, setGridSnap] = useState(true);
   const [isMobileToolsCollapsed, setIsMobileToolsCollapsed] = useState<boolean>(false);
+
+  // Canvas DOM container ref
+  const canvasRef = useRef<HTMLDivElement>(null);
 
   // Canvas zoom & pan state
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
@@ -406,6 +412,22 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     return { left: Math.round(left), top: Math.round(top) };
   }, [isAutoFit, containerDimensions, contentBounds, effectiveScale]);
 
+  // Helper to convert screen mouse/pointer coordinates (clientX, clientY) into exact canvas local coordinates (x, y)
+  const getCanvasCoords = useCallback((clientX: number, clientY: number) => {
+    if (!canvasRef.current) return { x: clientX, y: clientY };
+    const rect = canvasRef.current.getBoundingClientRect();
+    const scrollLeft = canvasRef.current.scrollLeft || 0;
+    const scrollTop = canvasRef.current.scrollTop || 0;
+
+    const offsetX = isAutoFit ? autoFitOffset.left : 0;
+    const offsetY = isAutoFit ? autoFitOffset.top : 0;
+
+    const canvasX = (clientX - rect.left + scrollLeft - offsetX) / (effectiveScale || 1);
+    const canvasY = (clientY - rect.top + scrollTop - offsetY) / (effectiveScale || 1);
+
+    return { x: canvasX, y: canvasY };
+  }, [isAutoFit, autoFitOffset, effectiveScale]);
+
 
 
   // Symbol Factory 3.0 Industrial Library Modal State
@@ -495,6 +517,12 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   const [selectedPanelIds, setSelectedPanelIds] = useState<string[]>([]);
   const [masterPanelId, setMasterPanelId] = useState<string | null>(null);
   const [selectedNodeInfo, setSelectedNodeInfo] = useState<{ panelId: string; nodeIndex: number } | null>(null);
+
+  // Left Studio Dock (Explorer & Config Tabs) State
+  const [isLeftDockOpen, setIsLeftDockOpen] = useState<boolean>(isDesktop);
+  const [activeDockTab, setActiveDockTab] = useState<'explorer' | 'config' | 'dynamics'>('explorer');
+  const [activeSubPartSelection, setActiveSubPartSelection] = useState<{ panelId: string; partId: string } | null>(null);
+  const [dockMode, setDockMode] = useState<'push' | 'overlay'>('push');
 
   // Right-click context menu & clipboard state
   const [contextMenu, setContextMenu] = useState<{
@@ -1101,7 +1129,6 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   };
 
   // Mouse dragging & marquee selection state
-  const canvasRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
   const [marqueeRect, setMarqueeRect] = useState<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
@@ -1139,14 +1166,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     if (isCanvasSelf) {
       if (contextMenu.isOpen) setContextMenu({ isOpen: false, x: 0, y: 0 });
 
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if (!rect) return;
-
-      const scrollLeft = canvasRef.current?.scrollLeft || 0;
-      const scrollTop = canvasRef.current?.scrollTop || 0;
-
-      const startX = (e.clientX - rect.left + scrollLeft) / zoomLevel;
-      const startY = (e.clientY - rect.top + scrollTop) / zoomLevel;
+      const { x: startX, y: startY } = getCanvasCoords(e.clientX, e.clientY);
 
       hasDraggedMarqueeRef.current = false;
       setIsMarqueeSelecting(true);
@@ -1582,12 +1602,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   useEffect(() => {
     const handleMarqueeMouseMove = (e: MouseEvent) => {
       if (!isMarqueeSelecting || !marqueeRect || !canvasRef.current) return;
-      const rect = canvasRef.current.getBoundingClientRect();
-      const scrollLeft = canvasRef.current.scrollLeft || 0;
-      const scrollTop = canvasRef.current.scrollTop || 0;
 
-      const currentX = (e.clientX - rect.left + scrollLeft) / effectiveScale;
-      const currentY = (e.clientY - rect.top + scrollTop) / effectiveScale;
+      const { x: currentX, y: currentY } = getCanvasCoords(e.clientX, e.clientY);
 
       if (Math.abs(currentX - marqueeRect.startX) > 4 || Math.abs(currentY - marqueeRect.startY) > 4) {
         hasDraggedMarqueeRef.current = true;
@@ -1638,7 +1654,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
         window.removeEventListener('mouseup', handleMarqueeMouseUp);
       };
     }
-  }, [isMarqueeSelecting, marqueeRect, panels]);
+  }, [isMarqueeSelecting, marqueeRect, panels, getCanvasCoords]);
 
   // Effect for Node Point Vertex Dragging
   useEffect(() => {
@@ -1758,12 +1774,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       const idx = panels.findIndex(p => p.panelId === panelId);
       const pos = getPanelPos(targetPanel, idx);
 
-      const rect = canvasRef.current.getBoundingClientRect();
-      const scrollLeft = canvasRef.current.scrollLeft || 0;
-      const scrollTop = canvasRef.current.scrollTop || 0;
-
-      const mouseCanvasX = (e.clientX - rect.left + scrollLeft) / effectiveScale;
-      const mouseCanvasY = (e.clientY - rect.top + scrollTop) / effectiveScale;
+      const { x: mouseCanvasX, y: mouseCanvasY } = getCanvasCoords(e.clientX, e.clientY);
 
       // Delta relative to element's center/anchor
       let deltaX = Math.round(mouseCanvasX - (pos.x + pos.w / 2));
@@ -1914,8 +1925,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
         centerY
       } = transformState;
 
-      const deltaX = (e.clientX - initialMouseX) / zoomLevel;
-      const deltaY = (e.clientY - initialMouseY) / zoomLevel;
+      const deltaX = (e.clientX - initialMouseX) / (effectiveScale || 1);
+      const deltaY = (e.clientY - initialMouseY) / (effectiveScale || 1);
 
       if (type === 'resize') {
         let newX = initialX;
@@ -2090,20 +2101,364 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   const handleGroupSelected = () => {
     if (selectedPanelIds.length < 2) return;
     const newGroupId = `grp_${Date.now()}`;
+    const defaultGroupName = `Group Container (${selectedPanelIds.length})`;
     const updatedPanels = appState.panels.map(p => {
       if (selectedPanelIds.includes(p.panelId)) {
-        return { ...p, groupId: newGroupId };
+        return { ...p, groupId: newGroupId, groupName: defaultGroupName };
+      }
+      return p;
+    });
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
+    setActiveDockTab('config');
+  };
+
+  const handleUngroupSelected = () => {
+    const updatedPanels = appState.panels.map(p => {
+      if (selectedPanelIds.includes(p.panelId)) {
+        const { groupId, groupName, ...rest } = p;
+        return rest;
       }
       return p;
     });
     updateAppStateWithHistory({ ...appState, panels: updatedPanels });
   };
 
-  const handleUngroupSelected = () => {
+  const handleUngroupSingle = (groupId: string) => {
     const updatedPanels = appState.panels.map(p => {
-      if (selectedPanelIds.includes(p.panelId)) {
-        const { groupId, ...rest } = p;
+      if (p.groupId === groupId) {
+        const { groupId: gid, groupName, ...rest } = p;
         return rest;
+      }
+      return p;
+    });
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
+  };
+
+  const handleSelectGroup = (groupId: string) => {
+    const groupMembers = appState.panels.filter(p => p.groupId === groupId).map(p => p.panelId);
+    setSelectedPanelIds(groupMembers);
+    if (groupMembers.length > 0) setMasterPanelId(groupMembers[0]);
+    setActiveSubPartSelection(null);
+    setActiveDockTab('config');
+  };
+
+  const handleSelectSubPart = (panelId: string, partId: string) => {
+    setSelectedPanelIds([panelId]);
+    setMasterPanelId(panelId);
+    setActiveSubPartSelection({ panelId, partId });
+    setActiveDockTab('config');
+  };
+
+  const handleUpdateSvgSubPart = (panelId: string, partId: string, updates: Partial<SvgSubPartConfig>) => {
+    const updatedPanels = appState.panels.map(p => {
+      if (p.panelId === panelId) {
+        const existingParts = p.svgSubParts || {};
+        const currentPart = existingParts[partId] || {};
+        return {
+          ...p,
+          svgSubParts: {
+            ...existingParts,
+            [partId]: {
+              ...currentPart,
+              ...updates
+            }
+          }
+        };
+      }
+      return p;
+    });
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
+  };
+
+  const handleAddDynamicRule = (panelId: string, partId: string | null, ruleType: DynamicPropertyType) => {
+    const isLevel = ruleType === 'level_fill';
+    const newRule: DynamicBehaviorRule = {
+      id: `dyn_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      type: ruleType,
+      name: ruleType === 'color_shift' ? 'Color Shift' : ruleType === 'rotation' ? 'Rotation Spin' : ruleType === 'level_fill' ? 'Level Fill' : ruleType === 'visibility_blink' ? 'Visibility & Hide/Show' : ruleType === 'opacity_fade' ? 'Opacity Fade' : 'Motion Path',
+      enabled: true,
+      dataSourceMode: 'driver',
+      driverTagId: '',
+      topic: '',
+      jsonPath: '',
+      tagDataType: isLevel ? 'analog' : 'digital',
+      // Digital 2-State Defaults (0 and 1)
+      state1Value: '0',
+      state2Value: '1',
+      state1Visibility: 'hide',
+      state2Visibility: 'show',
+      state1Fill: '#334155',
+      state1Stroke: '#0f172a',
+      state2Fill: '#10b981',
+      state2Stroke: '#059669',
+      state1Rotate: false,
+      state2Rotate: true,
+      state1RotationDirection: 'cw',
+      state2RotationDirection: 'cw',
+      state1Opacity: 0,
+      state2Opacity: 1,
+      // Analog Defaults
+      conditionType: isLevel || ruleType === 'rotation' ? 'always' : 'threshold',
+      operator: '>',
+      conditionValue: 50,
+      actionOnMatch: 'hide',
+      actionOnElse: 'show',
+      targetFill: '#ef4444',
+      targetStroke: '#f87171',
+      rotationMode: 'continuous_spin',
+      rotationSpeed: 2,
+      rotationDirection: 'cw',
+      fillDirection: 'bottom_to_top',
+      fillColor: '#10b981',
+      fillMin: 0,
+      fillMax: 100,
+      isBlinking: false,
+      blinkSpeed: 'medium',
+      targetOpacity: 0.3
+    };
+
+    const updatedPanels = appState.panels.map(p => {
+      if (p.panelId === panelId) {
+        if (partId) {
+          const parts = p.svgSubParts || {};
+          const currentPart = parts[partId] || {};
+          const currentDynamics = currentPart.dynamics || [];
+          return {
+            ...p,
+            svgSubParts: {
+              ...parts,
+              [partId]: {
+                ...currentPart,
+                dynamics: [...currentDynamics, newRule]
+              }
+            }
+          };
+        } else {
+          const currentDynamics = p.dynamics || [];
+          return {
+            ...p,
+            dynamics: [...currentDynamics, newRule]
+          };
+        }
+      }
+      return p;
+    });
+
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
+    setActiveDockTab('dynamics');
+  };
+
+  const handleUpdateDynamicRule = (panelId: string, partId: string | null, ruleId: string, updates: Partial<DynamicBehaviorRule>) => {
+    const updatedPanels = appState.panels.map(p => {
+      if (p.panelId === panelId) {
+        if (partId) {
+          const parts = p.svgSubParts || {};
+          const currentPart = parts[partId] || {};
+          const currentDynamics = currentPart.dynamics || [];
+          return {
+            ...p,
+            svgSubParts: {
+              ...parts,
+              [partId]: {
+                ...currentPart,
+                dynamics: currentDynamics.map(r => r.id === ruleId ? { ...r, ...updates } : r)
+              }
+            }
+          };
+        } else {
+          const currentDynamics = p.dynamics || [];
+          return {
+            ...p,
+            dynamics: currentDynamics.map(r => r.id === ruleId ? { ...r, ...updates } : r)
+          };
+        }
+      }
+      return p;
+    });
+
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
+  };
+
+  const handleDeleteDynamicRule = (panelId: string, partId: string | null, ruleId: string) => {
+    const updatedPanels = appState.panels.map(p => {
+      if (p.panelId === panelId) {
+        if (partId) {
+          const parts = p.svgSubParts || {};
+          const currentPart = parts[partId] || {};
+          const currentDynamics = currentPart.dynamics || [];
+          return {
+            ...p,
+            svgSubParts: {
+              ...parts,
+              [partId]: {
+                ...currentPart,
+                dynamics: currentDynamics.filter(r => r.id !== ruleId)
+              }
+            }
+          };
+        } else {
+          const currentDynamics = p.dynamics || [];
+          return {
+            ...p,
+            dynamics: currentDynamics.filter(r => r.id !== ruleId)
+          };
+        }
+      }
+      return p;
+    });
+
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
+  };
+
+  const handleToggleDynamicRule = (panelId: string, partId: string | null, ruleId: string) => {
+    const updatedPanels = appState.panels.map(p => {
+      if (p.panelId === panelId) {
+        if (partId) {
+          const parts = p.svgSubParts || {};
+          const currentPart = parts[partId] || {};
+          const currentDynamics = currentPart.dynamics || [];
+          return {
+            ...p,
+            svgSubParts: {
+              ...parts,
+              [partId]: {
+                ...currentPart,
+                dynamics: currentDynamics.map(r => r.id === ruleId ? { ...r, enabled: !r.enabled } : r)
+              }
+            }
+          };
+        } else {
+          const currentDynamics = p.dynamics || [];
+          return {
+            ...p,
+            dynamics: currentDynamics.map(r => r.id === ruleId ? { ...r, enabled: !r.enabled } : r)
+          };
+        }
+      }
+      return p;
+    });
+
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
+  };
+
+  const handleToggleVisibility = (panelId: string) => {
+    const updatedPanels = appState.panels.map(p => {
+      if (p.panelId === panelId) {
+        return { ...p, isHidden: !p.isHidden };
+      }
+      return p;
+    });
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
+  };
+
+  const handleToggleLock = (panelId: string) => {
+    const updatedPanels = appState.panels.map(p => {
+      if (p.panelId === panelId) {
+        return { ...p, isLocked: !p.isLocked };
+      }
+      return p;
+    });
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
+  };
+
+  const handleToggleGroupVisibility = (groupId: string) => {
+    const groupPanels = appState.panels.filter(p => p.groupId === groupId);
+    const isAllHidden = groupPanels.every(p => p.isHidden);
+    const updatedPanels = appState.panels.map(p => {
+      if (p.groupId === groupId) {
+        return { ...p, isHidden: !isAllHidden };
+      }
+      return p;
+    });
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
+  };
+
+  const handleToggleGroupLock = (groupId: string) => {
+    const groupPanels = appState.panels.filter(p => p.groupId === groupId);
+    const isAllLocked = groupPanels.every(p => p.isLocked);
+    const updatedPanels = appState.panels.map(p => {
+      if (p.groupId === groupId) {
+        return { ...p, isLocked: !isAllLocked };
+      }
+      return p;
+    });
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
+  };
+
+  const handleRenameGroup = (groupId: string, newName: string) => {
+    const updatedPanels = appState.panels.map(p => {
+      if (p.groupId === groupId) {
+        return { ...p, groupName: newName };
+      }
+      return p;
+    });
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
+  };
+
+  const handleReorderZIndex = (panelId: string, action: 'up' | 'down' | 'top' | 'bottom') => {
+    const idx = appState.panels.findIndex(p => p.panelId === panelId);
+    if (idx === -1) return;
+    const newPanels = [...appState.panels];
+    const [target] = newPanels.splice(idx, 1);
+    if (action === 'up' && idx < newPanels.length) {
+      newPanels.splice(idx + 1, 0, target);
+    } else if (action === 'down' && idx > 0) {
+      newPanels.splice(idx - 1, 0, target);
+    } else if (action === 'top') {
+      newPanels.push(target);
+    } else if (action === 'bottom') {
+      newPanels.unshift(target);
+    } else {
+      newPanels.splice(idx, 0, target);
+    }
+    updateAppStateWithHistory({ ...appState, panels: newPanels });
+  };
+
+  const handleMovePanelToIndex = (sourcePanelId: string, targetPanelId: string, position: 'before' | 'after') => {
+    const sourceIdx = appState.panels.findIndex(p => p.panelId === sourcePanelId);
+    const targetIdx = appState.panels.findIndex(p => p.panelId === targetPanelId);
+    if (sourceIdx === -1 || targetIdx === -1 || sourceIdx === targetIdx) return;
+
+    const newPanels = [...appState.panels];
+    const [moved] = newPanels.splice(sourceIdx, 1);
+
+    const newTargetIdx = newPanels.findIndex(p => p.panelId === targetPanelId);
+    const insertIdx = position === 'before' ? newTargetIdx : newTargetIdx + 1;
+    newPanels.splice(insertIdx, 0, moved);
+
+    updateAppStateWithHistory({ ...appState, panels: newPanels });
+  };
+
+  const handleNestPanelIntoGroup = (panelId: string, targetGroupId: string | null) => {
+    const updatedPanels = appState.panels.map(p => {
+      if (p.panelId === panelId) {
+        if (!targetGroupId) {
+          const { groupId, groupName, ...rest } = p;
+          return rest;
+        } else {
+          const sampleGroupPanel = appState.panels.find(item => item.groupId === targetGroupId);
+          return {
+            ...p,
+            groupId: targetGroupId,
+            groupName: sampleGroupPanel?.groupName || 'Group Container'
+          };
+        }
+      }
+      return p;
+    });
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
+  };
+
+  const handleDeleteGroup = (groupId: string) => {
+    const updatedPanels = appState.panels.filter(p => p.groupId !== groupId);
+    setSelectedPanelIds(prev => prev.filter(id => !appState.panels.some(p => p.groupId === groupId && p.panelId === id)));
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
+  };
+
+  const handleUpdatePanelPropSingle = (panelId: string, key: keyof Panel, value: any) => {
+    const updatedPanels = appState.panels.map(p => {
+      if (p.panelId === panelId) {
+        return { ...p, [key]: value };
       }
       return p;
     });
@@ -2152,7 +2507,11 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   };
 
   // Insert Symbol Factory 3.0 Industrial Equipment (SVG or PNG)
-  const handleSelectIndustrialSymbol = async (symbol: IndustrialSymbolItem, format: 'svg' | 'png') => {
+  const handleSelectIndustrialSymbol = async (
+    symbol: IndustrialSymbolItem, 
+    format: 'svg' | 'png',
+    bindingConfig?: { dataSourceMode?: 'driver' | 'mqtt'; driverTagId?: string; topic?: string }
+  ) => {
     const activeConnId = appState.connections?.[0]?.connectionId || '';
     const newId = `p_sym_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
@@ -2177,13 +2536,19 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       defaultAnimType = 'motor_rotation';
     }
 
+    const dataSourceMode = bindingConfig?.dataSourceMode || 'driver';
+    const driverTagId = bindingConfig?.driverTagId || `TAG_${symbol.id.toUpperCase()}`;
+    const topic = bindingConfig?.topic || `scada/${symbol.category}/${symbol.id}`;
+
     const newSymbolPanel: Panel = {
       panelId: newId,
       dashboardId: activeDashboardId,
       connectionId: activeConnId,
       panelName: symbol.name,
       type: PanelType.IMAGE,
-      topic: `scada/${symbol.category}/${symbol.id}`,
+      topic: topic,
+      dataSourceMode: dataSourceMode,
+      driverTagId: driverTagId,
       symbolId: symbol.id,
       symbolCategory: symbol.category,
       symbolAnimType: defaultAnimType,
@@ -2296,8 +2661,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     const relX = rect ? e.clientX - rect.left : e.clientX;
     const relY = rect ? e.clientY - rect.top : e.clientY;
 
-    const canvasX = Math.round((relX + (canvasRef.current?.scrollLeft || 0)) / (zoomLevel || 1));
-    const canvasY = Math.round((relY + (canvasRef.current?.scrollTop || 0)) / (zoomLevel || 1));
+    const { x: rawCanvasX, y: rawCanvasY } = getCanvasCoords(e.clientX, e.clientY);
+    const canvasX = Math.round(rawCanvasX);
+    const canvasY = Math.round(rawCanvasY);
 
     setContextMenu({
       isOpen: true,
@@ -2624,14 +2990,18 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       {!isFullscreen && (
         <div 
           onWheel={(e) => {
-            if (e.deltaY !== 0) {
+            if (isMobile && e.deltaY !== 0) {
               e.currentTarget.scrollLeft += e.deltaY;
             }
           }}
-          className="bg-slate-900/95 border-b border-slate-800 px-2 sm:px-3 py-1 flex items-center justify-between gap-1.5 shrink-0 z-20 backdrop-blur-md overflow-x-auto custom-horizontal-scrollbar w-full max-w-full touch-scroll overscroll-x-contain min-h-[38px]"
+          className={`bg-slate-900/95 border-b border-slate-800 px-2 sm:px-3 py-1.5 flex items-center justify-between gap-1.5 shrink-0 z-20 backdrop-blur-md min-h-[38px] w-full max-w-full ${
+            isDesktop
+              ? 'flex-wrap overflow-visible'
+              : 'overflow-x-auto custom-horizontal-scrollbar touch-scroll overscroll-x-contain'
+          }`}
         >
           {/* HMI Canvas Element Controls */}
-          <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0 whitespace-nowrap">
+          <div className={`flex items-center gap-1 sm:gap-1.5 ${isDesktop ? 'flex-wrap' : 'shrink-0 whitespace-nowrap'}`}>
             {effectiveEditMode && (
               <>
                 {/* Mobile Tools Collapse Toggle Button */}
@@ -2729,6 +3099,24 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       <span className="hidden 2xl:inline">Symbol Library</span>
                       <span className="bg-sky-500/30 text-sky-200 text-[9px] font-extrabold px-1 py-0.2 rounded-md border border-sky-400/30">Symbols</span>
                     </button>
+
+                    {/* Left Studio Dock (Explorer / Config) Toggle Button */}
+                    <button
+                      type="button"
+                      onClick={() => setIsLeftDockOpen(prev => !prev)}
+                      className={`px-2 sm:px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer shrink-0 border shadow-md active:scale-95 ${
+                        isLeftDockOpen
+                          ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
+                          : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700'
+                      }`}
+                      title="Toggle Left Studio Dock (Scene Explorer & Config Inspector - Alt+E)"
+                    >
+                      <i className={`fas ${isLeftDockOpen ? 'fa-table-columns' : 'fa-folder-tree'} text-xs ${isLeftDockOpen ? 'text-sky-400' : 'text-slate-400'}`}></i>
+                      <span>Studio Dock</span>
+                      <span className="text-[9px] font-mono bg-slate-950/80 px-1 py-0.2 rounded border border-slate-800 text-slate-400">
+                        {activeDockTab === 'explorer' ? 'Tree' : 'Config'}
+                      </span>
+                    </button>
                   </>
                 )}
               </>
@@ -2736,7 +3124,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
           </div>
 
           {/* Right Toolbar Controls */}
-          <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0 whitespace-nowrap">
+          <div className={`flex items-center gap-1 sm:gap-1.5 ${isDesktop ? 'flex-wrap' : 'shrink-0 whitespace-nowrap'}`}>
+
             {effectiveEditMode && !isMobileToolsCollapsed && (
               <>
                 {/* Screen Background Color Swatch Picker */}
@@ -2901,13 +3290,18 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       {effectiveEditMode && selectedPanelIds.length > 0 && (
         <div 
           onWheel={(e) => {
-            if (e.deltaY !== 0) {
+            if (isMobile && e.deltaY !== 0) {
               e.currentTarget.scrollLeft += e.deltaY;
             }
           }}
-          className="bg-slate-950 border-b border-slate-800 px-2 sm:px-3 py-1 flex items-center justify-between gap-1.5 text-xs z-20 animate-in fade-in shadow-xl overflow-x-auto custom-horizontal-scrollbar w-full max-w-full touch-scroll overscroll-x-contain shrink-0 min-h-[36px]"
+          className={`bg-slate-950 border-b border-slate-800 px-2 sm:px-3 py-1.5 flex items-center justify-between gap-1.5 text-xs z-20 animate-in fade-in shadow-xl w-full max-w-full shrink-0 min-h-[36px] ${
+            isDesktop
+              ? 'flex-wrap overflow-visible'
+              : 'overflow-x-auto custom-horizontal-scrollbar touch-scroll overscroll-x-contain'
+          }`}
         >
-          <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0 whitespace-nowrap">
+          <div className={`flex items-center gap-1 sm:gap-1.5 ${isDesktop ? 'flex-wrap' : 'shrink-0 whitespace-nowrap'}`}>
+
             
             {/* Selection Info Badge */}
             <div className="flex items-center space-x-1 font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/30 shrink-0">
@@ -3275,7 +3669,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
           </div>
 
           {/* Action Buttons: Copy Property, Duplicate, Config & Delete */}
-          <div className="flex items-center space-x-1 shrink-0 whitespace-nowrap">
+          <div className={`flex items-center gap-1 sm:gap-1.5 ${isDesktop ? 'flex-wrap' : 'shrink-0 whitespace-nowrap'}`}>
+
             {/* Copy & Paste Property Buttons */}
             <div className="flex items-center space-x-0.5 bg-slate-900 p-0.5 rounded-xl border border-slate-800 shrink-0">
               <button
@@ -3373,12 +3768,65 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
         </div>
       )}
 
-      {/* Main Freeform Absolute Canvas Area */}
-      <div 
-        ref={canvasRef}
-        id="hmi-canvas-background"
-        data-canvas-bg="true"
-        onMouseDown={(e) => handleCanvasMouseDown(e)}
+      {/* Studio Body Container with Retractable Left Dock (Explorer & Config Tabs) */}
+      <div className="flex-1 flex min-h-0 relative overflow-hidden">
+        {/* Retractable Left Studio Dock */}
+        {!isFullscreen && effectiveEditMode && (
+          <HmiCanvasLeftDock
+            isOpen={isLeftDockOpen}
+            onToggleOpen={() => setIsLeftDockOpen(prev => !prev)}
+            activeTab={activeDockTab}
+            onChangeTab={(tab) => setActiveDockTab(tab)}
+            dockMode={dockMode}
+            onToggleDockMode={() => setDockMode(prev => prev === 'push' ? 'overlay' : 'push')}
+            panels={activeScreenPanels}
+            selectedPanels={activeScreenPanels.filter(p => selectedPanelIds.includes(p.panelId))}
+            selectedPanelIds={selectedPanelIds}
+            activeSubPartSelection={activeSubPartSelection}
+            onSelectPanel={(panelId, isMulti) => {
+              handlePanelSelect(panelId, isMulti);
+              setActiveSubPartSelection(null);
+            }}
+            onSelectGroup={handleSelectGroup}
+            onSelectSubPart={handleSelectSubPart}
+            onToggleVisibility={handleToggleVisibility}
+            onToggleLock={handleToggleLock}
+            onToggleGroupVisibility={handleToggleGroupVisibility}
+            onToggleGroupLock={handleToggleGroupLock}
+            onUngroup={handleUngroupSingle}
+            onRenameGroup={handleRenameGroup}
+            onReorderZIndex={handleReorderZIndex}
+            onMovePanelToIndex={handleMovePanelToIndex}
+            onNestPanelIntoGroup={handleNestPanelIntoGroup}
+            onDeletePanel={(panelId) => {
+              const updatedPanels = appState.panels.filter(p => p.panelId !== panelId);
+              setSelectedPanelIds(prev => prev.filter(id => id !== panelId));
+              updateAppStateWithHistory({ ...appState, panels: updatedPanels });
+            }}
+            onDeleteGroup={handleDeleteGroup}
+            onOpenAddPanel={onOpenAddPanel}
+            onUpdatePanelProp={handleUpdatePanelPropSingle}
+            onUpdateBatchProp={updateSelectedPanelProp}
+            onUpdateSvgSubPart={handleUpdateSvgSubPart}
+            onAddDynamicRule={handleAddDynamicRule}
+            onUpdateDynamicRule={handleUpdateDynamicRule}
+            onDeleteDynamicRule={handleDeleteDynamicRule}
+            onToggleDynamicRule={handleToggleDynamicRule}
+            onAlignPanels={alignSelectedPanels}
+            onDuplicateSelected={handleDuplicateSelected}
+            onDeleteSelected={handleDeleteSelected}
+            onOpenFullEditModal={(panel) => onEditPanel(panel)}
+            onClearSubPartSelection={() => setActiveSubPartSelection(null)}
+            appState={appState}
+          />
+        )}
+
+        {/* Main Freeform Absolute Canvas Area */}
+        <div 
+          ref={canvasRef}
+          id="hmi-canvas-background"
+          data-canvas-bg="true"
+          onMouseDown={(e) => handleCanvasMouseDown(e)}
         onClick={() => {
           if (justFinishedMarqueeRef.current) {
             justFinishedMarqueeRef.current = false;
@@ -3502,22 +3950,42 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
           )
         ) : (
           panels.map((panel, idx) => {
+            const dynEval = evaluatePanelDynamics(panel, latestValues);
+            if (panel.isHidden || dynEval.visibility?.isHidden) return null;
+
             const pos = getPanelPos(panel, idx);
             const isSelected = selectedPanelIds.includes(panel.panelId);
             const isMaster = masterPanelId === panel.panelId;
-            const liveData = latestValues[panel.panelId] || (panel.driverTagId ? latestValues[panel.driverTagId] : undefined) || (panel.topic ? latestValues[panel.topic] : undefined);
+            // Find any active dynamic rule tag/topic binding on this panel
+            const dynamicTag = panel.dynamics?.find(d => d.enabled && (d.driverTagId || d.topic))?.driverTagId 
+              || panel.dynamics?.find(d => d.enabled && (d.driverTagId || d.topic))?.topic;
+
+            const liveData = latestValues[panel.panelId] 
+              || (panel.driverTagId ? latestValues[panel.driverTagId] : undefined) 
+              || (panel.topic ? latestValues[panel.topic] : undefined)
+              || (dynamicTag ? latestValues[dynamicTag] : undefined);
+
             const liveValue = liveData?.val;
             const rawStringValue = liveValue !== undefined && liveValue !== null ? String(liveValue) : '';
+
+            // Dynamic color shift, opacity, and blinking
+            const effectiveBg = dynEval.colorShift?.fill || panel.bgColor;
+            const effectiveBorder = dynEval.colorShift?.stroke || panel.borderColor;
+            const effectiveOpacity = dynEval.opacity !== null ? dynEval.opacity : (panel.opacity !== undefined ? panel.opacity : 1);
+            const isDynBlinking = dynEval.visibility?.isBlinking;
+            const dynBlinkClass = isDynBlinking ? (dynEval.visibility?.blinkSpeed === 'fast' ? 'animate-ping' : 'animate-pulse') : '';
 
             // Equipment Trip / Fault Evaluation
             const tripStatus = isPanelTripped(panel, latestValues);
             const isTripActive = tripStatus.isTripped;
-            const tripAnimClass = isTripActive ? `trip-anim-${panel.tripAnimStyle || 'flash_strobe'}` : '';
+            const tripAnimClass = isTripActive ? `trip-anim-${panel.tripAnimStyle || 'flash_strobe'}` : dynBlinkClass;
             const isPipePanel = panel.type === PanelType.PIPE || (panel.type as string) === 'pipe' || panel.shapeType === 'pipe';
             const isVectorShape = panel.type === PanelType.SHAPE || (panel.type as string) === 'shape' || isPipePanel;
             const isSymbolOrImagePanel = !!panel.symbolId || !!panel.symbolAnimType || panel.type === PanelType.IMAGE || (panel.type as string) === 'image';
             const hasCustomExplicitBg = !!panel.bgColor && panel.bgColor !== 'transparent' && !panel.bgColor.includes('15, 23, 42') && panel.bgColor !== '#0f172a' && panel.bgColor !== '#1e293b';
             const isPureShapeWithoutBox = isPipePanel || (isSymbolOrImagePanel && !hasCustomExplicitBg) || (isVectorShape && panel.shapeType !== 'rectangle');
+
+            const hasAnyBinding = Boolean(panel.topic?.trim() || panel.driverTagId || dynamicTag);
 
             // Check if element is purely static/decorative/non-telemetry
             const isStaticOrDecorative =
@@ -3525,9 +3993,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
               (panel.type as string) === 'static_text' ||
               (panel.type as string) === 'label' ||
               panel.type === PanelType.CLOCK ||
-              panel.type === PanelType.SHAPE ||
               panel.type === PanelType.SCREEN_JUMP ||
-              (!panel.topic?.trim() && !panel.driverTagId);
+              (!hasAnyBinding);
 
             // Telemetry Timeout / Disconnection Watchdog Evaluation
             const telemetryStatus = getPanelTelemetryStatus(panel, latestValues);
@@ -3536,24 +4003,41 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
             // Rx & Tx Telemetry Timestamp Visual Display
             const lastRxTime = liveData?.time;
             const lastTxTime = liveData?.sentTime;
-            const showRx = !isStaticOrDecorative && panel.showReceivedTimeStamp !== false && !!lastRxTime && (!!panel.topic || !!panel.driverTagId);
+            const showRx = !isStaticOrDecorative && panel.showReceivedTimeStamp !== false && !!lastRxTime && (!!panel.topic || !!panel.driverTagId || !!dynamicTag);
             const showTx = !isStaticOrDecorative && !!panel.showSentTimeStamp && !!lastTxTime && (!!panel.publishTopic || !!panel.topic);
 
             // Dynamic Tag-Based Motion Translation and Rotation Evaluation
             const dynTransform = getDynamicElementTransform(panel, latestValues, effectiveEditMode);
 
+            let combinedTransform = dynTransform.transform || (panel.rotation ? `rotate(${panel.rotation}deg)` : undefined);
+            if (dynEval.rotation?.angle && !effectiveEditMode) {
+              combinedTransform = combinedTransform ? `${combinedTransform} rotate(${dynEval.rotation.angle}deg)` : `rotate(${dynEval.rotation.angle}deg)`;
+            }
+
+            let combinedAnimation = dynTransform.animation;
+            if (dynEval.rotation?.isSpinning && !effectiveEditMode && !combinedAnimation) {
+              const animName = dynEval.rotation.spinDirection === 'ccw' ? 'hmi-spin-ccw' : 'hmi-spin-cw';
+              combinedAnimation = `${animName} ${dynEval.rotation.spinDuration}s linear infinite`;
+            }
+
             return (
               <div
                 key={panel.panelId}
                 id={`hmi-panel-${panel.panelId}`}
-                onMouseDown={(e) => handleMouseDown(e, panel.panelId)}
+                onMouseDown={(e) => {
+                  if (panel.isLocked) {
+                    handlePanelSelect(panel.panelId, e.shiftKey || e.ctrlKey || e.metaKey);
+                    return;
+                  }
+                  handleMouseDown(e, panel.panelId);
+                }}
                 onContextMenu={(e) => handleContextMenu(e, panel.panelId)}
                 onClick={(e) => {
                   e.stopPropagation();
                   handlePanelInteract(panel);
                 }}
                 className={`absolute transition-all group select-none ${
-                  effectiveEditMode ? 'cursor-move' : 'cursor-pointer'
+                  effectiveEditMode ? (panel.isLocked ? 'cursor-not-allowed' : 'cursor-move') : 'cursor-pointer'
                 } ${
                   isSelected && effectiveEditMode
                     ? isMaster
@@ -3568,14 +4052,14 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   top: `${pos.y}px`,
                   width: `${pos.w}px`,
                   height: `${pos.h}px`,
-                  backgroundColor: isPureShapeWithoutBox ? 'transparent' : (panel.bgColor || (panel.type === PanelType.STATIC_TEXT ? '#0f172a' : 'rgba(15, 23, 42, 0.9)')),
-                  borderColor: isPureShapeWithoutBox ? 'transparent' : (panel.borderColor || '#1e293b'),
+                  backgroundColor: isPureShapeWithoutBox ? 'transparent' : (effectiveBg || (panel.type === PanelType.STATIC_TEXT ? '#0f172a' : 'rgba(15, 23, 42, 0.9)')),
+                  borderColor: isPureShapeWithoutBox ? 'transparent' : (effectiveBorder || '#1e293b'),
                   borderWidth: isPureShapeWithoutBox ? '0px' : `${panel.borderWidth ?? 1}px`,
                   borderRadius: isPureShapeWithoutBox ? '0px' : `${panel.borderRadius ?? 8}px`,
                   color: panel.textColor || '#f8fafc',
-                  opacity: panel.opacity !== undefined ? panel.opacity : 1,
-                  transform: dynTransform.transform || (panel.rotation ? `rotate(${panel.rotation}deg)` : undefined),
-                  animation: dynTransform.animation || undefined,
+                  opacity: effectiveOpacity,
+                  transform: combinedTransform,
+                  animation: combinedAnimation,
                   boxShadow: !isPureShapeWithoutBox && panel.shadowEnabled
                     ? `0 0 ${panel.shadowIntensity ?? 15}px ${panel.shadowColor || '#38bdf8'}, 0 4px 12px rgba(0, 0, 0, 0.5)`
                     : undefined
@@ -4087,6 +4571,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         liveValue={liveValue}
                         latestValues={latestValues}
                         className="w-full h-full"
+                        activeSubPartId={activeSubPartSelection?.panelId === panel.panelId ? activeSubPartSelection.partId : undefined}
                       />
                     ) : panel.imageUrl || panel.staticText ? (
                       <img
@@ -4117,19 +4602,61 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     <div className="w-full h-full relative flex items-center justify-center select-none overflow-visible">
                       {panel.shapeType === 'circle' ? (
                         <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+                          <defs>
+                            <clipPath id={`clip_circle_${panel.panelId}`}>
+                              <ellipse cx="50" cy="50" rx="46" ry="46" />
+                            </clipPath>
+                            <linearGradient id={`grad_meniscus_circle_${panel.panelId}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.35" />
+                              <stop offset="50%" stopColor="#000000" stopOpacity="0.0" />
+                              <stop offset="100%" stopColor="#000000" stopOpacity="0.3" />
+                            </linearGradient>
+                          </defs>
+                          {/* Background Shape */}
                           <ellipse 
                             cx="50" cy="50" rx="46" ry="46" 
-                            fill={panel.bgColor && panel.bgColor !== 'transparent' && !panel.bgColor.includes('15, 23, 42') ? panel.bgColor : 'rgba(56, 189, 248, 0.15)'} 
-                            stroke={panel.borderColor || '#38bdf8'} 
+                            fill={effectiveBg && effectiveBg !== 'transparent' && !effectiveBg.includes('15, 23, 42') ? effectiveBg : 'rgba(15, 23, 42, 0.6)'} 
+                          />
+                          {/* Liquid Level Fill Layer */}
+                          {dynEval.levelFill && dynEval.levelFill.isLevelFill && (
+                            <g clipPath={`url(#clip_circle_${panel.panelId})`}>
+                              <rect
+                                x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
+                                height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
+                                fill={dynEval.levelFill.fillColor || '#10b981'}
+                                className="transition-all duration-300 ease-out"
+                              />
+                              <rect
+                                x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
+                                height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
+                                fill={`url(#grad_meniscus_circle_${panel.panelId})`}
+                                className="transition-all duration-300 ease-out"
+                              />
+                            </g>
+                          )}
+                          {/* Outer Border */}
+                          <ellipse 
+                            cx="50" cy="50" rx="46" ry="46" 
+                            fill="none"
+                            stroke={effectiveBorder || '#38bdf8'} 
                             strokeWidth={panel.borderWidth || 2} 
                           />
+                          {dynEval.levelFill && dynEval.levelFill.isLevelFill && dynEval.levelFill.showPercentage !== false && (
+                            <text x="50" y="54" fontSize="12" fill="#ffffff" fontWeight="bold" fontFamily="monospace" textAnchor="middle" filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.8))">
+                              {Math.round(dynEval.levelFill.percentage)}%
+                            </text>
+                          )}
                         </svg>
                       ) : panel.shapeType === 'line' ? (
                         <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
                           <polyline
                             points={shapePts.map(p => `${p.x},${p.y}`).join(' ')}
                             fill="none"
-                            stroke={panel.borderColor || '#38bdf8'}
+                            stroke={effectiveBorder || '#38bdf8'}
                             strokeWidth={panel.borderWidth || 3}
                             strokeLinecap="round"
                             strokeLinejoin="round"
@@ -4140,30 +4667,12 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                           <polyline
                             points={shapePts.map(p => `${p.x},${p.y}`).join(' ')}
                             fill="none"
-                            stroke={panel.borderColor || '#38bdf8'}
+                            stroke={effectiveBorder || '#38bdf8'}
                             strokeWidth={panel.borderWidth || 3}
                             strokeLinecap="round"
                             strokeLinejoin="round"
                           />
                         </svg>
-                      ) : panel.shapeType === 'polyline' ? (
-                        (() => {
-                          const boxW = Math.max(10, pos.w);
-                          const boxH = Math.max(10, pos.h);
-                          const polyPts = shapePts.map(p => `${(p.x / 100) * boxW},${(p.y / 100) * boxH}`).join(' ');
-                          return (
-                            <svg className="w-full h-full overflow-visible" viewBox={`0 0 ${boxW} ${boxH}`}>
-                              <polyline
-                                points={polyPts}
-                                fill="none"
-                                stroke={panel.borderColor || '#38bdf8'}
-                                strokeWidth={panel.borderWidth || 3}
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          );
-                        })()
                       ) : panel.shapeType === 'polygon' || panel.shapeType === 'custom_polygon' ? (
                         (() => {
                           const boxW = Math.max(10, pos.w);
@@ -4171,13 +4680,52 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                           const polyPts = shapePts.map(p => `${(p.x / 100) * boxW},${(p.y / 100) * boxH}`).join(' ');
                           return (
                             <svg className="w-full h-full overflow-visible" viewBox={`0 0 ${boxW} ${boxH}`}>
+                              <defs>
+                                <clipPath id={`clip_poly_${panel.panelId}`}>
+                                  <polygon points={polyPts} />
+                                </clipPath>
+                                <linearGradient id={`grad_meniscus_poly_${panel.panelId}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                                  <stop offset="0%" stopColor="#ffffff" stopOpacity="0.35" />
+                                  <stop offset="50%" stopColor="#000000" stopOpacity="0.0" />
+                                  <stop offset="100%" stopColor="#000000" stopOpacity="0.3" />
+                                </linearGradient>
+                              </defs>
                               <polygon
                                 points={polyPts}
-                                fill={panel.bgColor && panel.bgColor !== 'transparent' && !panel.bgColor.includes('15, 23, 42') ? panel.bgColor : 'rgba(56, 189, 248, 0.15)'}
-                                stroke={panel.borderColor || '#38bdf8'}
+                                fill={effectiveBg && effectiveBg !== 'transparent' && !effectiveBg.includes('15, 23, 42') ? effectiveBg : 'rgba(15, 23, 42, 0.6)'}
+                              />
+                              {dynEval.levelFill && dynEval.levelFill.isLevelFill && (
+                                <g clipPath={`url(#clip_poly_${panel.panelId})`}>
+                                  <rect
+                                    x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${boxW * (1 - dynEval.levelFill.percentage / 100)}` : '0'}
+                                    y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${boxH * (1 - dynEval.levelFill.percentage / 100)}` : '0'}
+                                    width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${boxW * (dynEval.levelFill.percentage / 100)}` : boxW}
+                                    height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${boxH * (dynEval.levelFill.percentage / 100)}` : boxH}
+                                    fill={dynEval.levelFill.fillColor || '#38bdf8'}
+                                    className="transition-all duration-300 ease-out"
+                                  />
+                                  <rect
+                                    x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${boxW * (1 - dynEval.levelFill.percentage / 100)}` : '0'}
+                                    y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${boxH * (1 - dynEval.levelFill.percentage / 100)}` : '0'}
+                                    width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${boxW * (dynEval.levelFill.percentage / 100)}` : boxW}
+                                    height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${boxH * (dynEval.levelFill.percentage / 100)}` : boxH}
+                                    fill={`url(#grad_meniscus_poly_${panel.panelId})`}
+                                    className="transition-all duration-300 ease-out"
+                                  />
+                                </g>
+                              )}
+                              <polygon
+                                points={polyPts}
+                                fill="none"
+                                stroke={effectiveBorder || '#38bdf8'}
                                 strokeWidth={panel.borderWidth || 2}
                                 strokeLinejoin="round"
                               />
+                              {dynEval.levelFill && dynEval.levelFill.isLevelFill && dynEval.levelFill.showPercentage !== false && (
+                                <text x={boxW / 2} y={boxH / 2 + 4} fontSize="12" fill="#ffffff" fontWeight="bold" fontFamily="monospace" textAnchor="middle" filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.8))">
+                                  {Math.round(dynEval.levelFill.percentage)}%
+                                </text>
+                              )}
                             </svg>
                           );
                         })()
@@ -4280,14 +4828,14 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                               <path
                                 d={dPath}
                                 fill="none"
-                                stroke={panel.firstColor || '#ef4444'}
+                                stroke={dynEval.levelFill?.fillColor || panel.firstColor || '#ef4444'}
                                 strokeWidth={Math.max(2, Math.floor(pipeThick * 0.48))}
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
                                 style={{ opacity: 0.85 }}
                               />
 
-                              {/* Layer 5: Bubble Flow Mechanics Animation (Set of 2-3 Different Sized Small Floating Circles) */}
+                              {/* Layer 5: Bubble Flow Mechanics Animation */}
                               {animStyle === 'bubbles' ? (
                                 <g>
                                   {/* Big Bubbles */}
@@ -4412,45 +4960,195 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         })()
                       ) : panel.shapeType === 'triangle' ? (
                         <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+                          <defs>
+                            <clipPath id={`clip_tri_${panel.panelId}`}>
+                              <polygon points="50,5 95,95 5,95" />
+                            </clipPath>
+                            <linearGradient id={`grad_meniscus_tri_${panel.panelId}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.35" />
+                              <stop offset="50%" stopColor="#000000" stopOpacity="0.0" />
+                              <stop offset="100%" stopColor="#000000" stopOpacity="0.3" />
+                            </linearGradient>
+                          </defs>
                           <polygon 
                             points="50,5 95,95 5,95" 
-                            fill={panel.bgColor && panel.bgColor !== 'transparent' && !panel.bgColor.includes('15, 23, 42') ? panel.bgColor : 'rgba(56, 189, 248, 0.15)'} 
-                            stroke={panel.borderColor || '#38bdf8'} 
+                            fill={effectiveBg && effectiveBg !== 'transparent' && !effectiveBg.includes('15, 23, 42') ? effectiveBg : 'rgba(15, 23, 42, 0.6)'} 
+                          />
+                          {dynEval.levelFill && dynEval.levelFill.isLevelFill && (
+                            <g clipPath={`url(#clip_tri_${panel.panelId})`}>
+                              <rect
+                                x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
+                                height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
+                                fill={dynEval.levelFill.fillColor || '#10b981'}
+                                className="transition-all duration-300 ease-out"
+                              />
+                              <rect
+                                x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
+                                height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
+                                fill={`url(#grad_meniscus_tri_${panel.panelId})`}
+                                className="transition-all duration-300 ease-out"
+                              />
+                            </g>
+                          )}
+                          <polygon 
+                            points="50,5 95,95 5,95" 
+                            fill="none"
+                            stroke={effectiveBorder || '#38bdf8'} 
                             strokeWidth={panel.borderWidth || 2} 
                             strokeLinejoin="round"
                           />
+                          {dynEval.levelFill && dynEval.levelFill.isLevelFill && dynEval.levelFill.showPercentage !== false && (
+                            <text x="50" y="65" fontSize="12" fill="#ffffff" fontWeight="bold" fontFamily="monospace" textAnchor="middle" filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.8))">
+                              {Math.round(dynEval.levelFill.percentage)}%
+                            </text>
+                          )}
                         </svg>
                       ) : panel.shapeType === 'star' ? (
                         <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+                          <defs>
+                            <clipPath id={`clip_star_${panel.panelId}`}>
+                              <polygon points="50,5 63,35 95,38 71,60 78,92 50,75 22,92 29,60 5,38 37,35" />
+                            </clipPath>
+                            <linearGradient id={`grad_meniscus_star_${panel.panelId}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.35" />
+                              <stop offset="50%" stopColor="#000000" stopOpacity="0.0" />
+                              <stop offset="100%" stopColor="#000000" stopOpacity="0.3" />
+                            </linearGradient>
+                          </defs>
                           <polygon 
                             points="50,5 63,35 95,38 71,60 78,92 50,75 22,92 29,60 5,38 37,35" 
-                            fill={panel.bgColor && panel.bgColor !== 'transparent' && !panel.bgColor.includes('15, 23, 42') ? panel.bgColor : 'rgba(245, 158, 11, 0.2)'} 
-                            stroke={panel.borderColor || '#f59e0b'} 
+                            fill={effectiveBg && effectiveBg !== 'transparent' && !effectiveBg.includes('15, 23, 42') ? effectiveBg : 'rgba(15, 23, 42, 0.6)'} 
+                          />
+                          {dynEval.levelFill && dynEval.levelFill.isLevelFill && (
+                            <g clipPath={`url(#clip_star_${panel.panelId})`}>
+                              <rect
+                                x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
+                                height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
+                                fill={dynEval.levelFill.fillColor || '#f59e0b'}
+                                className="transition-all duration-300 ease-out"
+                              />
+                              <rect
+                                x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
+                                height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
+                                fill={`url(#grad_meniscus_star_${panel.panelId})`}
+                                className="transition-all duration-300 ease-out"
+                              />
+                            </g>
+                          )}
+                          <polygon 
+                            points="50,5 63,35 95,38 71,60 78,92 50,75 22,92 29,60 5,38 37,35" 
+                            fill="none"
+                            stroke={effectiveBorder || '#f59e0b'} 
                             strokeWidth={panel.borderWidth || 2} 
                             strokeLinejoin="round"
                           />
+                          {dynEval.levelFill && dynEval.levelFill.isLevelFill && dynEval.levelFill.showPercentage !== false && (
+                            <text x="50" y="58" fontSize="12" fill="#ffffff" fontWeight="bold" fontFamily="monospace" textAnchor="middle" filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.8))">
+                              {Math.round(dynEval.levelFill.percentage)}%
+                            </text>
+                          )}
                         </svg>
                       ) : panel.shapeType === 'arrow' ? (
                         <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+                          <defs>
+                            <clipPath id={`clip_arrow_${panel.panelId}`}>
+                              <polygon points="0,35 60,35 60,10 100,50 60,90 60,65 0,65" />
+                            </clipPath>
+                            <linearGradient id={`grad_meniscus_arrow_${panel.panelId}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.35" />
+                              <stop offset="50%" stopColor="#000000" stopOpacity="0.0" />
+                              <stop offset="100%" stopColor="#000000" stopOpacity="0.3" />
+                            </linearGradient>
+                          </defs>
                           <polygon 
                             points="0,35 60,35 60,10 100,50 60,90 60,65 0,65" 
-                            fill={panel.bgColor && panel.bgColor !== 'transparent' && !panel.bgColor.includes('15, 23, 42') ? panel.bgColor : 'rgba(16, 185, 129, 0.25)'} 
-                            stroke={panel.borderColor || '#10b981'} 
+                            fill={effectiveBg && effectiveBg !== 'transparent' && !effectiveBg.includes('15, 23, 42') ? effectiveBg : 'rgba(15, 23, 42, 0.6)'} 
+                          />
+                          {dynEval.levelFill && dynEval.levelFill.isLevelFill && (
+                            <g clipPath={`url(#clip_arrow_${panel.panelId})`}>
+                              <rect
+                                x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
+                                height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
+                                fill={dynEval.levelFill.fillColor || '#10b981'}
+                                className="transition-all duration-300 ease-out"
+                              />
+                              <rect
+                                x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
+                                height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
+                                fill={`url(#grad_meniscus_arrow_${panel.panelId})`}
+                                className="transition-all duration-300 ease-out"
+                              />
+                            </g>
+                          )}
+                          <polygon 
+                            points="0,35 60,35 60,10 100,50 60,90 60,65 0,65" 
+                            fill="none"
+                            stroke={effectiveBorder || '#10b981'} 
                             strokeWidth={panel.borderWidth || 2} 
                             strokeLinejoin="round"
                           />
+                          {dynEval.levelFill && dynEval.levelFill.isLevelFill && dynEval.levelFill.showPercentage !== false && (
+                            <text x="50" y="54" fontSize="12" fill="#ffffff" fontWeight="bold" fontFamily="monospace" textAnchor="middle" filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.8))">
+                              {Math.round(dynEval.levelFill.percentage)}%
+                            </text>
+                          )}
                         </svg>
                       ) : (
-                        /* Rectangle */
+                        /* Rectangle / Shape Box with Dynamic Liquid Level Fill */
                         <div 
-                          className="w-full h-full border-2 flex items-center justify-center transition-all"
+                          className="w-full h-full border-2 flex items-center justify-center transition-all overflow-hidden relative"
                           style={{
-                            backgroundColor: panel.bgColor || 'rgba(15, 23, 42, 0.6)',
-                            borderColor: panel.borderColor || '#38bdf8',
+                            backgroundColor: effectiveBg || 'rgba(15, 23, 42, 0.6)',
+                            borderColor: effectiveBorder || '#38bdf8',
                             borderRadius: `${panel.borderRadius ?? 8}px`
                           }}
                         >
-                          {panel.panelName && <span className="text-[10px] font-bold text-slate-200 truncate px-2">{panel.panelName}</span>}
+                          {/* Liquid Level Fill Overlay Layer */}
+                          {dynEval.levelFill && dynEval.levelFill.isLevelFill && (
+                            <div 
+                              className="absolute transition-all duration-300 ease-out z-0 pointer-events-none"
+                              style={{
+                                backgroundColor: dynEval.levelFill.fillColor || '#10b981',
+                                ...(dynEval.levelFill.fillDirection === 'bottom_to_top'
+                                  ? { bottom: 0, left: 0, right: 0, height: `${dynEval.levelFill.percentage}%` }
+                                  : dynEval.levelFill.fillDirection === 'top_to_bottom'
+                                  ? { top: 0, left: 0, right: 0, height: `${dynEval.levelFill.percentage}%` }
+                                  : dynEval.levelFill.fillDirection === 'right_to_left'
+                                  ? { top: 0, bottom: 0, right: 0, width: `${dynEval.levelFill.percentage}%` }
+                                  : { top: 0, bottom: 0, left: 0, width: `${dynEval.levelFill.percentage}%` }
+                                )
+                              }}
+                            >
+                              {/* Fluid wave / meniscus sheen highlight */}
+                              <div className="w-full h-full bg-gradient-to-t from-black/20 via-transparent to-white/30" />
+                            </div>
+                          )}
+
+                          {/* Shape Label / Numeric Readout Overlay */}
+                          <div className="relative z-10 flex flex-col items-center justify-center p-1 text-center truncate max-w-full">
+                            {panel.panelName && (
+                              <span className="text-[10px] font-bold text-slate-200 truncate px-2 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                                {panel.panelName}
+                              </span>
+                            )}
+                            {dynEval.levelFill && dynEval.levelFill.isLevelFill && dynEval.levelFill.showPercentage !== false && (
+                              <span className="text-xs font-mono font-black text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                                {Math.round(dynEval.levelFill.percentage)}%
+                              </span>
+                            )}
+                          </div>
                         </div>
                       )}
 
@@ -4520,12 +5218,41 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       : [{ x: 50, y: 5 }, { x: 95, y: 35 }, { x: 80, y: 95 }, { x: 20, y: 95 }, { x: 5, y: 35 }]
                   ))
                 ) : (
-                  /* Default fallback box */
-                  <div className="w-full h-full p-2 flex flex-col justify-center items-center text-center truncate">
-                    <span className="text-[10px] font-bold truncate w-full" style={{ color: panel.textColor || '#cbd5e1' }}>{panel.panelName}</span>
-                    <span className="text-xs font-mono font-bold mt-1" style={{ color: panel.textColor || '#fbbf24' }}>
-                      {liveValue !== undefined ? String(liveValue) : '0'}
-                    </span>
+                  /* Default fallback box with Liquid Level Fill */
+                  <div className="w-full h-full p-2 flex flex-col justify-center items-center text-center truncate relative overflow-hidden">
+                    {/* Liquid Level Fill Overlay Layer */}
+                    {dynEval.levelFill && dynEval.levelFill.isLevelFill && (
+                      <div 
+                        className="absolute transition-all duration-300 ease-out z-0 pointer-events-none"
+                        style={{
+                          backgroundColor: dynEval.levelFill.fillColor || '#10b981',
+                          ...(dynEval.levelFill.fillDirection === 'bottom_to_top'
+                            ? { bottom: 0, left: 0, right: 0, height: `${dynEval.levelFill.percentage}%` }
+                            : dynEval.levelFill.fillDirection === 'top_to_bottom'
+                            ? { top: 0, left: 0, right: 0, height: `${dynEval.levelFill.percentage}%` }
+                            : dynEval.levelFill.fillDirection === 'right_to_left'
+                            ? { top: 0, bottom: 0, right: 0, width: `${dynEval.levelFill.percentage}%` }
+                            : { top: 0, bottom: 0, left: 0, width: `${dynEval.levelFill.percentage}%` }
+                          )
+                        }}
+                      >
+                        <div className="w-full h-full bg-gradient-to-t from-black/20 via-transparent to-white/30" />
+                      </div>
+                    )}
+                    <div className="relative z-10">
+                      <span className="text-[10px] font-bold truncate w-full" style={{ color: panel.textColor || '#cbd5e1' }}>{panel.panelName}</span>
+                      {liveValue !== undefined ? (
+                        <span className="text-xs font-mono font-bold mt-1 block" style={{ color: panel.textColor || '#fbbf24' }}>
+                          {String(liveValue)}
+                        </span>
+                      ) : (
+                        dynEval.levelFill && dynEval.levelFill.showPercentage !== false ? (
+                          <span className="text-xs font-mono font-bold mt-1 block" style={{ color: panel.textColor || '#fbbf24' }}>
+                            {`${Math.round(dynEval.levelFill.percentage)}%`}
+                          </span>
+                        ) : null
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -4548,84 +5275,93 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 {/* Edit Mode Selection Handle Badges */}
                 {effectiveEditMode && isSelected && (
                   <>
-                    <div className={`absolute ${pos.y < 30 ? 'top-1 right-1' : '-top-3 -right-2'} px-1.5 py-0.5 rounded text-[9px] font-black uppercase shadow z-[70] ${
-                      isMaster ? 'bg-amber-500 text-slate-950' : 'bg-sky-500 text-slate-950'
-                    }`}>
-                      {isMaster ? 'Master Ref' : 'Selected'}
-                    </div>
+                    {panel.isLocked ? (
+                      <div className={`absolute ${pos.y < 30 ? 'top-1 right-1' : '-top-3 -right-2'} px-1.5 py-0.5 rounded text-[9px] font-black uppercase shadow z-[70] bg-rose-500 text-white flex items-center space-x-1 border border-rose-400`}>
+                        <i className="fas fa-lock text-[8px]"></i>
+                        <span>Locked</span>
+                      </div>
+                    ) : (
+                      <div className={`absolute ${pos.y < 30 ? 'top-1 right-1' : '-top-3 -right-2'} px-1.5 py-0.5 rounded text-[9px] font-black uppercase shadow z-[70] ${
+                        isMaster ? 'bg-amber-500 text-slate-950' : 'bg-sky-500 text-slate-950'
+                      }`}>
+                        {isMaster ? 'Master Ref' : 'Selected'}
+                      </div>
+                    )}
 
-                    {/* Interactive Resize & Rotation Control Handles */}
-                    <div className="absolute inset-0 pointer-events-none z-40">
-                      {/* Outline dashed border */}
-                      <div className="absolute inset-0 border-2 border-sky-400 border-dashed rounded-[inherit] pointer-events-none" />
+                    {/* Interactive Resize & Rotation Control Handles (Disabled when locked) */}
+                    {!panel.isLocked && (
+                      <div className="absolute inset-0 pointer-events-none z-40">
+                        {/* Outline dashed border */}
+                        <div className="absolute inset-0 border-2 border-sky-400 border-dashed rounded-[inherit] pointer-events-none" />
 
-                      {/* Rotation Handle (Top Center) */}
-                      <div 
-                        className={`absolute ${pos.y < 45 ? 'top-2 left-1/2 -translate-x-1/2' : '-top-9 left-1/2 -translate-x-1/2'} flex flex-col items-center pointer-events-auto cursor-grab active:cursor-grabbing group/rot z-[70]`}
-                        onMouseDown={(e) => handleRotateStart(e, panel, e.currentTarget.parentElement)}
-                        title="Click and drag to rotate element (Shift for 15° snap)"
-                      >
-                        <div className="w-6 h-6 rounded-full bg-amber-400 text-slate-950 border-2 border-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.8)] flex items-center justify-center text-[10px] font-bold hover:scale-125 transition-transform">
-                          <i className="fas fa-rotate"></i>
+                        {/* Rotation Handle (Top Center) */}
+                        <div 
+                          className={`absolute ${pos.y < 45 ? 'top-2 left-1/2 -translate-x-1/2' : '-top-9 left-1/2 -translate-x-1/2'} flex flex-col items-center pointer-events-auto cursor-grab active:cursor-grabbing group/rot z-[70]`}
+                          onMouseDown={(e) => handleRotateStart(e, panel, e.currentTarget.parentElement)}
+                          title="Click and drag to rotate element (Shift for 15° snap)"
+                        >
+                          <div className="w-6 h-6 rounded-full bg-amber-400 text-slate-950 border-2 border-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.8)] flex items-center justify-center text-[10px] font-bold hover:scale-125 transition-transform">
+                            <i className="fas fa-rotate"></i>
+                          </div>
+                          <div className="w-0.5 h-3 bg-amber-400"></div>
                         </div>
-                        <div className="w-0.5 h-3 bg-amber-400"></div>
-                      </div>
 
-                      {/* 8 Corner & Edge Resize Handles */}
-                      {/* Top-Left */}
-                      <div
-                        onMouseDown={(e) => handleResizeStart(e, panel, 'nw')}
-                        className="absolute -top-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nwse-resize pointer-events-auto hover:scale-125 transition-transform"
-                        title="Resize Top-Left"
-                      />
-                      {/* Top-Center */}
-                      <div
-                        onMouseDown={(e) => handleResizeStart(e, panel, 'n')}
-                        className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ns-resize pointer-events-auto hover:scale-125 transition-transform"
-                        title="Resize Height (Top)"
-                      />
-                      {/* Top-Right */}
-                      <div
-                        onMouseDown={(e) => handleResizeStart(e, panel, 'ne')}
-                        className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nesw-resize pointer-events-auto hover:scale-125 transition-transform"
-                        title="Resize Top-Right"
-                      />
-                      {/* Middle-Right */}
-                      <div
-                        onMouseDown={(e) => handleResizeStart(e, panel, 'e')}
-                        className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ew-resize pointer-events-auto hover:scale-125 transition-transform"
-                        title="Resize Width (Right)"
-                      />
-                      {/* Bottom-Right */}
-                      <div
-                        onMouseDown={(e) => handleResizeStart(e, panel, 'se')}
-                        className="absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nwse-resize pointer-events-auto hover:scale-125 transition-transform"
-                        title="Resize Bottom-Right"
-                      />
-                      {/* Bottom-Center */}
-                      <div
-                        onMouseDown={(e) => handleResizeStart(e, panel, 's')}
-                        className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ns-resize pointer-events-auto hover:scale-125 transition-transform"
-                        title="Resize Height (Bottom)"
-                      />
-                      {/* Bottom-Left */}
-                      <div
-                        onMouseDown={(e) => handleResizeStart(e, panel, 'sw')}
-                        className="absolute -bottom-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nesw-resize pointer-events-auto hover:scale-125 transition-transform"
-                        title="Resize Bottom-Left"
-                      />
-                      {/* Middle-Left */}
-                      <div
-                        onMouseDown={(e) => handleResizeStart(e, panel, 'w')}
-                        className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ew-resize pointer-events-auto hover:scale-125 transition-transform"
-                        title="Resize Width (Left)"
-                      />
+                        {/* 8 Corner & Edge Resize Handles */}
+                        {/* Top-Left */}
+                        <div
+                          onMouseDown={(e) => handleResizeStart(e, panel, 'nw')}
+                          className="absolute -top-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nwse-resize pointer-events-auto hover:scale-125 transition-transform"
+                          title="Resize Top-Left"
+                        />
+                        {/* Top-Center */}
+                        <div
+                          onMouseDown={(e) => handleResizeStart(e, panel, 'n')}
+                          className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ns-resize pointer-events-auto hover:scale-125 transition-transform"
+                          title="Resize Height (Top)"
+                        />
+                        {/* Top-Right */}
+                        <div
+                          onMouseDown={(e) => handleResizeStart(e, panel, 'ne')}
+                          className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nesw-resize pointer-events-auto hover:scale-125 transition-transform"
+                          title="Resize Top-Right"
+                        />
+                        {/* Middle-Right */}
+                        <div
+                          onMouseDown={(e) => handleResizeStart(e, panel, 'e')}
+                          className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ew-resize pointer-events-auto hover:scale-125 transition-transform"
+                          title="Resize Width (Right)"
+                        />
+                        {/* Bottom-Right */}
+                        <div
+                          onMouseDown={(e) => handleResizeStart(e, panel, 'se')}
+                          className="absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nwse-resize pointer-events-auto hover:scale-125 transition-transform"
+                          title="Resize Bottom-Right"
+                        />
+                        {/* Bottom-Center */}
+                        <div
+                          onMouseDown={(e) => handleResizeStart(e, panel, 's')}
+                          className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ns-resize pointer-events-auto hover:scale-125 transition-transform"
+                          title="Resize Height (Bottom)"
+                        />
+                        {/* Bottom-Left */}
+                        <div
+                          onMouseDown={(e) => handleResizeStart(e, panel, 'sw')}
+                          className="absolute -bottom-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nesw-resize pointer-events-auto hover:scale-125 transition-transform"
+                          title="Resize Bottom-Left"
+                        />
+                        {/* Middle-Left */}
+                        <div
+                          onMouseDown={(e) => handleResizeStart(e, panel, 'w')}
+                          className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ew-resize pointer-events-auto hover:scale-125 transition-transform"
+                          title="Resize Width (Left)"
+                        />
 
-                      {/* Dimension & Rotation Badge Overlay */}
-                      <div className={`absolute ${pos.y + pos.h > 720 ? 'bottom-1' : '-bottom-6'} left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-900/95 text-amber-300 border border-slate-700 rounded text-[9px] font-mono shadow-xl font-bold whitespace-nowrap pointer-events-none z-[70]`}>
-                        {pos.w} × {pos.h} px {panel.rotation ? `| ${panel.rotation}°` : ''}
+                        {/* Dimension & Rotation Badge Overlay */}
+                        <div className={`absolute ${pos.y + pos.h > 720 ? 'bottom-1' : '-bottom-6'} left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-900/95 text-amber-300 border border-slate-700 rounded text-[9px] font-mono shadow-xl font-bold whitespace-nowrap pointer-events-none z-[70]`}>
+                          {pos.w} × {pos.h} px {panel.rotation ? `| ${panel.rotation}°` : ''}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* ─── DESIGN-TIME INTERACTIVE MULTI-NODE MOTION PATH VECTOR OVERLAY ─── */}
                     {panel.enableMotionDynamics && (() => {
@@ -4752,6 +5488,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
           })
         )}
         </div>
+      </div>
       </div>
 
       {/* Floating Right-Click Context Menu */}

@@ -17,6 +17,9 @@ const PROTOCOL_LABELS: Record<DriverProtocol, string> = {
   opcda: 'OPC DA',
   modbus_tcp: 'Modbus TCP',
   modbus_rtu: 'Modbus RTU',
+  iec61850: 'IEC 61850 (MMS / GOOSE)',
+  s7: 'Siemens S7 (Snap7 / S7Comm)',
+  melsec: 'Mitsubishi MELSEC (SLMP / MC)',
   rs485: 'RS-485',
   rs232: 'RS-232',
   usb_serial: 'USB Serial',
@@ -29,6 +32,9 @@ const PROTOCOL_ICONS: Record<DriverProtocol, string> = {
   opcda: 'fa-sitemap',
   modbus_tcp: 'fa-network-wired',
   modbus_rtu: 'fa-microchip',
+  iec61850: 'fa-bolt',
+  s7: 'fa-industry',
+  melsec: 'fa-microchip',
   rs485: 'fa-wave-square',
   rs232: 'fa-microchip',
   usb_serial: 'fa-usb',
@@ -41,6 +47,26 @@ const emptyConn = (): Partial<DriverConnection> => ({
   connectionName: '',
   protocol: 'modbus_tcp',
   enabled: true,
+  // Siemens S7 Defaults
+  s7Model: 's7_1500',
+  rack: 0,
+  slot: 1,
+  pduSize: 480,
+  // Mitsubishi MELSEC Defaults
+  melsecSeries: 'iq_f',
+  melsecFrame: '3e_binary',
+  networkNumber: 0,
+  pcNumber: 255,
+  destinationModuleIoNumber: 1023,
+  destinationModuleStationNumber: 0,
+  // IEC 61850 Substation Defaults
+  iedName: 'IED1',
+  apTitle: '1.1.1.999.1',
+  aeQualifier: 12,
+  mmsPort: 102,
+  enableGoose: false,
+  gooseInterface: 'eth0',
+  gooseAppId: '0x0001',
   // OPC UA Defaults
   endpointUrl: 'opc.tcp://127.0.0.1:4840',
   secondaryEndpointUrl: '',
@@ -76,7 +102,7 @@ const emptyConn = (): Partial<DriverConnection> => ({
   sendRecvDelayMs: 0,
   frameRetryCount: 0,
   tcpSockets: 1,
-  reopenSockets: true,
+  reopenSockets: false,
   zeroBasedAddressing: true,
   zeroBasedBitAddressing: true,
   byteSwap: false,
@@ -109,6 +135,7 @@ const DriverConnectionsView: React.FC<DriverConnectionsViewProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [detectedPorts, setDetectedPorts] = useState<Array<{ port: string; name: string; description?: string }>>([]);
+  const [isScanningPorts, setIsScanningPorts] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
 
   // OPC UA Collapsible Section States
@@ -151,6 +178,87 @@ const DriverConnectionsView: React.FC<DriverConnectionsViewProps> = ({
       }
     } catch (err: any) {
       setOpcUaTestStatus({ testing: false, target, success: false, message: err.message || 'Probe request failed' });
+    }
+  };
+
+  const [iecTestStatus, setIecTestStatus] = useState<{ testing: boolean; success?: boolean; message?: string }>({
+    testing: false
+  });
+
+  const testIecConnection = async () => {
+    setIecTestStatus({ testing: true });
+    try {
+      const res = await fetch('/api/iec61850/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingConn)
+      });
+      const data = await res.json();
+      setIecTestStatus({
+        testing: false,
+        success: data.success,
+        message: data.message || (data.success ? '✓ Connected to IED successfully' : '✗ Failed to connect to IED')
+      });
+    } catch (err: any) {
+      setIecTestStatus({
+        testing: false,
+        success: false,
+        message: err.message || 'Probe request failed'
+      });
+    }
+  };
+
+  const [s7TestStatus, setS7TestStatus] = useState<{ testing: boolean; success?: boolean; message?: string }>({
+    testing: false
+  });
+
+  const testS7Connection = async () => {
+    setS7TestStatus({ testing: true });
+    try {
+      const res = await fetch('/api/s7/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingConn)
+      });
+      const data = await res.json();
+      setS7TestStatus({
+        testing: false,
+        success: data.success,
+        message: data.message || (data.success ? '✓ Connected to Siemens S7 PLC' : '✗ Failed to connect to Siemens S7 PLC')
+      });
+    } catch (err: any) {
+      setS7TestStatus({
+        testing: false,
+        success: false,
+        message: err.message || 'S7 probe request failed'
+      });
+    }
+  };
+
+  const [melsecTestStatus, setMelsecTestStatus] = useState<{ testing: boolean; success?: boolean; message?: string }>({
+    testing: false
+  });
+
+  const testMelsecConnection = async () => {
+    setMelsecTestStatus({ testing: true });
+    try {
+      const res = await fetch('/api/melsec/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingConn)
+      });
+      const data = await res.json();
+      setMelsecTestStatus({
+        testing: false,
+        success: data.success,
+        message: data.message || (data.success ? '✓ Connected to Mitsubishi MELSEC PLC' : '✗ Failed to connect to Mitsubishi MELSEC PLC')
+      });
+    } catch (err: any) {
+      setMelsecTestStatus({
+        testing: false,
+        success: false,
+        message: err.message || 'MELSEC probe request failed'
+      });
     }
   };
 
@@ -860,6 +968,460 @@ const DriverConnectionsView: React.FC<DriverConnectionsViewProps> = ({
                 </div>
               )}
 
+              {/* IEC 61850 (MMS & GOOSE) Substation Settings Panel */}
+              {editingConn.protocol === 'iec61850' && (
+                <div className="space-y-3 pt-1">
+                  {/* Test Connection Probe Feedback Banner */}
+                  {iecTestStatus.testing && (
+                    <div className="p-2.5 bg-emerald-950/70 border border-emerald-500/40 rounded-xl text-emerald-200 text-xs flex items-center space-x-2 animate-pulse">
+                      <i className="fas fa-circle-notch fa-spin text-emerald-400"></i>
+                      <span>Probing IED at {editingConn.host || '127.0.0.1'}:{editingConn.port || editingConn.mmsPort || 102} via MMS (Port 102)...</span>
+                    </div>
+                  )}
+                  {!iecTestStatus.testing && iecTestStatus.message && (
+                    <div className={`p-2.5 rounded-xl text-xs flex items-center justify-between border ${iecTestStatus.success ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-200' : 'bg-rose-950/70 border-rose-500/40 text-rose-200'}`}>
+                      <div className="flex items-center space-x-2">
+                        <i className={`fas ${iecTestStatus.success ? 'fa-circle-check text-emerald-400' : 'fa-circle-xmark text-rose-400'}`}></i>
+                        <span>{iecTestStatus.message}</span>
+                      </div>
+                      <button type="button" onClick={() => setIecTestStatus({ testing: false })} className="text-slate-400 hover:text-white text-xs ml-2">✕</button>
+                    </div>
+                  )}
+
+                  {/* IED Core Communication Settings */}
+                  <div className="bg-slate-850 border border-slate-700/80 rounded-xl p-3.5 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <div className="flex items-center space-x-2 text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                        <i className="fas fa-bolt text-emerald-400"></i>
+                        <span>IED MMS Communication</span>
+                      </div>
+                      <span className="text-[10px] font-mono px-2 py-0.5 bg-emerald-900/60 text-emerald-300 rounded-md border border-emerald-700/50">
+                        libIEC61850 Stack
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-300 mb-1">IED Identifier / Model Name *</label>
+                        <input
+                          type="text"
+                          value={editingConn.iedName || ''}
+                          onChange={e => setField('iedName', e.target.value)}
+                          placeholder="e.g. SEL_751_FEEDER1, SIPROTEC_5"
+                          className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-300 mb-1">MMS Port (Default: 102) *</label>
+                        <input
+                          type="number"
+                          value={editingConn.port ?? editingConn.mmsPort ?? 102}
+                          onChange={e => {
+                            const val = parseInt(e.target.value) || 102;
+                            setField('port', val);
+                            setField('mmsPort', val);
+                          }}
+                          min={1} max={65535}
+                          className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500 font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">IED Host IP Address *</label>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          value={editingConn.host || ''}
+                          onChange={e => setField('host', e.target.value)}
+                          placeholder="192.168.1.100 or 127.0.0.1"
+                          className="flex-1 bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500 font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={testIecConnection}
+                          disabled={iecTestStatus.testing || !editingConn.host}
+                          className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all disabled:opacity-50 flex items-center space-x-1.5 shrink-0 cursor-pointer shadow-sm"
+                        >
+                          <i className="fas fa-bolt text-[10px]"></i>
+                          <span>Test IED</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-300 mb-1">AP-Title</label>
+                        <input
+                          type="text"
+                          value={editingConn.apTitle || '1.1.1.999.1'}
+                          onChange={e => setField('apTitle', e.target.value)}
+                          placeholder="1.1.1.999.1"
+                          className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-300 mb-1">AE-Qualifier</label>
+                        <input
+                          type="number"
+                          value={editingConn.aeQualifier ?? 12}
+                          onChange={e => setField('aeQualifier', parseInt(e.target.value) || 12)}
+                          className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500 font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* GOOSE Real-Time Subscribing */}
+                  <div className="bg-slate-850 border border-slate-700/80 rounded-xl p-3.5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <i className="fas fa-wave-square text-emerald-400 text-xs"></i>
+                        <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">GOOSE Event Subscribing</span>
+                      </div>
+                      <label className="flex items-center space-x-2 text-xs cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(editingConn.enableGoose)}
+                          onChange={e => setField('enableGoose', e.target.checked)}
+                          className="w-4 h-4 rounded text-emerald-600 bg-slate-900 border-slate-600"
+                        />
+                        <span className="font-semibold text-slate-300">Enable GOOSE</span>
+                      </label>
+                    </div>
+
+                    {editingConn.enableGoose && (
+                      <div className="grid grid-cols-2 gap-3 pt-1">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-300 mb-1">Network Interface</label>
+                          <input
+                            type="text"
+                            value={editingConn.gooseInterface || 'eth0'}
+                            onChange={e => setField('gooseInterface', e.target.value)}
+                            placeholder="eth0, enp3s0"
+                            className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-300 mb-1">AppID Filter</label>
+                          <input
+                            type="text"
+                            value={editingConn.gooseAppId || '0x0001'}
+                            onChange={e => setField('gooseAppId', e.target.value)}
+                            placeholder="0x0001"
+                            className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500 font-mono"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Siemens S7 (Snap7 / S7Comm) Settings Panel */}
+              {editingConn.protocol === 's7' && (
+                <div className="space-y-3 pt-1">
+                  {/* Test Connection Probe Feedback Banner */}
+                  {s7TestStatus.testing && (
+                    <div className="p-2.5 bg-cyan-950/70 border border-cyan-500/40 rounded-xl text-cyan-200 text-xs flex items-center space-x-2 animate-pulse">
+                      <i className="fas fa-circle-notch fa-spin text-cyan-400"></i>
+                      <span>Probing Siemens S7 PLC at {editingConn.host || '127.0.0.1'}:{editingConn.port || 102} (Rack {editingConn.rack ?? 0}, Slot {editingConn.slot ?? 1})...</span>
+                    </div>
+                  )}
+                  {!s7TestStatus.testing && s7TestStatus.message && (
+                    <div className={`p-2.5 rounded-xl text-xs flex items-center justify-between border ${s7TestStatus.success ? 'bg-cyan-950/70 border-cyan-500/40 text-cyan-200' : 'bg-rose-950/70 border-rose-500/40 text-rose-200'}`}>
+                      <div className="flex items-center space-x-2">
+                        <i className={`fas ${s7TestStatus.success ? 'fa-circle-check text-cyan-400' : 'fa-circle-xmark text-rose-400'}`}></i>
+                        <span>{s7TestStatus.message}</span>
+                      </div>
+                      <button type="button" onClick={() => setS7TestStatus({ testing: false })} className="text-slate-400 hover:text-white text-xs ml-2">✕</button>
+                    </div>
+                  )}
+
+                  <div className="bg-slate-850 border border-slate-700/80 rounded-xl p-3.5 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <div className="flex items-center space-x-2 text-xs font-bold text-cyan-400 uppercase tracking-wider">
+                        <i className="fas fa-industry text-cyan-400"></i>
+                        <span>Siemens S7Comm Parameters</span>
+                      </div>
+                      <span className="text-[10px] font-mono px-2 py-0.5 bg-cyan-900/60 text-cyan-300 rounded-md border border-cyan-700/50">
+                        Snap7 / ISO-on-TCP
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-300 mb-1">PLC Hardware Series *</label>
+                        <select
+                          value={editingConn.s7Model || 's7_1500'}
+                          onChange={e => {
+                            const model = e.target.value as any;
+                            setField('s7Model', model);
+                            if (model === 's7_300' || model === 's7_400') {
+                              setField('slot', 2);
+                            } else {
+                              setField('slot', 1);
+                            }
+                          }}
+                          className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-cyan-500"
+                        >
+                          <option value="s7_1500">SIMATIC S7-1500 (Rack 0, Slot 1)</option>
+                          <option value="s7_1200">SIMATIC S7-1200 (Rack 0, Slot 1)</option>
+                          <option value="s7_300">SIMATIC S7-300 (Rack 0, Slot 2)</option>
+                          <option value="s7_400">SIMATIC S7-400 (Rack 0, Slot 2)</option>
+                          <option value="s7_200">SIMATIC S7-200 / Smart</option>
+                          <option value="logo">Siemens LOGO! 0BA7/0BA8</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-300 mb-1">ISO Port (Default: 102) *</label>
+                        <input
+                          type="number"
+                          value={editingConn.port ?? 102}
+                          onChange={e => setField('port', parseInt(e.target.value) || 102)}
+                          min={1} max={65535}
+                          className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-cyan-500 font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">PLC IP Address *</label>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          value={editingConn.host || ''}
+                          onChange={e => setField('host', e.target.value)}
+                          placeholder="192.168.0.1"
+                          className="flex-1 bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-cyan-500 font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={testS7Connection}
+                          disabled={s7TestStatus.testing || !editingConn.host}
+                          className="px-3 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-xl transition-all disabled:opacity-50 flex items-center space-x-1.5 shrink-0 cursor-pointer shadow-sm"
+                        >
+                          <i className="fas fa-bolt text-[10px]"></i>
+                          <span>Test S7 PLC</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Contextual Hardware Routing Fields */}
+                    {editingConn.s7Model === 's7_200' ? (
+                      <div className="space-y-3 pt-1">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-300 mb-1">Local TSAP (CP243-1) *</label>
+                            <input
+                              type="text"
+                              value={editingConn.localTsap || '0x1000'}
+                              onChange={e => setField('localTsap', e.target.value)}
+                              placeholder="0x1000 or 10.00"
+                              className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-cyan-500 font-mono"
+                            />
+                            <span className="text-[9px] text-slate-400 mt-0.5 block">Default: 0x1000 (01.00)</span>
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-300 mb-1">Remote TSAP (PLC) *</label>
+                            <input
+                              type="text"
+                              value={editingConn.remoteTsap || '0x1000'}
+                              onChange={e => setField('remoteTsap', e.target.value)}
+                              placeholder="0x1000 or 10.00"
+                              className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-cyan-500 font-mono"
+                            />
+                            <span className="text-[9px] text-slate-400 mt-0.5 block">Default: 0x1000 (02.00)</span>
+                          </div>
+                        </div>
+                        <div className="p-2.5 bg-cyan-950/40 border border-cyan-800/40 rounded-xl text-[10px] text-cyan-300/90 leading-relaxed">
+                          <span className="font-bold">S7-200 V-Memory:</span> Connected via CP243-1 module. Variable Memory (V) is addressed as <code>VB100</code>, <code>VW100</code>, <code>VD100</code>, or <code>V100.0</code> and mapped directly to DB1.
+                        </div>
+                      </div>
+                    ) : editingConn.s7Model === 'logo' ? (
+                      <div className="space-y-2 pt-1">
+                        <div className="p-2.5 bg-cyan-950/50 border border-cyan-700/50 rounded-xl text-[11px] text-cyan-200 leading-relaxed">
+                          <div className="font-bold flex items-center space-x-1.5 text-cyan-300 mb-1">
+                            <i className="fas fa-microchip text-xs"></i>
+                            <span>LOGO! 0BA7 / 0BA8 Virtual DB1 Translation Active</span>
+                          </div>
+                          <p className="text-[10px] text-cyan-300/90">
+                            You can directly enter native LOGO! Soft Comfort addresses:
+                          </p>
+                          <ul className="text-[10px] text-slate-300 list-disc list-inside mt-1 space-y-0.5 font-mono">
+                            <li><span className="text-cyan-300 font-bold">I1..I24</span> &rarr; Digital Inputs (DB1.DBX923.0..925.7)</li>
+                            <li><span className="text-cyan-300 font-bold">Q1..Q20</span> &rarr; Digital Outputs (DB1.DBX942.0..944.3)</li>
+                            <li><span className="text-cyan-300 font-bold">M1..M64</span> &rarr; Internal Flags (DB1.DBX948.0..955.7)</li>
+                            <li><span className="text-cyan-300 font-bold">AI1..AI8</span> &rarr; Analog Inputs (DB1.DBW926..940)</li>
+                            <li><span className="text-cyan-300 font-bold">VW100 / VD100</span> &rarr; Variable Memory (DB1.DBW100 / DB1.DBD100)</li>
+                          </ul>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-2 gap-3 pt-1">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-300 mb-1">Rack Number *</label>
+                            <input
+                              type="number"
+                              value={editingConn.rack ?? 0}
+                              onChange={e => setField('rack', parseInt(e.target.value) || 0)}
+                              min={0} max={7}
+                              className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-cyan-500 font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-300 mb-1">CPU Slot Number *</label>
+                            <input
+                              type="number"
+                              value={editingConn.slot ?? (editingConn.s7Model === 's7_300' || editingConn.s7Model === 's7_400' ? 2 : 1)}
+                              onChange={e => setField('slot', parseInt(e.target.value) || 1)}
+                              min={0} max={31}
+                              className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-cyan-500 font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="p-2.5 bg-cyan-950/40 border border-cyan-800/40 rounded-xl text-[10px] text-cyan-300/90 leading-relaxed">
+                          <span className="font-bold">TIA Portal Requirement:</span> Enable <em>"Permit access with PUT/GET communication from remote partner"</em> in CPU Protection & Security settings, and disable <em>"Optimized block access"</em> on DBs.
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Mitsubishi MELSEC (SLMP / MC Protocol) Settings Panel */}
+              {editingConn.protocol === 'melsec' && (
+                <div className="space-y-3 pt-1">
+                  {/* Test Connection Probe Feedback Banner */}
+                  {melsecTestStatus.testing && (
+                    <div className="p-2.5 bg-rose-950/70 border border-rose-500/40 rounded-xl text-rose-200 text-xs flex items-center space-x-2 animate-pulse">
+                      <i className="fas fa-circle-notch fa-spin text-rose-400"></i>
+                      <span>Probing Mitsubishi PLC at {editingConn.host || '127.0.0.1'}:{editingConn.port || 5007} (3E Binary Frame)...</span>
+                    </div>
+                  )}
+                  {!melsecTestStatus.testing && melsecTestStatus.message && (
+                    <div className={`p-2.5 rounded-xl text-xs flex items-center justify-between border ${melsecTestStatus.success ? 'bg-rose-950/70 border-rose-500/40 text-rose-200' : 'bg-rose-950/70 border-rose-500/40 text-rose-200'}`}>
+                      <div className="flex items-center space-x-2">
+                        <i className={`fas ${melsecTestStatus.success ? 'fa-circle-check text-emerald-400' : 'fa-circle-xmark text-rose-400'}`}></i>
+                        <span>{melsecTestStatus.message}</span>
+                      </div>
+                      <button type="button" onClick={() => setMelsecTestStatus({ testing: false })} className="text-slate-400 hover:text-white text-xs ml-2">✕</button>
+                    </div>
+                  )}
+
+                  <div className="bg-slate-850 border border-slate-700/80 rounded-xl p-3.5 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <div className="flex items-center space-x-2 text-xs font-bold text-rose-400 uppercase tracking-wider">
+                        <i className="fas fa-microchip text-rose-400"></i>
+                        <span>MELSEC Communication (MC Protocol)</span>
+                      </div>
+                      <span className="text-[10px] font-mono px-2 py-0.5 bg-rose-900/60 text-rose-300 rounded-md border border-rose-700/50">
+                        SLMP 3E Frame
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-300 mb-1">Controller Series *</label>
+                        <select
+                          value={editingConn.melsecSeries || 'iq_f'}
+                          onChange={e => setField('melsecSeries', e.target.value as any)}
+                          className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-rose-500"
+                        >
+                          <option value="iq_f">MELSEC iQ-F Series (FX5U / FX5UJ)</option>
+                          <option value="iq_r">MELSEC iQ-R Series (R04, R08, R16)</option>
+                          <option value="q_series">MELSEC-Q Series (Q02, Q06, Q13)</option>
+                          <option value="l_series">MELSEC-L Series</option>
+                          <option value="fx_series">MELSEC-FX Series (FX3U + ENET)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-300 mb-1">Frame Type *</label>
+                        <select
+                          value={editingConn.melsecFrame || '3e_binary'}
+                          onChange={e => setField('melsecFrame', e.target.value as any)}
+                          className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-rose-500 font-mono"
+                        >
+                          <option value="3e_binary">3E Binary Frame (Recommended)</option>
+                          <option value="3e_ascii">3E ASCII Frame</option>
+                          <option value="1e_binary">1E Binary Frame (Legacy FX)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">PLC IP Address & Port (Default: 5007) *</label>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          value={editingConn.host || ''}
+                          onChange={e => setField('host', e.target.value)}
+                          placeholder="192.168.1.250"
+                          className="flex-1 bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-rose-500 font-mono"
+                        />
+                        <input
+                          type="number"
+                          value={editingConn.port ?? 5007}
+                          onChange={e => setField('port', parseInt(e.target.value) || 5007)}
+                          min={1} max={65535}
+                          className="w-24 bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-rose-500 font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={testMelsecConnection}
+                          disabled={melsecTestStatus.testing || !editingConn.host}
+                          className="px-3 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl transition-all disabled:opacity-50 flex items-center space-x-1.5 shrink-0 cursor-pointer shadow-sm"
+                        >
+                          <i className="fas fa-bolt text-[10px]"></i>
+                          <span>Test PLC</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-300 mb-1">Network No</label>
+                        <input
+                          type="number"
+                          value={editingConn.networkNumber ?? 0}
+                          onChange={e => setField('networkNumber', parseInt(e.target.value) || 0)}
+                          className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-rose-500 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-300 mb-1">PC No</label>
+                        <input
+                          type="number"
+                          value={editingConn.pcNumber ?? 255}
+                          onChange={e => setField('pcNumber', parseInt(e.target.value) || 255)}
+                          className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-rose-500 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-300 mb-1">Dest Module I/O</label>
+                        <input
+                          type="number"
+                          value={editingConn.destinationModuleIoNumber ?? 1023}
+                          onChange={e => setField('destinationModuleIoNumber', parseInt(e.target.value) || 1023)}
+                          className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-rose-500 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-300 mb-1">Station No</label>
+                        <input
+                          type="number"
+                          value={editingConn.destinationModuleStationNumber ?? 0}
+                          onChange={e => setField('destinationModuleStationNumber', parseInt(e.target.value) || 0)}
+                          className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-rose-500 font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Channel TCP/IP Settings (Modbus TCP, TCP Custom) */}
               {isTcpProtocol && (
                 <div className="bg-slate-850 border border-slate-700/80 rounded-xl p-3.5 space-y-3">
@@ -903,12 +1465,12 @@ const DriverConnectionsView: React.FC<DriverConnectionsViewProps> = ({
                       <input
                         type="checkbox"
                         id="reopenSockets"
-                        checked={editingConn.reopenSockets !== false}
+                        checked={Boolean(editingConn.reopenSockets)}
                         onChange={e => setField('reopenSockets', e.target.checked)}
                         className="w-4 h-4 rounded text-violet-600 bg-slate-900 border-slate-600 focus:ring-0 focus:outline-none cursor-pointer"
                       />
                       <label htmlFor="reopenSockets" className="text-xs font-semibold text-slate-200 cursor-pointer select-none">
-                        Re-open socket(s) on error
+                        Close & Re-open socket on each poll (forces new connection)
                       </label>
                     </div>
                   </div>

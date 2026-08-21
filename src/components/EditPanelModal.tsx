@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Panel, PanelType, AppState } from '../types';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Panel, PanelType, AppState, HistorianTag } from '../types';
 import IconPicker from './IconPicker';
 import ColorPicker from './ColorPicker';
 import TopicAutocompleteInput from './TopicAutocompleteInput';
@@ -15,9 +15,10 @@ interface EditPanelModalProps {
   onClose: () => void;
   onSave: (updatedPanel: any) => void;
   appState?: AppState;
+  onAddHistorianTag?: (tag: HistorianTag) => void;
 }
 
-const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose, onSave, appState }) => {
+const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose, onSave, appState, onAddHistorianTag }) => {
   const [formData, setFormData] = useState<any>(panel);
   const [pickingIconFor, setPickingIconFor] = useState<'on' | 'off' | null>(null);
   const [pickingColorFor, setPickingColorFor] = useState<'iconOn' | 'iconOff' | 'first' | 'second' | 'third' | null>(null);
@@ -337,7 +338,7 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
           </div>
 
           {/* ─── DATA SOURCE TOGGLE ─────────────────────────────── */}
-          {!isStaticText && !isImage && !isClock && !isPipe && !isShape && !isScreenJump && (
+          {!isStaticText && !isClock && !isScreenJump && (
             <div className="space-y-3">
               <div>
                 <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Data Source</label>
@@ -3124,7 +3125,7 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
 
               {/* Multi-Pen Configuration List */}
               <div className="pt-3 border-t border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <label className="text-xs font-bold text-slate-200 flex items-center space-x-1.5">
                     <i className="fas fa-layer-group text-sky-400 text-xs"></i>
                     <span>Multi-Pen Configuration (TASCTrendz Multi-Topic Pens)</span>
@@ -3132,39 +3133,83 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
                   {(() => {
                     const isCommunity = appState?.userRole === 'community' || appState?.productEdition === 'community';
                     const isPenLimitReached = isCommunity && (formData.pens?.length || 0) >= 2;
+                    const historianTagList = appState?.historianTags || [];
+
                     return (
-                      <button
-                        type="button"
-                        disabled={isPenLimitReached}
-                        onClick={() => {
-                          if (isPenLimitReached) return;
-                          const firstDriverTag = appState?.driverTags?.[0];
-                          const newPen = {
-                            id: `pen_${Date.now()}`,
-                            name: `Pen ${((formData.pens?.length || 0) + 1)}`,
-                            topic: dataSourceMode === 'driver' ? (firstDriverTag?.tagId || '') : (formData.topic || ''),
-                            driverTagId: dataSourceMode === 'driver' ? (firstDriverTag?.tagId || '') : undefined,
-                            jsonPath: '',
-                            color: ['#38bdf8', '#f43f5e', '#10b981', '#f59e0b', '#a855f7'][(formData.pens?.length || 0) % 5],
-                            thickness: 2,
-                            unit: dataSourceMode === 'driver' ? (firstDriverTag?.unit || formData.unit || '') : (formData.unit || ''),
-                            showNodeMarkers: false
-                          };
-                          setFormData((prev: any) => ({
-                            ...prev,
-                            pens: [...(prev.pens || []), newPen]
-                          }));
-                        }}
-                        className={`px-2.5 py-1 rounded text-xs font-bold transition-all flex items-center space-x-1 ${
-                          isPenLimitReached
-                            ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-70'
-                            : 'bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 cursor-pointer'
-                        }`}
-                        title={isPenLimitReached ? "Free Demo Limit: Maximum 2 Pens allowed in Community Edition." : "Add a new trend pen"}
-                      >
-                        <i className={isPenLimitReached ? "fas fa-lock text-[10px]" : "fas fa-plus text-[10px]"}></i>
-                        <span>{isPenLimitReached ? 'Max 2 Pens (Free Demo)' : '+ Add Pen'}</span>
-                      </button>
+                      <div className="flex items-center space-x-2">
+                        {/* Quick Add from Historian Tags Dropdown */}
+                        {historianTagList.length > 0 && (
+                          <select
+                            disabled={isPenLimitReached}
+                            value=""
+                            onChange={(e) => {
+                              const tagId = e.target.value;
+                              if (!tagId || isPenLimitReached) return;
+                              const matchedHistTag = historianTagList.find(ht => ht.id === tagId);
+                              if (matchedHistTag) {
+                                const newPen = {
+                                  id: `pen_${Date.now()}`,
+                                  name: matchedHistTag.name,
+                                  topic: matchedHistTag.topic || matchedHistTag.driverTagId || matchedHistTag.id,
+                                  driverTagId: matchedHistTag.driverTagId,
+                                  jsonPath: matchedHistTag.jsonPath || '',
+                                  color: matchedHistTag.color || ['#38bdf8', '#f43f5e', '#10b981', '#f59e0b', '#a855f7'][(formData.pens?.length || 0) % 5],
+                                  thickness: 2,
+                                  unit: matchedHistTag.unit || '',
+                                  min: matchedHistTag.min,
+                                  max: matchedHistTag.max,
+                                  showNodeMarkers: false
+                                };
+                                setFormData((prev: any) => ({
+                                  ...prev,
+                                  pens: [...(prev.pens || []), newPen]
+                                }));
+                              }
+                            }}
+                            className="bg-violet-950/60 border border-violet-500/40 text-violet-200 rounded px-2 py-1 text-xs font-bold outline-none cursor-pointer hover:bg-violet-900/50 transition-colors"
+                          >
+                            <option value="" disabled>📈 Add from Historian Tags...</option>
+                            {historianTagList.map(ht => (
+                              <option key={ht.id} value={ht.id}>
+                                {ht.name} ({ht.sourceType.toUpperCase()} • {ht.topic || ht.driverTagId})
+                              </option>
+                            ))}
+                          </select>
+                        )}
+
+                        <button
+                          type="button"
+                          disabled={isPenLimitReached}
+                          onClick={() => {
+                            if (isPenLimitReached) return;
+                            const firstDriverTag = appState?.driverTags?.[0];
+                            const newPen = {
+                              id: `pen_${Date.now()}`,
+                              name: `Pen ${((formData.pens?.length || 0) + 1)}`,
+                              topic: dataSourceMode === 'driver' ? (firstDriverTag?.tagId || '') : (formData.topic || ''),
+                              driverTagId: dataSourceMode === 'driver' ? (firstDriverTag?.tagId || '') : undefined,
+                              jsonPath: '',
+                              color: ['#38bdf8', '#f43f5e', '#10b981', '#f59e0b', '#a855f7'][(formData.pens?.length || 0) % 5],
+                              thickness: 2,
+                              unit: dataSourceMode === 'driver' ? (firstDriverTag?.unit || formData.unit || '') : (formData.unit || ''),
+                              showNodeMarkers: false
+                            };
+                            setFormData((prev: any) => ({
+                              ...prev,
+                              pens: [...(prev.pens || []), newPen]
+                            }));
+                          }}
+                          className={`px-2.5 py-1 rounded text-xs font-bold transition-all flex items-center space-x-1 ${
+                            isPenLimitReached
+                              ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-70'
+                              : 'bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 cursor-pointer'
+                          }`}
+                          title={isPenLimitReached ? "Free Demo Limit: Maximum 2 Pens allowed in Community Edition." : "Add a new trend pen"}
+                        >
+                          <i className={isPenLimitReached ? "fas fa-lock text-[10px]" : "fas fa-plus text-[10px]"}></i>
+                          <span>{isPenLimitReached ? 'Max 2 Pens (Free Demo)' : '+ Add Pen'}</span>
+                        </button>
+                      </div>
                     );
                   })()}
                 </div>
@@ -3178,200 +3223,244 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
 
                 {formData.pens && formData.pens.length > 0 ? (
                   <div className="space-y-3">
-                    {formData.pens.map((pen: any, idx: number) => (
-                      <div key={pen.id || idx} className="bg-slate-900/80 rounded-xl border border-slate-700/60 relative" style={{ zIndex: 30 - idx }}>
-                        {/* Pen Header Row */}
-                        <div className="flex items-center gap-2 px-3 py-2">
-                          {/* Color swatch */}
-                          <input
-                            type="color"
-                            value={pen.color || '#38bdf8'}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setFormData((prev: any) => ({
-                                ...prev,
-                                pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, color: val } : p)
-                              }));
-                            }}
-                            className="w-7 h-7 bg-transparent rounded-md border border-slate-600 cursor-pointer shrink-0"
-                            title="Pen Color"
-                          />
-                          {/* Pen name */}
-                          <input
-                            type="text"
-                            value={pen.name || ''}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setFormData((prev: any) => ({
-                                ...prev,
-                                pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, name: val } : p)
-                              }));
-                            }}
-                            placeholder="Pen Name"
-                            className="w-28 bg-slate-950 border border-slate-700 text-white rounded-lg px-2 py-1.5 text-xs outline-none focus:border-sky-500 font-semibold"
-                          />
-                          {/* MQTT Topic or Driver Tag summary badge */}
-                          {dataSourceMode === 'mqtt' ? (
+                    {formData.pens.map((pen: any, idx: number) => {
+                      const isHistorianLogged = appState?.historianTags?.some(ht =>
+                        ht.id === pen.id ||
+                        (ht.topic && ht.topic === pen.topic) ||
+                        (ht.driverTagId && ht.driverTagId === pen.driverTagId)
+                      );
+
+                      return (
+                        <div key={pen.id || idx} className="bg-slate-900/80 rounded-xl border border-slate-700/60 relative" style={{ zIndex: 30 - idx }}>
+                          {/* Pen Header Row */}
+                          <div className="flex items-center gap-2 px-3 py-2 flex-wrap sm:flex-nowrap">
+                            {/* Color swatch */}
                             <input
-                              type="text"
-                              value={pen.topic || ''}
+                              type="color"
+                              value={pen.color || '#38bdf8'}
                               onChange={(e) => {
                                 const val = e.target.value;
                                 setFormData((prev: any) => ({
                                   ...prev,
-                                  pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, topic: val } : p)
+                                  pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, color: val } : p)
                                 }));
                               }}
-                              placeholder="MQTT Topic (e.g. sensors/tank1/level)"
-                              className="flex-1 bg-slate-950 border border-slate-700 text-white rounded-lg px-2 py-1.5 text-xs outline-none focus:border-sky-500 font-mono"
+                              className="w-7 h-7 bg-transparent rounded-md border border-slate-600 cursor-pointer shrink-0"
+                              title="Pen Color"
                             />
-                          ) : (
-                            <div className="flex-1 flex items-center justify-between px-2.5 py-1.5 bg-slate-950/70 border border-slate-800 rounded-lg text-xs">
-                              <span className="text-[11px] text-violet-300 font-semibold flex items-center gap-1.5 truncate">
-                                <i className="fas fa-microchip text-[10px] text-violet-400"></i>
-                                <span className="truncate">{(() => {
-                                  const matched = appState?.driverTags?.find(t => t.tagId === pen.driverTagId || t.tagName === pen.driverTagId);
-                                  return matched ? `${matched.tagName} (${matched.driverType || 'Driver'})` : (pen.driverTagId ? `Tag: ${pen.driverTagId}` : 'Select Driver Tag below');
-                                })()}</span>
-                              </span>
-                              <span className="text-[10px] text-slate-500 font-mono shrink-0 ml-2">
-                                {(() => {
-                                  const matched = appState?.driverTags?.find(t => t.tagId === pen.driverTagId || t.tagName === pen.driverTagId);
-                                  return matched ? `Addr: ${matched.address}` : 'Browse Tag';
-                                })()}
-                              </span>
-                            </div>
-                          )}
-                          {/* Remove button */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setFormData((prev: any) => ({
-                                ...prev,
-                                pens: prev.pens.filter((_: any, i: number) => i !== idx)
-                              }));
-                            }}
-                            className="text-rose-400 hover:text-rose-300 p-1.5 rounded-lg hover:bg-rose-500/10 cursor-pointer shrink-0 transition-colors"
-                            title="Remove Pen"
-                          >
-                            <i className="fas fa-trash-can text-xs"></i>
-                          </button>
-                        </div>
-
-                        {/* Per-Pen Advanced Settings Row */}
-                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center px-3 pb-3 border-t border-slate-800/60 pt-2.5">
-                          {/* JSONPath Query (MQTT mode) vs Tag Browser Dropdown (Driver mode) */}
-                          <div className="sm:col-span-6 relative z-30">
+                            {/* Pen name */}
+                            <input
+                              type="text"
+                              value={pen.name || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setFormData((prev: any) => ({
+                                  ...prev,
+                                  pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, name: val } : p)
+                                }));
+                              }}
+                              placeholder="Pen Name"
+                              className="w-28 bg-slate-950 border border-slate-700 text-white rounded-lg px-2 py-1.5 text-xs outline-none focus:border-sky-500 font-semibold"
+                            />
+                            {/* MQTT Topic or Driver Tag summary badge */}
                             {dataSourceMode === 'mqtt' ? (
-                              <div>
-                                <label className="text-[10px] text-sky-400 font-bold block mb-1 flex items-center gap-1">
-                                  <i className="fas fa-code text-[9px]"></i> JSONPath Query (this pen)
-                                </label>
-                                <input
-                                  type="text"
-                                  value={pen.jsonPath || ''}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setFormData((prev: any) => ({
-                                      ...prev,
-                                      pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, jsonPath: val } : p)
-                                    }));
-                                  }}
-                                  placeholder="$.d.value or $.sensor[0] (blank = raw)"
-                                  className="w-full bg-slate-950 border border-slate-700/80 text-emerald-300 rounded-lg px-2.5 py-1.5 text-xs font-mono outline-none focus:border-sky-500 placeholder:text-slate-600"
-                                />
-                              </div>
-                            ) : (
-                              <div>
-                                <DriverTagSelector
-                                  appState={appState!}
-                                  selectedTagId={pen.driverTagId}
-                                  compact={true}
-                                  onChange={(tagId) => {
-                                    const matchedTag = appState?.driverTags?.find(t => t.tagId === tagId || t.tagName === tagId);
-                                    setFormData((prev: any) => ({
-                                      ...prev,
-                                      pens: prev.pens.map((p: any, i: number) => i === idx ? {
-                                        ...p,
-                                        driverTagId: tagId,
-                                        topic: tagId,
-                                        unit: p.unit || matchedTag?.unit || ''
-                                      } : p)
-                                    }));
-                                  }}
-                                  label="Tag Browser (Driver Tag)"
-                                  placeholder="Select Driver Tag..."
-                                />
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Right Controls: Thickness, Unit, Show Dots */}
-                          <div className="sm:col-span-6 flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-1 sm:pt-0">
-                            {/* Thickness */}
-                            <div className="flex items-center gap-1.5">
-                              <label className="text-[10px] text-slate-400 font-bold">Thickness</label>
-                              <input
-                                type="range" min="1" max="6" step="1"
-                                value={pen.thickness ?? 2}
-                                onChange={(e) => {
-                                  const val = Number(e.target.value);
-                                  setFormData((prev: any) => ({
-                                    ...prev,
-                                    pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, thickness: val } : p)
-                                  }));
-                                }}
-                                className="w-16 accent-sky-500 cursor-pointer"
-                              />
-                              <span className="text-[10px] text-slate-400 font-mono w-2.5">{pen.thickness ?? 2}</span>
-                            </div>
-
-                            {/* Unit */}
-                            <div className="flex items-center gap-1">
-                              <label className="text-[10px] text-slate-400 font-bold">Unit</label>
                               <input
                                 type="text"
-                                value={pen.unit || ''}
+                                value={pen.topic || ''}
                                 onChange={(e) => {
                                   const val = e.target.value;
                                   setFormData((prev: any) => ({
                                     ...prev,
-                                    pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, unit: val } : p)
+                                    pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, topic: val } : p)
                                   }));
                                 }}
-                                placeholder="e.g. °C"
-                                className="w-14 bg-slate-950 border border-slate-700 text-white rounded px-1.5 py-1 text-xs outline-none focus:border-sky-500 font-mono text-center"
+                                placeholder="MQTT Topic (e.g. sensors/tank1/level)"
+                                className="flex-1 bg-slate-950 border border-slate-700 text-white rounded-lg px-2 py-1.5 text-xs outline-none focus:border-sky-500 font-mono"
                               />
+                            ) : (
+                              <div className="flex-1 flex items-center justify-between px-2.5 py-1.5 bg-slate-950/70 border border-slate-800 rounded-lg text-xs">
+                                <span className="text-[11px] text-violet-300 font-semibold flex items-center gap-1.5 truncate">
+                                  <i className="fas fa-microchip text-[10px] text-violet-400"></i>
+                                  <span className="truncate">{(() => {
+                                    const matched = appState?.driverTags?.find(t => t.tagId === pen.driverTagId || t.tagName === pen.driverTagId);
+                                    return matched ? `${matched.tagName} (${matched.driverType || 'Driver'})` : (pen.driverTagId ? `Tag: ${pen.driverTagId}` : 'Select Driver Tag below');
+                                  })()}</span>
+                                </span>
+                                <span className="text-[10px] text-slate-500 font-mono shrink-0 ml-2">
+                                  {(() => {
+                                    const matched = appState?.driverTags?.find(t => t.tagId === pen.driverTagId || t.tagName === pen.driverTagId);
+                                    return matched ? `Addr: ${matched.address}` : 'Browse Tag';
+                                  })()}
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Historian Status Badge & 1-Click Add Shortcut */}
+                            {isHistorianLogged ? (
+                              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-1 rounded-lg font-mono font-bold flex items-center gap-1 shrink-0" title="This pen is actively logged to Historian">
+                                <i className="fas fa-database text-[9px] text-emerald-400"></i>
+                                <span>Logged</span>
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newHistTag: HistorianTag = {
+                                    id: `htag_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                                    name: pen.name || pen.topic || pen.driverTagId || `Pen ${idx + 1}`,
+                                    sourceType: dataSourceMode === 'driver' ? 'driver' : 'mqtt',
+                                    topic: dataSourceMode === 'mqtt' ? pen.topic : undefined,
+                                    jsonPath: pen.jsonPath || undefined,
+                                    driverTagId: dataSourceMode === 'driver' ? pen.driverTagId : undefined,
+                                    unit: pen.unit || '',
+                                    color: pen.color || '#38bdf8',
+                                    enabled: true,
+                                    createdAt: new Date().toISOString(),
+                                    updatedAt: new Date().toISOString()
+                                  };
+                                  if (onAddHistorianTag) {
+                                    onAddHistorianTag(newHistTag);
+                                  }
+                                }}
+                                className="text-[10px] bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 border border-violet-500/40 px-2 py-1 rounded-lg font-bold flex items-center gap-1 shrink-0 cursor-pointer transition-colors active:scale-95"
+                                title="Add this tag to central Historian logging"
+                              >
+                                <i className="fas fa-plus text-[8px]"></i>
+                                <span>Add to Historian</span>
+                              </button>
+                            )}
+
+                            {/* Remove button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFormData((prev: any) => ({
+                                  ...prev,
+                                  pens: prev.pens.filter((_: any, i: number) => i !== idx)
+                                }));
+                              }}
+                              className="text-rose-400 hover:text-rose-300 p-1.5 rounded-lg hover:bg-rose-500/10 cursor-pointer shrink-0 transition-colors"
+                              title="Remove Pen"
+                            >
+                              <i className="fas fa-trash-can text-xs"></i>
+                            </button>
+                          </div>
+
+                          {/* Per-Pen Advanced Settings Row */}
+                          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center px-3 pb-3 border-t border-slate-800/60 pt-2.5">
+                            {/* JSONPath Query (MQTT mode) vs Tag Browser Dropdown (Driver mode) */}
+                            <div className="sm:col-span-6 relative z-30">
+                              {dataSourceMode === 'mqtt' ? (
+                                <div>
+                                  <label className="text-[10px] text-sky-400 font-bold block mb-1 flex items-center gap-1">
+                                    <i className="fas fa-code text-[9px]"></i> JSONPath Query (this pen)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={pen.jsonPath || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setFormData((prev: any) => ({
+                                        ...prev,
+                                        pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, jsonPath: val } : p)
+                                      }));
+                                    }}
+                                    placeholder="$.d.value or $.sensor[0] (blank = raw)"
+                                    className="w-full bg-slate-950 border border-slate-700/80 text-emerald-300 rounded-lg px-2.5 py-1.5 text-xs font-mono outline-none focus:border-sky-500 placeholder:text-slate-600"
+                                  />
+                                </div>
+                              ) : (
+                                <div>
+                                  <DriverTagSelector
+                                    appState={appState!}
+                                    selectedTagId={pen.driverTagId}
+                                    compact={true}
+                                    onChange={(tagId) => {
+                                      const matchedTag = appState?.driverTags?.find(t => t.tagId === tagId || t.tagName === tagId);
+                                      setFormData((prev: any) => ({
+                                        ...prev,
+                                        pens: prev.pens.map((p: any, i: number) => i === idx ? {
+                                          ...p,
+                                          driverTagId: tagId,
+                                          topic: tagId,
+                                          unit: p.unit || matchedTag?.unit || ''
+                                        } : p)
+                                      }));
+                                    }}
+                                    label="Tag Browser (Driver Tag)"
+                                    placeholder="Select Driver Tag..."
+                                  />
+                                </div>
+                              )}
                             </div>
 
-                            {/* Node markers toggle */}
-                            <label className="flex items-center gap-1.5 cursor-pointer text-[10px] text-amber-300 select-none whitespace-nowrap">
-                              <input
-                                type="checkbox"
-                                checked={pen.showNodeMarkers === true}
-                                onChange={(e) => {
-                                  const val = e.target.checked;
-                                  setFormData((prev: any) => ({
-                                    ...prev,
-                                    pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, showNodeMarkers: val } : p)
-                                  }));
-                                }}
-                                className="w-3.5 h-3.5 accent-amber-500 cursor-pointer"
-                              />
-                              <span>Show Dots</span>
-                            </label>
+                            {/* Right Controls: Thickness, Unit, Show Dots */}
+                            <div className="sm:col-span-6 flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-1 sm:pt-0">
+                              {/* Thickness */}
+                              <div className="flex items-center gap-1.5">
+                                <label className="text-[10px] text-slate-400 font-bold">Thickness</label>
+                                <input
+                                  type="range" min="1" max="6" step="1"
+                                  value={pen.thickness ?? 2}
+                                  onChange={(e) => {
+                                    const val = Number(e.target.value);
+                                    setFormData((prev: any) => ({
+                                      ...prev,
+                                      pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, thickness: val } : p)
+                                    }));
+                                  }}
+                                  className="w-16 accent-sky-500 cursor-pointer"
+                                />
+                                <span className="text-[10px] text-slate-400 font-mono w-2.5">{pen.thickness ?? 2}</span>
+                              </div>
+
+                              {/* Unit */}
+                              <div className="flex items-center gap-1">
+                                <label className="text-[10px] text-slate-400 font-bold">Unit</label>
+                                <input
+                                  type="text"
+                                  value={pen.unit || ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setFormData((prev: any) => ({
+                                      ...prev,
+                                      pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, unit: val } : p)
+                                    }));
+                                  }}
+                                  placeholder="e.g. °C"
+                                  className="w-14 bg-slate-950 border border-slate-700 text-white rounded px-1.5 py-1 text-xs outline-none focus:border-sky-500 font-mono text-center"
+                                />
+                              </div>
+
+                              {/* Node markers toggle */}
+                              <label className="flex items-center gap-1.5 cursor-pointer text-[10px] text-amber-300 select-none whitespace-nowrap">
+                                <input
+                                  type="checkbox"
+                                  checked={pen.showNodeMarkers === true}
+                                  onChange={(e) => {
+                                    const val = e.target.checked;
+                                    setFormData((prev: any) => ({
+                                      ...prev,
+                                      pens: prev.pens.map((p: any, i: number) => i === idx ? { ...p, showNodeMarkers: val } : p)
+                                    }));
+                                  }}
+                                  className="w-3.5 h-3.5 accent-amber-500 cursor-pointer"
+                                />
+                                <span>Show Dots</span>
+                              </label>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="flex items-start gap-2 bg-slate-900/40 border border-slate-800 rounded-lg p-3">
                     <i className="fas fa-info-circle text-sky-400 text-sm mt-0.5 shrink-0"></i>
                     <p className="text-[11px] text-slate-400">
                       {dataSourceMode === 'driver'
-                        ? <>Single pen mode — click <strong className="text-violet-300">+ Add Pen</strong> to chart multiple Driver Tags (Modbus, OPC UA, etc.) simultaneously, each with its own Tag Browser selector.</>
-                        : <>Single pen mode — uses the Primary MQTT Topic above. Click <strong className="text-sky-300">+ Add Pen</strong> to chart multiple telemetry tags simultaneously, each with its own MQTT topic and JSONPath query.</>
+                        ? <>Single pen mode — click <strong className="text-violet-300">+ Add Pen</strong> or select a tag from <strong className="text-sky-300">📈 Add from Historian Tags</strong>.</>
+                        : <>Single pen mode — uses the Primary MQTT Topic above. Click <strong className="text-sky-300">+ Add Pen</strong> or choose from <strong className="text-violet-300">📈 Add from Historian Tags</strong>.</>
                       }
                     </p>
                   </div>
@@ -3425,366 +3514,21 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
             </div>
           )}
 
-          {/* ── Historian Logging Section (LINE_GRAPH only) ── */}
+          {/* ── Centralized Historian Status Information Card (LINE_GRAPH only) ── */}
           {isLineGraph && (
-            <div className="space-y-0 border border-violet-500/40 rounded-xl overflow-hidden bg-[#0e0a1a]">
-              {/* Header / Toggle */}
-              <button
-                type="button"
-                onClick={() => setHistorianSectionOpen(p => !p)}
-                className="w-full flex items-center justify-between px-4 py-3 bg-violet-900/20 hover:bg-violet-900/30 transition-colors cursor-pointer"
-              >
+            <div className="p-3.5 bg-gradient-to-r from-violet-950/40 via-slate-900/80 to-slate-950 border border-violet-500/30 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <i className="fas fa-database text-violet-400 text-xs"></i>
-                  <span className="text-xs text-violet-300 font-bold uppercase tracking-wider">📼 Historian & Persistent Trend Logging</span>
-                  {formData.enableHistorianLogging && (
-                    <span className="text-[9px] bg-violet-500 text-white px-1.5 py-0.5 rounded font-bold">ACTIVE</span>
-                  )}
+                  <span className="text-xs text-violet-200 font-bold uppercase tracking-wider">📼 Centralized Historian Logging</span>
                 </div>
-                <i className={`fas fa-chevron-${historianSectionOpen ? 'up' : 'down'} text-violet-400 text-xs`}></i>
-              </button>
-
-              {historianSectionOpen && (() => {
-                // Live storage estimation
-                const activePenList = formData.pens && formData.pens.length > 0 ? formData.pens.filter((p: any) => p.loggingEnabled !== false) : [];
-                const pensCount = formData.pens && formData.pens.length > 0 ? Math.max(1, activePenList.length) : 1;
-                const intervalSec = formData.logIntervalSeconds ?? 10;
-                const retentionVal = formData.retentionValue ?? 7;
-
-                const retentionUnit = formData.retentionUnit ?? 'DAYS';
-                const archiveAfterMonths = formData.archiveAfterMonths ?? 1;
-                const archiveClusterDuration = formData.archiveClusterDuration ?? '1_WEEK';
-                const isPersisted = getIsStoragePersisted(); // true when Android storage.persist() granted
-                const estimate = estimateStorageFootprint(pensCount, intervalSec, retentionVal, retentionUnit, isPersisted, archiveAfterMonths, archiveClusterDuration);
-                const oemWarning = detectOEMBrowserWarning();
-                const tierColors = {
-                  safe: { bg: 'bg-emerald-900/30', border: 'border-emerald-500/40', text: 'text-emerald-300', icon: '🟢', label: estimate.isPC ? 'Safe — Clustered Partition Archiving active on PC' : (isPersisted ? 'Safe — Android OS eviction protection active' : 'Safe for mobile & desktop') },
-                  warn: { bg: 'bg-amber-900/30', border: 'border-amber-500/40', text: 'text-amber-300', icon: '🟡', label: estimate.isPC ? 'High retention: ensure sufficient disk space' : 'Warning: May be evicted on iOS Safari (7-day inactivity rule)' },
-                  critical: { bg: 'bg-rose-900/30', border: 'border-rose-500/40', text: 'text-rose-300', icon: '🔴', label: 'Critical: Recommended on PC / Laptop only' },
-                };
-                const tc = tierColors[estimate.tier];
-
-                return (
-                  <div className="p-4 space-y-4">
-                    {/* Device Mode Status Header */}
-                    <div className={`p-2.5 rounded-lg border text-xs font-semibold flex items-center justify-between ${
-                      estimate.isPC 
-                        ? 'bg-sky-950/40 border-sky-500/40 text-sky-300' 
-                        : 'bg-violet-950/40 border-violet-500/40 text-violet-300'
-                    }`}>
-                      <div className="flex items-center space-x-2">
-                        <span>{estimate.isPC ? '💻' : '📱'}</span>
-                        <span>{estimate.isPC ? 'Laptop / PC Workstation Mode' : 'Mobile / Tablet Device Mode'}</span>
-                      </div>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-900/80 border border-slate-700 font-mono">
-                        {estimate.isPC ? 'Lossless Clustered Archiving' : 'Auto-Clamped ≤30D'}
-                      </span>
-                    </div>
-
-                    {/* Android OEM Browser Warning */}
-                    {oemWarning && (
-                      <div className="flex items-start space-x-2 bg-rose-900/20 border border-rose-500/40 rounded-lg p-2.5">
-                        <span className="text-sm shrink-0">⚠️</span>
-                        <p className="text-[10px] text-rose-300 leading-relaxed">
-                          <strong>Browser Compatibility Warning:</strong> {oemWarning}
-                        </p>
-                      </div>
-                    )}
-                    {/* Enable toggle */}
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <label className="text-xs text-violet-200 font-semibold">Enable Persistent Local Historian Logging</label>
-                        <p className="text-[10px] text-slate-400 mt-0.5">Stores telemetry to browser IndexedDB with clustered lossless archiving</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setFormData((p: any) => ({ ...p, enableHistorianLogging: !p.enableHistorianLogging }))}
-                        className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${
-                          formData.enableHistorianLogging ? 'bg-violet-500' : 'bg-slate-700'
-                        }`}
-                      >
-                        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                          formData.enableHistorianLogging ? 'translate-x-5' : 'translate-x-0.5'
-                        }`} />
-                      </button>
-                    </div>
-
-                    {formData.enableHistorianLogging && (<>
-                      {/* Log Sampling Frequency */}
-                      <div className="space-y-2">
-                        <label className="text-[11px] text-violet-300 font-semibold block">Log Sampling Frequency</label>
-                        <div className="flex items-center space-x-2">
-                          <select
-                            value={formData._historianIntervalPreset || '10'}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setHistorianCustomIntervalError(null);
-                              if (val !== 'custom') {
-                                setFormData((p: any) => ({ ...p, _historianIntervalPreset: val, logIntervalSeconds: parseInt(val) }));
-                              } else {
-                                setFormData((p: any) => ({ ...p, _historianIntervalPreset: 'custom' }));
-                              }
-                            }}
-                            className="bg-slate-900 border border-slate-700 text-white rounded px-2 py-1.5 text-xs outline-none focus:border-violet-500"
-                          >
-                            <option value="1">1 Second (High Resolution)</option>
-                            <option value="10">10 Seconds</option>
-                            <option value="60">1 Minute</option>
-                            <option value="300">5 Minutes</option>
-                            <option value="600">10 Minutes (Low Bandwidth)</option>
-                            <option value="custom">Custom Interval...</option>
-                          </select>
-                          {formData._historianIntervalPreset === 'custom' && (
-                            <div className="flex items-center space-x-1">
-                              <input
-                                type="number"
-                                min={1}
-                                placeholder="Seconds"
-                                value={formData.logIntervalSeconds ?? ''}
-                                onChange={(e) => {
-                                  const v = parseInt(e.target.value);
-                                  if (isNaN(v) || v < 1) {
-                                    setHistorianCustomIntervalError('⚠ Minimum 1 second allowed');
-                                    setFormData((p: any) => ({ ...p, logIntervalSeconds: 1 }));
-                                  } else {
-                                    setHistorianCustomIntervalError(null);
-                                    setFormData((p: any) => ({ ...p, logIntervalSeconds: v }));
-                                  }
-                                }}
-                                className="w-20 bg-slate-900 border border-violet-600 text-white rounded px-2 py-1.5 text-xs outline-none focus:border-violet-400 font-mono"
-                              />
-                              <span className="text-[10px] text-slate-400">sec</span>
-                            </div>
-                          )}
-                        </div>
-                        {historianCustomIntervalError && (
-                          <p className="text-[10px] text-rose-400">{historianCustomIntervalError}</p>
-                        )}
-                      </div>
-
-                      {/* Retention Period */}
-                      <div className="space-y-2">
-                        <label className="text-[11px] text-violet-300 font-semibold block">History Retention Period</label>
-                        {(() => {
-                          const isCommunity = appState?.userRole === 'community' || appState?.productEdition === 'community';
-                          const unit = formData.retentionUnit || (isCommunity ? 'HOURS' : 'DAYS');
-                          const maxVal = isCommunity ? (unit === 'MINUTES' ? 60 : 1) : (unit === 'YEARS' ? 10 : 1000);
-
-                          return (
-                            <div className="space-y-1.5">
-                              <div className="flex items-center space-x-2">
-                                <input
-                                  type="number"
-                                  min={1}
-                                  max={maxVal}
-                                  value={isCommunity ? Math.min(formData.retentionValue ?? 1, maxVal) : (formData.retentionValue ?? 7)}
-                                  onChange={(e) => {
-                                    const val = Math.max(1, parseInt(e.target.value) || 1);
-                                    const clampedVal = isCommunity ? Math.min(val, maxVal) : val;
-                                    setFormData((p: any) => ({ ...p, retentionValue: clampedVal }));
-                                  }}
-                                  className="w-16 bg-slate-900 border border-slate-700 text-white rounded px-2 py-1.5 text-xs outline-none focus:border-violet-500 font-mono text-center font-bold"
-                                />
-                                <select
-                                  value={unit}
-                                  onChange={(e) => {
-                                    const newUnit = e.target.value;
-                                    let newVal = formData.retentionValue ?? 1;
-                                    if (isCommunity) {
-                                      if (newUnit === 'MINUTES') newVal = Math.min(newVal, 60);
-                                      if (newUnit === 'HOURS') newVal = Math.min(newVal, 1);
-                                    }
-                                    setFormData((p: any) => ({ ...p, retentionUnit: newUnit, retentionValue: newVal }));
-                                  }}
-                                  className="bg-slate-900 border border-slate-700 text-white rounded px-2 py-1.5 text-xs outline-none focus:border-violet-500 font-semibold"
-                                >
-                                  <option value="MINUTES">Minutes</option>
-                                  <option value="HOURS">Hours</option>
-                                  <option value="DAYS" disabled={isCommunity}>Days {isCommunity ? '🔒 (Pro)' : ''}</option>
-                                  <option value="WEEKS" disabled={isCommunity}>Weeks {isCommunity ? '🔒 (Pro)' : ''}</option>
-                                  <option value="MONTHS" disabled={isCommunity}>Months {isCommunity ? '🔒 (Pro)' : ''}</option>
-                                  <option value="YEARS" disabled={isCommunity}>Years {isCommunity ? '🔒 (Pro)' : ''}</option>
-                                </select>
-                                <span className="text-[10px] text-slate-400">of history kept</span>
-                              </div>
-
-                              {isCommunity && (
-                                <div className="p-2 bg-amber-500/10 border border-amber-500/30 rounded text-[10px] text-amber-300 flex items-center space-x-1.5 font-medium">
-                                  <i className="fas fa-crown text-amber-400 text-xs shrink-0"></i>
-                                  <span>Free Demo Active: Retention is limited to <strong>1 Hour max</strong> (e.g. 60 Mins / 1 Hour). Upgrade to Engineering Studio to keep data for Days/Weeks/Years.</span>
-                                </div>
-                              )}
-
-                              {estimate.isClampedForMobile && (
-                                <div className="p-2 bg-violet-500/10 border border-violet-500/30 rounded text-[10px] text-violet-300 flex items-center space-x-1.5 font-medium">
-                                  <i className="fas fa-mobile-screen text-xs shrink-0"></i>
-                                  <span>Mobile Auto-Adaptation: Configured for {formData.retentionValue} {(formData.retentionUnit || 'DAYS').toLowerCase()}, but automatically constrained to <strong>30 Days</strong> on this mobile device.</span>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </div>
-
-                      {/* Clustered Archiving & Partition Settings (PC/Pro Mode) */}
-                      <div className="bg-slate-900/70 border border-violet-500/30 rounded-xl p-3 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-violet-200 flex items-center gap-1.5">
-                            <i className="fas fa-file-zipper text-violet-400 text-xs"></i>
-                            <span>Lossless Clustered Partition Archiving</span>
-                          </span>
-                          <span className="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded font-mono font-bold">
-                            100% 1s Fidelity
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {/* Start Archiving After Dropdown */}
-                          <div>
-                            <label className="text-[10px] text-slate-300 font-bold block mb-1">
-                              Start Archiving After
-                            </label>
-                            <select
-                              value={formData.archiveAfterMonths ?? 1}
-                              onChange={(e) => {
-                                setFormData((p: any) => ({ ...p, archiveAfterMonths: parseInt(e.target.value) || 0 }));
-                              }}
-                              className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-violet-500 cursor-pointer font-medium"
-                            >
-                              <option value="1">1 Month (Recommended)</option>
-                              <option value="2">2 Months</option>
-                              <option value="3">3 Months</option>
-                              <option value="6">6 Months</option>
-                              <option value="12">12 Months (1 Year)</option>
-                              <option value="0">Never (Keep uncompressed)</option>
-                            </select>
-                            <p className="text-[9px] text-slate-500 mt-1">Recent data stays in fast uncompressed hot store</p>
-                          </div>
-
-                          {/* Archive Cluster Partition Size Dropdown */}
-                          <div>
-                            <label className="text-[10px] text-slate-300 font-bold block mb-1">
-                              Archive Cluster File Duration
-                            </label>
-                            <select
-                              value={formData.archiveClusterDuration || '1_WEEK'}
-                              onChange={(e) => {
-                                setFormData((p: any) => ({ ...p, archiveClusterDuration: e.target.value }));
-                              }}
-                              className="w-full bg-slate-950 border border-slate-700 text-white rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-violet-500 cursor-pointer font-medium"
-                            >
-                              <option value="1_WEEK">1 Week (Recommended — Fast queries)</option>
-                              <option value="1_DAY">1 Day (Micro-partition files)</option>
-                              <option value="1_MONTH">1 Month (Monthly archive files)</option>
-                              <option value="2_MONTHS">2 Months (Bi-monthly archive files)</option>
-                            </select>
-                            <p className="text-[9px] text-slate-500 mt-1">Smaller files enable faster single-file decompression</p>
-                          </div>
-                        </div>
-
-                        {/* Dynamic Cluster File Size Estimator Box */}
-                        {estimate.clusterEstimate && (
-                          <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-2.5 space-y-1.5 text-[11px]">
-                            <div className="flex items-center justify-between text-violet-300 font-semibold">
-                              <span className="flex items-center gap-1.5">
-                                <i className="fas fa-box-archive text-violet-400 text-xs"></i>
-                                <span>Est. Cluster File Size:</span>
-                              </span>
-                              <span className="font-mono text-emerald-300 font-bold">
-                                {estimate.clusterEstimate.formattedFileSize} / file
-                              </span>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-400 pt-1 border-t border-slate-800/80">
-                              <div>
-                                <span className="text-slate-500">Points per File:</span>{' '}
-                                <strong className="text-slate-300 font-mono">{estimate.clusterEstimate.pointsPerFile.toLocaleString()}</strong>
-                              </div>
-                              <div>
-                                <span className="text-slate-500">Total Archive Files:</span>{' '}
-                                <strong className="text-slate-300 font-mono">~{estimate.clusterEstimate.totalArchiveFiles} files ({estimate.clusterEstimate.formattedTotalArchiveSize})</strong>
-                              </div>
-                            </div>
-
-                            <div className="text-[9px] text-sky-400/90 flex items-center gap-1 pt-0.5">
-                              <i className="fas fa-bolt text-[8px]"></i>
-                              <span>Targeted Decompression: Opening a past trend decompresses <strong>only 1 small file</strong> in &lt; 5ms</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Per-Pen Logging Toggles */}
-                      {formData.pens && formData.pens.length > 0 && (
-                        <div className="space-y-2">
-                          <label className="text-[11px] text-violet-300 font-semibold block">Per-Pen Logging</label>
-                          <div className="space-y-1.5">
-                            {formData.pens.map((pen: any, idx: number) => (
-                              <label key={pen.id || idx} className="flex items-center space-x-2 cursor-pointer group">
-                                <input
-                                  type="checkbox"
-                                  checked={pen.loggingEnabled !== false}
-                                  onChange={(e) => {
-                                    setFormData((p: any) => ({
-                                      ...p,
-                                      pens: p.pens.map((pp: any, i: number) => i === idx ? { ...pp, loggingEnabled: e.target.checked } : pp)
-                                    }));
-                                  }}
-                                  className="w-3.5 h-3.5 accent-violet-500"
-                                />
-                                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: pen.color || '#38bdf8' }}></span>
-                                <span className="text-[11px] text-slate-300 group-hover:text-white transition-colors">{pen.name || pen.topic || `Pen ${idx + 1}`}</span>
-                                <span className="text-[9px] text-slate-500 font-mono">{pen.topic}</span>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Live Storage Estimator Badge */}
-                      <div className={`rounded-lg p-3 border ${tc.bg} ${tc.border}`}>
-                        <div className="flex items-start space-x-2">
-                          <span className="text-sm leading-none mt-0.5">{tc.icon}</span>
-                          <div className="flex-1">
-                            <div className={`text-xs font-bold ${tc.text} flex items-center gap-2`}>
-                              ⚡ Total Local Storage: {estimate.formattedSize}
-                              {isPersisted && (
-                                <span className="text-[9px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-bold">
-                                  🤖 Android Protected
-                                </span>
-                              )}
-                              {estimate.isPC && (
-                                <span className="text-[9px] bg-sky-700 text-white px-1.5 py-0.5 rounded font-bold">
-                                  💻 Lossless Clustered Archive
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-[10px] text-slate-400 mt-0.5">
-                              {estimate.totalPoints.toLocaleString()} 1s points · {pensCount} pen{pensCount > 1 ? 's' : ''} · {formData.logIntervalSeconds}s interval · {formData.retentionValue} {(formData.retentionUnit || 'DAYS').toLowerCase()}
-                            </div>
-                            <div className={`text-[10px] mt-1 ${tc.text} opacity-80`}>{tc.label}</div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Device Portability & Storage Advisory */}
-                      <div className="space-y-1.5">
-                        <div className="flex items-start space-x-2 bg-slate-900/60 border border-slate-700 rounded-lg p-2.5">
-                          <span className="text-sm shrink-0">🔄</span>
-                          <div className="text-[10px] text-slate-400 leading-relaxed space-y-1">
-                            <p>
-                              <strong className="text-slate-300">💻 PC Clustered Decompression:</strong> Data older than {formData.archiveAfterMonths ?? 1} month(s) is partitioned into {formData.archiveClusterDuration === '1_DAY' ? 'daily' : formData.archiveClusterDuration === '1_MONTH' ? 'monthly' : formData.archiveClusterDuration === '2_MONTHS' ? 'bi-monthly' : 'weekly'} files. Historical queries decompress only the targeted file in milliseconds with 100% 1-second accuracy.
-                            </p>
-                            <p>
-                              <strong className="text-slate-300">📱 Mobile Portability:</strong> Opening this project backup on a mobile device automatically scales local retention to safe 30-day limits with zero data redundancy between devices.
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </>)}
-                  </div>
-                );
-              })()}
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded font-mono font-bold">
+                  ● Active in Background
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Historian sampling rates, 5-year multi-tier retention policies, and storage quotas are now centralized in the <strong>Historian & Trends</strong> section in the side menu. All pens linked to Historian Tags log continuously to IndexedDB.
+              </p>
             </div>
           )}
           {isOptionsType && (

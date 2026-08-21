@@ -35,12 +35,14 @@ export enum AppView {
   BACKUP = 'backup',
   TOPIC_MANAGER = 'topic_manager',
   TAG_MANAGER = 'tag_manager',
+  HISTORIAN_TREND = 'historian_trend',
   DRIVER_CONNECTIONS = 'driver_connections',
   DRIVER_TAG_MANAGER = 'driver_tag_manager',
   OPC_UA_BROWSER = 'opc_ua_browser',
   DRIVER_DIAGNOSTICS = 'driver_diagnostics',
   AI_ASSISTANT = 'ai_assistant',
-  USER_MANUAL = 'user_manual'
+  USER_MANUAL = 'user_manual',
+  REPORTING = 'reporting'
 }
 
 export interface MqttConnection {
@@ -191,7 +193,109 @@ export interface HistorianStorageEstimate {
   compressedArchiveMb?: number;
 }
 
+export type DynamicPropertyType = 
+  | 'color_shift'          // Threshold / state-based fill/stroke/text color change
+  | 'rotation'             // Continuous rotation speed by tag or angular deflection
+  | 'discrete_motion'      // 2D linear or multi-node motion path translation
+  | 'level_fill'           // Analog liquid/fluid percentage level filling (tanks, pipes)
+  | 'visibility_blink'     // Tag condition based hide/show or flashing strobe
+  | 'size_scale'           // Dynamic scaling (W/H stretch)
+  | 'opacity_fade';        // Dynamic alpha fading
+
+export interface DynamicBehaviorRule {
+  id: string;
+  type: DynamicPropertyType;
+  name: string;
+  enabled: boolean;
+  dataSourceMode: 'driver' | 'mqtt';
+  driverTagId?: string;
+  topic?: string;
+  jsonPath?: string;            // Per-rule JSONPath query when dataSourceMode === 'mqtt'
+
+  // Tag Data Format: 'analog' (Continuous / Threshold / Range) vs 'digital' (2-State Discrete)
+  tagDataType?: 'analog' | 'digital';
+
+  // 2-State Digital (Discrete) Settings (Default State 1 = '0', State 2 = '1'):
+  state1Value?: string | number; // Default '0'
+  state2Value?: string | number; // Default '1'
+  state1Label?: string;          // e.g. "State 0 / Off"
+  state2Label?: string;          // e.g. "State 1 / On"
+
+  // Digital State 1 Actions:
+  state1Visibility?: 'show' | 'hide' | 'blink';
+  state1Fill?: string;
+  state1Stroke?: string;
+  state1Opacity?: number;
+  state1Rotate?: boolean;
+  state1RotationSpeed?: number;
+  state1RotationDirection?: 'cw' | 'ccw';
+
+  // Digital State 2 Actions:
+  state2Visibility?: 'show' | 'hide' | 'blink';
+  state2Fill?: string;
+  state2Stroke?: string;
+  state2Opacity?: number;
+  state2Rotate?: boolean;
+  state2RotationSpeed?: number;
+  state2RotationDirection?: 'cw' | 'ccw';
+
+  // Analog Trigger & Condition Settings
+  conditionType: 'always' | 'threshold' | 'digital_state' | 'range' | 'continuous_analog';
+  operator?: '>' | '<' | '>=' | '<=' | '==' | '!=';
+  conditionValue?: number | string;
+  conditionValueHigh?: number; // for range
+  actionOnMatch?: 'show' | 'hide' | 'blink'; // For analog visibility
+  actionOnElse?: 'show' | 'hide';            // For analog visibility
+
+  // Action / Visual targets
+  targetFill?: string;
+  targetStroke?: string;
+  targetTextColor?: string;
+  targetOpacity?: number;
+  targetVisible?: boolean;
+  isBlinking?: boolean;
+  blinkSpeed?: 'slow' | 'medium' | 'fast';
+
+  // Motion & Rotation parameters
+  rotationMode?: 'continuous_spin' | 'angle_deflection';
+  rotationSpeed?: number; // RPM or duration
+  rotationDirection?: 'cw' | 'ccw';
+  minAngle?: number; // e.g. 0 deg
+  maxAngle?: number; // e.g. 90 deg
+  minTagValue?: number; // e.g. 0
+  maxTagValue?: number; // e.g. 100
+
+  // Level fill parameters
+  fillDirection?: 'bottom_to_top' | 'top_to_bottom' | 'left_to_right' | 'right_to_left';
+  fillColor?: string;
+  fillMin?: number;
+  fillMax?: number;
+  showPercentage?: boolean;
+
+  // Motion Translation
+  motionPathPoints?: Array<{ x: number; y: number }>;
+}
+
+export interface SvgSubPartConfig {
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  opacity?: number;
+  isHidden?: boolean;
+  animType?: 'none' | 'spin' | 'pulse' | 'level_fill' | 'flow' | 'color_shift';
+  rotationSpeed?: number;
+  dataSourceMode?: 'mqtt' | 'driver';
+  topic?: string;
+  driverTagId?: string;
+  lowThreshold?: number;
+  highThreshold?: number;
+  alarmColor?: string;
+  // Multiple Dynamic Behaviors Pipeline
+  dynamics?: DynamicBehaviorRule[];
+}
+
 export interface Panel {
+
   panelId: string;
   dashboardId: string;
   connectionId: string;
@@ -308,8 +412,13 @@ export interface Panel {
   textAlign?: 'left' | 'center' | 'right';
   isHmiMode?: boolean;
   groupId?: string;
+  groupName?: string;
+  isLocked?: boolean;
+  isHidden?: boolean;
+  svgSubParts?: Record<string, SvgSubPartConfig>;
   imageUrl?: string;
   imageFit?: 'contain' | 'cover' | 'fill';
+
   opacity?: number;
   rotation?: number;
   dataType?: 'number' | 'text';
@@ -373,6 +482,9 @@ export interface Panel {
   rotationTagMax?: number;
   rotationAngleMin?: number;
   rotationAngleMax?: number;
+
+  // Multiple Dynamic Behaviors Pipeline
+  dynamics?: DynamicBehaviorRule[];
 }
 
 export interface MqttMessageLog {
@@ -469,6 +581,41 @@ export interface TagRegistryEntry {
   updatedAt?: string;
 }
 
+export interface HistorianConfig {
+  enabled: boolean;
+  logIntervalSeconds: number; // Global default sampling rate (e.g. 10s)
+  retentionValue: number;     // e.g. 30, 6, 1, 5
+  retentionUnit: 'MINUTES' | 'HOURS' | 'DAYS' | 'WEEKS' | 'MONTHS' | 'YEARS';
+  logStorageCapMb: number;    // Hard storage cap (e.g. 1000 MB)
+  archiveAfterMonths: number; // Clustered archiving start threshold (e.g. 1 month)
+  archiveClusterDuration: ArchiveClusterDuration;
+}
+
+export interface HistorianTag {
+  id: string;                    // Unique identifier (e.g. 'htag_1718000000_abc')
+  name: string;                  // Display name
+  sourceType: 'mqtt' | 'driver'; // Data source ('mqtt' or 'driver')
+  topic?: string;                // MQTT topic
+  jsonPath?: string;             // JSONPath query (e.g. '$.level')
+  driverTagId?: string;          // Master tag link to appState.driverTags
+  connectionId?: string;         // Connection ID
+  dataType?: 'number' | 'boolean' | 'string';
+  unit?: string;                 // e.g. '°C', 'bar', 'RPM'
+  min?: number;
+  max?: number;
+  enabled: boolean;              // Logging active toggle (Play/Pause)
+  color?: string;                // Preferred pen color
+  description?: string;
+  
+  // Per-Tag Override Settings (Optional — inherits global when omitted)
+  useCustomInterval?: boolean;
+  customIntervalSeconds?: number; // e.g. 1s, 2s, 5s, 60s
+  deadband?: number;              // Value change % threshold (e.g. 0.5% to suppress static noise)
+
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface AppState {
   connections: MqttConnection[];
   dashboards: Dashboard[];
@@ -486,6 +633,10 @@ export interface AppState {
   packageOrigin?: 'community' | 'commercial' | 'engineering';
   currency?: '$' | '₹';
 
+  // Centralized Historian & Persistence Settings
+  historianConfig?: HistorianConfig;
+  historianTags?: HistorianTag[];
+
   // Industrial Driver Support (additive)
   driverConnections?: DriverConnection[];
   driverTags?: DriverTag[];
@@ -501,6 +652,9 @@ export type DriverProtocol =
   | 'opcda'
   | 'modbus_tcp'
   | 'modbus_rtu'
+  | 'iec61850'
+  | 's7'
+  | 'melsec'
   | 'rs485'
   | 'rs232'
   | 'usb_serial'
@@ -527,6 +681,29 @@ export interface DriverConnection {
   connectionName: string;
   protocol: DriverProtocol;
   enabled: boolean;
+  // Siemens S7 Driver Settings
+  s7Model?: 's7_300' | 's7_400' | 's7_1200' | 's7_1500' | 's7_200' | 'logo';
+  rack?: number;             // Default: 0
+  slot?: number;             // Default: 1 (S7-1200/1500) or 2 (S7-300/400)
+  localTsap?: string;        // For S7-200 / CP243-1 (e.g. "0x1000", "01.00")
+  remoteTsap?: string;       // For S7-200 / CP243-1 (e.g. "0x1000", "02.00")
+  pduSize?: number;          // Negotiated PDU size (default: 240 / 480)
+  // Mitsubishi MELSEC / SLMP Driver Settings
+  melsecSeries?: 'iq_r' | 'iq_f' | 'q_series' | 'l_series' | 'fx_series';
+  melsecFrame?: '3e_binary' | '3e_ascii' | '1e_binary' | '4e_binary';
+  networkNumber?: number;    // Default: 0
+  pcNumber?: number;         // Default: 255 (0xFF)
+  destinationModuleIoNumber?: number; // Default: 0x03FF (1023)
+  destinationModuleStationNumber?: number; // Default: 0
+  // IEC 61850 (MMS & GOOSE) Substation Driver Settings
+  iedName?: string;
+  apTitle?: string;
+  aeQualifier?: number;
+  mmsPort?: number;
+  enableGoose?: boolean;
+  gooseInterface?: string;
+  gooseAppId?: string;
+  reportControlBlocks?: string[];
   // OPC UA / OPC DA Advanced Configuration
   endpointUrl?: string;
   secondaryEndpointUrl?: string;
@@ -603,6 +780,23 @@ export interface DriverTag {
   protocol: DriverProtocol;
   sourceType: DriverTagSourceType;
   connectionId: string;
+  // Siemens S7 Addressing
+  s7Area?: 'DB' | 'I' | 'Q' | 'M' | 'T' | 'C';
+  dbNumber?: number;           // e.g. 1 for DB1
+  byteOffset?: number;         // e.g. 0, 4, 10
+  bitOffset?: number;          // e.g. 0..7
+  s7Address?: string;          // Formatted e.g. "DB1.DBD0", "DB1.DBW4", "M0.0", "IW0", "QD0"
+  // Mitsubishi MELSEC Addressing
+  melsecDeviceCode?: 'D' | 'W' | 'M' | 'X' | 'Y' | 'R' | 'ZR' | 'SD' | 'SM' | 'TN' | 'CN' | number;
+  melsecAddress?: string;      // Formatted e.g. "D100", "M100", "X000", "Y000", "W100", "ZR1000"
+  melsecHeadDeviceNumber?: number; // e.g. 100
+  // IEC 61850 Logical Device / Logical Node / Data Attribute addressing
+  logicalDevice?: string;       // e.g. "LD0", "PROT", "CTRL"
+  logicalNode?: string;         // e.g. "MMXU1", "CSWI1", "XCBR1", "PTOC1"
+  functionalConstraint?: string;// e.g. "MX", "ST", "CO", "SP", "SV", "CF"
+  dataObject?: string;          // e.g. "TotW", "A", "PhV", "Pos", "Op"
+  dataAttribute?: string;       // e.g. "phsA.cVal.mag.f", "stVal", "q", "t"
+  iecPath?: string;             // Full path e.g. "LD0/MMXU1.A.phsA.cVal.mag.f"
   // OPC UA
   nodeId?: string;
   namespace?: number;
@@ -615,7 +809,6 @@ export interface DriverTag {
   slaveId?: number;
   registerType?: ModbusRegisterType;
   address?: number;
-  bitOffset?: number;
   wordCount?: number;
   // Common
   dataType: DriverTagDataType;
@@ -648,6 +841,7 @@ export interface DriverTag {
 
 export interface DriverTagValue {
   tagId: string;
+  tagName?: string;
   panelId: string;
   value: any;
   quality: DriverTagQuality;
@@ -670,5 +864,215 @@ export interface DriverConnectionHealthPayload {
   retryCount?: number;
   consecutiveFailureCount?: number;
 }
+
+// ─── Reporting Module Types ────────────────────────────────────────────────────
+
+export type ReportDataResolution = 'raw' | '1min' | '1hour' | '1day';
+export type ReportFormat = 'html' | 'xlsx' | 'csv';
+export type ReportScheduleFrequency = 'once' | 'daily' | 'weekly' | 'monthly' | 'interval';
+export type ReportStatus = 'idle' | 'suggesting' | 'generating' | 'ready' | 'error';
+
+export type FieldTransformType =
+  | 'none'
+  | 'delta_consumption'
+  | 'scale_kilo'
+  | 'scale_milli'
+  | 'c_to_f'
+  | 'f_to_c'
+  | 'bar_to_psi'
+  | 'psi_to_bar'
+  | 'abs'
+  | 'invert'
+  | 'custom_math';
+
+/** One column ↔ tag mapping in a template report */
+export interface ReportFieldMap {
+  columnIndex: number;      // 0-based column index in sheet
+  columnLetter: string;     // 'A', 'B', 'C', ...
+  columnHeader: string;     // Detected header text from template
+  tagId?: string;           // Historian pen / driver tag ID
+  tagName?: string;         // Human readable name
+  aggregation: 'raw' | 'avg' | 'min' | 'max' | 'sum' | 'last'; // How to aggregate
+  isTimestamp?: boolean;    // true = this column gets the timestamp
+  transform?: FieldTransformType; // Applied transformation before writing into cell
+  customFormula?: string;   // Formula expression e.g. "val * 1.5 + 10" (when transform === 'custom_math')
+  clampMin?: number;        // Minimum allowed value clamp
+  clampMax?: number;        // Maximum allowed value clamp
+}
+
+/** Schedule definition for recurring report generation */
+export interface ReportSchedule {
+  enabled: boolean;         // Whether this schedule is actively executing
+  frequency: ReportScheduleFrequency;
+  intervalMinutes?: number; // e.g. 15, 30, 60, 120 (for frequency === 'interval')
+  hour?: number;            // 0-23 for daily/weekly/monthly (local time)
+  minute?: number;          // 0-59
+  weekday?: number;         // 0=Sunday, 1=Monday... for weekly
+  dayOfMonth?: number;      // 1-31 for monthly
+  lookbackHours?: number;   // Lookback window to query (e.g. 24 for daily, 168 for weekly)
+  lastRunAt?: string;       // ISO string of last execution
+  nextRunAt?: string;       // ISO string of next scheduled run
+  autoDownload?: boolean;   // Whether to trigger immediate download upon generation
+}
+
+/** A saved standard template report configuration */
+export interface ReportTemplate {
+  templateId: string;
+  templateName: string;
+  description?: string;
+  xlsxBase64?: string;        // Stored in IndexedDB (not in this object for localStorage)
+  targetSheet: string;        // Which sheet to inject data into (e.g. 'Sheet1')
+  dataStartRow: number;       // Row number where data rows begin (e.g. 2)
+  fieldMaps: ReportFieldMap[];
+  defaultResolution: ReportDataResolution;
+  defaultFromOffsetHours?: number; // Default lookback (e.g. -24 = last 24h)
+  schedule?: ReportSchedule;
+  lastGeneratedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A generated/completed report record for history */
+export interface ReportJob {
+  jobId: string;
+  templateId?: string;        // If from template
+  title: string;
+  type: 'template' | 'ai_ondemand';
+  status: 'generating' | 'ready' | 'error';
+  fromMs: number;
+  toMs: number;
+  rowCount?: number;
+  errorMessage?: string;
+  htmlContent?: string;       // For AI reports: inline HTML
+  isScheduled?: boolean;      // True if triggered automatically by background scheduler
+  unread?: boolean;           // True if user hasn't opened/acknowledged the generated report
+  createdAt: string;
+  completedAt?: string;
+}
+
+/** Batch generation progress tracking */
+export interface BatchReportProgress {
+  total: number;
+  current: number;
+  currentName: string;
+  completedJobs: ReportJob[];
+  isRunning: boolean;
+  error?: string;
+}
+
+/** Suggestion from AI before generating on-demand report */
+export interface ReportSuggestion {
+  id: number;
+  title: string;
+  description: string;
+  addsTags?: string[];
+  addsSection?: string;
+}
+
+/** Pending AI report request state tracked in AiChatPanel */
+export interface PendingReportRequest {
+  requestId: string;
+  title: string;
+  fromMs: number;
+  toMs: number;
+  tags: string[];
+  resolution: ReportDataResolution;
+  includeAlarms: boolean;
+  includeFdd: boolean;
+  suggestions: ReportSuggestion[];
+  selectedSuggestionIds: number[];
+  status: ReportStatus;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DEDICATED CLIENT-SIDE AI MEMORY & MULTI-AGENT TYPES
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface LearnedTagAlias {
+  id: string;
+  alias: string;              // e.g. "Main Incomer" or "Chiller Outflow"
+  tagId: string;             // physical tag ID e.g. "htag_123" or "modbus_holding_40001"
+  tagName: string;           // readable physical tag name
+  source: 'operator_chat' | 'manual_entry' | 'inferred';
+  confidence: number;        // 0.0 to 1.0
+  notes?: string;
+  createdAt: string;
+  lastUsedAt?: string;
+}
+
+export type PlantKnowledgeCategory = 'energy' | 'hvac' | 'electrical' | 'safety' | 'production' | 'general';
+
+export interface PlantKnowledgeNote {
+  id: string;
+  category: PlantKnowledgeCategory;
+  topic: string;             // e.g. "Boiler Steam Limit", "Shift Timings"
+  note: string;              // e.g. "Boiler max steam pressure is 10.5 bar. Shift 1 runs from 06:00 to 14:00."
+  tagsLinked?: string[];
+  author?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QueryPattern {
+  queryHash: string;
+  querySample: string;
+  intentType: 'telemetry_stats' | 'report_gen' | 'alarm_audit' | 'fdd_rca' | 'driver_diag' | 'general';
+  tagIds: string[];
+  frequency: number;
+  lastQueriedAt: string;
+}
+
+export interface PrecomputedTelemetryChunk {
+  chunkKey: string;           // e.g. "chunk_htag_123_1d_2026-08-20"
+  tagId: string;
+  resolution: ReportDataResolution;
+  startTime: number;
+  endTime: number;
+  stats: {
+    min: number;
+    max: number;
+    avg: number;
+    delta: number;
+    sum: number;
+    count: number;
+    peakTimestamp?: number;
+  };
+  pointsSummary?: Array<{ ts: number; val: number }>;
+  generatedAt: string;
+}
+
+export interface EventTelemetrySnapshot {
+  eventId: string;
+  alarmId: string;
+  tagId: string;
+  alarmMessage: string;
+  severity: 'HIGH' | 'CRITICAL' | 'MEDIUM' | 'LOW';
+  tripTimestamp: number;
+  preFaultPoints: Array<{ ts: number; val: number }>;  // 30 min before
+  postFaultPoints?: Array<{ ts: number; val: number }>; // 15 min after
+  snapshotAt: string;
+}
+
+export interface AiMemoryStats {
+  aliasCount: number;
+  noteCount: number;
+  queryPatternCount: number;
+  cachedChunkCount: number;
+  alarmSnapshotCount: number;
+  estimatedStorageMb: number;
+  isPersistentStorage: boolean;
+  lastChunkedAt?: string;
+}
+
+export type MultiAgentSpecialistType = 'supervisor' | 'telemetry' | 'fdd' | 'diagnostic' | 'memory' | 'reporting';
+
+export interface MultiAgentEvent {
+  agentType: MultiAgentSpecialistType;
+  agentName: string;
+  status: 'starting' | 'running' | 'completed' | 'error';
+  actionDescription: string;
+  timestamp: number;
+}
+
 
 

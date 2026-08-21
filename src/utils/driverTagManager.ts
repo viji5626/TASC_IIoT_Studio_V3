@@ -57,6 +57,27 @@ export function validateDriverTag(tag: Partial<DriverTag>): ValidationResult {
     errors.push('OPC DA Item ID is required.');
   }
 
+  // IEC 61850 Substation
+  if (tag.protocol === 'iec61850') {
+    if (!tag.iecPath && !tag.logicalNode) {
+      errors.push('IEC 61850 Data Attribute path or Logical Node is required (e.g. "LD0/MMXU1.A.phsA.cVal.mag.f").');
+    }
+  }
+
+  // Siemens S7
+  if (tag.protocol === 's7') {
+    if (!tag.s7Address && !tag.s7Area) {
+      errors.push('Siemens S7 memory address is required (e.g. "DB1.DBD0", "M0.0", "IW0", "Q0.0").');
+    }
+  }
+
+  // Mitsubishi MELSEC
+  if (tag.protocol === 'melsec') {
+    if (!tag.melsecAddress && !tag.melsecDeviceCode) {
+      errors.push('Mitsubishi MELSEC device register address is required (e.g. "D100", "M100", "X0", "Y0", "W100").');
+    }
+  }
+
   return { valid: errors.length === 0, errors, warnings };
 }
 

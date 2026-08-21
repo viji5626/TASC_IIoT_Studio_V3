@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { AppState, ActiveAlarm, ProductEdition } from '../types';
+import { AppState, ActiveAlarm, ProductEdition, PendingReportRequest, ReportSuggestion, ReportJob } from '../types';
 import { saveApiKey, loadApiKey, deleteApiKey } from '../utils/aiKeyVault';
 import { createGeminiAdapter } from '../utils/aiProviders/googleGemini';
 import { createOpenAiAdapter } from '../utils/aiProviders/openai';
@@ -17,17 +17,29 @@ import { ParsedSnippet } from '../utils/aiSnippetParser';
 import { LocalAiServerControl } from './LocalAiServerControl';
 import { CoachMarkOverlay } from './CoachMarkOverlay';
 import { isTourSuppressed } from '../utils/tourRegistry';
+import { AiMemoryStudioTab } from './AiMemoryStudioTab';
+import {
+  collectHistorianData,
+  buildAiHtmlReport,
+  buildDataExcelWorkbook,
+  downloadHtmlReport,
+  downloadExcelReport,
+  saveReportJob,
+  storeReportHtml
+} from '../utils/reportEngine';
+
 
 interface Props {
   onBack?: () => void;
   latestValues: Record<string, { val: any; time: string; timestampMs?: number; quality?: string }>;
   appState: AppState;
   activeAlarms: ActiveAlarm[];
-  initialTab?: 'chat' | 'settings';
+  initialTab?: 'chat' | 'memory' | 'settings';
   isDrawer?: boolean;
   onClose?: () => void;
   onOpenFullAssistant?: () => void;
 }
+
 
 export type AiProviderType = 'google_gemini' | 'openai' | 'groq' | 'ollama' | 'lmstudio' | 'custom';
 
@@ -105,7 +117,7 @@ export const AiAssistantView: React.FC<Props> = ({
   onClose,
   onOpenFullAssistant
 }) => {
-  const [activeTab, setActiveTab] = useState<'chat' | 'settings'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'chat' | 'memory' | 'settings'>(initialTab);
 
   // Settings State - loaded per provider
   const [provider, setProvider] = useState<AiProviderType>(() => {
@@ -153,6 +165,133 @@ export const AiAssistantView: React.FC<Props> = ({
   const [isAiTourOpen, setIsAiTourOpen] = useState(false);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // ─── Report Generation State ─────────────────────────────────────────────────
+  // pendingReport tracks the current in-progress report request (suggestion stage or generating)
+  const [pendingReport, setPendingReport] = useState<PendingReportRequest | null>(null);
+  const [reportDownloads, setReportDownloads] = useState<Array<{ jobId: string; title: string; html: string; excelWb?: any }>>([]);
+
+
+  // After each AI turn, scan the last message for report control markers
+  useEffect(() => {
+    const lastMsg = chatSession.slice().reverse().find(m => m.role === 'assistant' && m.content);
+    if (!lastMsg?.content) return;
+
+    // Try to find a JSON block with __reportSuggestion or __generateReport
+    // These are embedded by the AI tool executor and may appear in tool result context
+    // We scan all assistant messages for unprocessed markers
+    const allContent = chatSession
+      .filter(m => m.role === 'assistant')
+      .map(m => m.content || '')
+      .join('\n');
+
+    // Match JSON objects containing report control flags
+    const jsonMatches = allContent.matchAll(/\{[^{}]*"__reportSuggestion"[^{}]*\}|\{[^{}]*"__generateReport"[^{}]*\}/g);
+    for (const match of Array.from(jsonMatches)) {
+      try {
+        const obj = JSON.parse(match[0]);
+        if (obj.__reportSuggestion && !pendingReport) {
+          // New suggestion request — set pending report state
+          setPendingReport({
+            requestId: obj.requestId || `req_${Date.now()}`,
+            title: obj.title || 'Report',
+            fromMs: obj.fromMs || Date.now() - 86400000,
+            toMs: obj.toMs || Date.now(),
+            tags: obj.requestedTags || [],
+            resolution: obj.resolution || '1hour',
+            includeAlarms: Boolean(obj.includeAlarms),
+            includeFdd: Boolean(obj.includeFdd),
+            suggestions: (obj.suggestions || []) as ReportSuggestion[],
+            selectedSuggestionIds: [],
+            status: 'suggesting'
+          });
+        } else if (obj.__generateReport) {
+          // Generate the report client-side
+          handleGenerateAiReport(obj);
+        }
+      } catch {}
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionRevision]);
+
+  const handleGenerateAiReport = useCallback(async (params: any) => {
+    const jobId = `job_${Date.now()}`;
+    const title = String(params.title || 'Industrial Report');
+    const fromMs = Number(params.fromMs);
+    const toMs = Number(params.toMs);
+    const tags: string[] = params.tags || [];
+    const resolution = String(params.resolution || '1hour') as any;
+    const includeAlarms = Boolean(params.includeAlarms ?? true);
+    const selectedSuggestionIds: number[] = params.selectedSuggestionIds || [];
+    const aiSummary = String(params.aiSummary || '');
+    const aiResults = String(params.aiResults || '');
+
+    // Save job as generating
+    const job: ReportJob = {
+      jobId,
+      title,
+      type: 'ai_ondemand',
+      status: 'generating',
+      fromMs,
+      toMs,
+      createdAt: new Date().toISOString()
+    };
+    saveReportJob(job);
+
+    // Clear pending report
+    setPendingReport(null);
+
+    try {
+      // Collect historian data — pass includeFdd flag to signal FDD enrichment
+      const includeFdd = Boolean(params.includeFdd);
+      const dataset = await collectHistorianData(tags, fromMs, toMs, resolution, includeAlarms, false, includeFdd);
+
+      dataset.title = title;
+      const suggestions: ReportSuggestion[] = pendingReport?.suggestions || [];
+      dataset.includedSuggestions = suggestions.filter(s => selectedSuggestionIds.includes(s.id));
+
+      // Build HTML report
+      const html = buildAiHtmlReport(dataset, aiSummary, aiResults, suggestions, selectedSuggestionIds);
+
+      // Store in IndexedDB/sessionStorage
+      await storeReportHtml(jobId, html);
+
+      // Save completed job
+      const completedJob: ReportJob = {
+        ...job,
+        status: 'ready',
+        rowCount: dataset.tags.reduce((s, t) => s + t.points.length, 0),
+        completedAt: new Date().toISOString()
+      };
+      saveReportJob(completedJob);
+
+      // Build Excel workbook (multi-sheet: Trend, Stats, Alarms)
+      const excelWb = buildDataExcelWorkbook(dataset);
+
+      // Track for immediate download in chat
+      setReportDownloads(prev => [...prev, { jobId, title, html, excelWb }]);
+
+    } catch (err: any) {
+      const failedJob: ReportJob = {
+        ...job,
+        status: 'error',
+        errorMessage: err.message,
+        completedAt: new Date().toISOString()
+      };
+      saveReportJob(failedJob);
+    }
+  }, [pendingReport]);
+
+  const handleReportSuggestionSelected = useCallback((selectedIds: number[]) => {
+    setPendingReport(prev => prev ? { ...prev, selectedSuggestionIds: selectedIds, status: 'generating' } : null);
+  }, []);
+
+  const handleDownloadExcel = useCallback((jobId: string, title: string) => {
+    const entry = reportDownloads.find(r => r.jobId === jobId);
+    if (entry?.excelWb) {
+      downloadExcelReport(entry.excelWb, title);
+    }
+  }, [reportDownloads]);
 
   useEffect(() => {
     if (!isTourSuppressed('ai_assistant')) {
@@ -624,6 +763,18 @@ export const AiAssistantView: React.FC<Props> = ({
               </button>
               <button
                 type="button"
+                onClick={() => setActiveTab('memory')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center space-x-1.5 cursor-pointer ${
+                  activeTab === 'memory'
+                    ? 'bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+                }`}
+              >
+                <i className="fas fa-brain"></i>
+                <span>Memory & Knowledge</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => setActiveTab('settings')}
                 className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center space-x-1.5 cursor-pointer ${
                   activeTab === 'settings'
@@ -641,7 +792,7 @@ export const AiAssistantView: React.FC<Props> = ({
 
       {/* Main Content Area */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        {(isDrawer || activeTab === 'chat') ? (
+        {(isDrawer || activeTab === 'chat') && (
           <AiChatPanel
             messages={chatSession}
             isLoading={isLoading}
@@ -654,10 +805,22 @@ export const AiAssistantView: React.FC<Props> = ({
             supportsVision={supportsVision}
             isCommunity={isCommunity}
             quotaStatus={quotaStatus}
+            pendingReport={pendingReport}
+            reportDownloads={reportDownloads}
+            onReportSuggestionSelected={handleReportSuggestionSelected}
+            onDownloadReport={(html, title) => downloadHtmlReport(html, title)}
+            onDownloadExcel={handleDownloadExcel}
           />
-        ) : (
+        )}
+
+        {!isDrawer && activeTab === 'memory' && (
+          <AiMemoryStudioTab appState={appState} />
+        )}
+
+        {!isDrawer && activeTab === 'settings' && (
           /* Settings Tab */
           <div className="h-full overflow-y-auto p-6 max-w-4xl mx-auto space-y-6">
+
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-5 shadow-lg">
               <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
                 <div>

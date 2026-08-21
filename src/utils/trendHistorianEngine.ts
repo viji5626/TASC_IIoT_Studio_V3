@@ -1499,3 +1499,63 @@ export function destroyHistorianEngine(): void {
   isLeaderTab = false;
   batchBuffer = [];
 }
+
+export async function clearHistorianDB(): Promise<void> {
+  if (!db) await initTrendHistorianDB();
+  return new Promise((resolve, reject) => {
+    try {
+      const stores = [STORE_RAW, STORE_1MIN, STORE_1HOUR, STORE_1DAY, STORE_GAPS, STORE_ARCHIVES];
+      const tx = db!.transaction(stores, 'readwrite');
+      stores.forEach(s => {
+        try {
+          tx.objectStore(s).clear();
+        } catch { }
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+export async function exportHistorianDataJson(): Promise<string> {
+  if (!db) await initTrendHistorianDB();
+  return new Promise((resolve) => {
+    try {
+      const tx = db!.transaction([STORE_RAW, STORE_1MIN, STORE_1HOUR, STORE_1DAY], 'readonly');
+      const data: Record<string, any[]> = {
+        raw: [],
+        min: [],
+        hour: [],
+        day: []
+      };
+
+      const rawReq = tx.objectStore(STORE_RAW).getAll();
+      rawReq.onsuccess = () => { data.raw = rawReq.result || []; };
+
+      const minReq = tx.objectStore(STORE_1MIN).getAll();
+      minReq.onsuccess = () => { data.min = minReq.result || []; };
+
+      const hrReq = tx.objectStore(STORE_1HOUR).getAll();
+      hrReq.onsuccess = () => { data.hour = hrReq.result || []; };
+
+      const dayReq = tx.objectStore(STORE_1DAY).getAll();
+      dayReq.onsuccess = () => { data.day = dayReq.result || []; };
+
+      tx.oncomplete = () => {
+        resolve(JSON.stringify({
+          version: '1.0',
+          exportedAt: new Date().toISOString(),
+          data
+        }, null, 2));
+      };
+
+      tx.onerror = () => {
+        resolve(JSON.stringify({ error: 'Failed to read records' }));
+      };
+    } catch {
+      resolve(JSON.stringify({ error: 'Export failed' }));
+    }
+  });
+}

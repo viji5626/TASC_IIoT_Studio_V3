@@ -2,6 +2,7 @@ import { DriverTagValue, DriverConnectionHealthPayload } from '../types';
 
 export type DriverTagValueCallback = (update: DriverTagValue) => void;
 export type DriverConnectionHealthCallback = (payload: DriverConnectionHealthPayload) => void;
+export type DriverReconnectCallback = () => void;
 
 const RECONNECT_INTERVAL_MS = 3000;
 const DRIVER_BRIDGE_PATH = '/api/driver-bridge';
@@ -10,14 +11,21 @@ export class DriverBridgeClient {
   private ws: WebSocket | null = null;
   private onTagValue: DriverTagValueCallback;
   private onConnectionHealth?: DriverConnectionHealthCallback;
+  private onReconnect?: DriverReconnectCallback;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private shouldConnect = false;
   private subscribedTagIds: Set<string> = new Set();
   private pendingSubscriptions: any[] = [];
+  private hasConnectedOnce = false; // tracks first vs subsequent connections
 
-  constructor(onTagValue: DriverTagValueCallback, onConnectionHealth?: DriverConnectionHealthCallback) {
+  constructor(
+    onTagValue: DriverTagValueCallback,
+    onConnectionHealth?: DriverConnectionHealthCallback,
+    onReconnect?: DriverReconnectCallback
+  ) {
     this.onTagValue = onTagValue;
     this.onConnectionHealth = onConnectionHealth;
+    this.onReconnect = onReconnect;
   }
 
   connect() {
@@ -73,10 +81,21 @@ export class DriverBridgeClient {
       this.ws = new WebSocket(url);
 
       this.ws.onopen = () => {
-        console.log('[DriverBridge] Connected to driver bridge.');
+        const isReconnect = this.hasConnectedOnce;
+        this.hasConnectedOnce = true;
+        console.log(`[DriverBridge] ${isReconnect ? 'Re-connected' : 'Connected'} to driver bridge.`);
+
+        // Always flush pending subscriptions on (re)connect so server always
+        // gets the current set even after it restarts.
         if (this.pendingSubscriptions.length > 0) {
           console.log('[DriverBridge] Flushing pending subscriptions on connect:', this.pendingSubscriptions.length);
           this.ws?.send(JSON.stringify({ type: 'subscribe', subscriptions: this.pendingSubscriptions }));
+        }
+
+        // Notify App so it can also reset lastSubscribedKeyRef and force a
+        // fresh bridge.subscribe() call on the next subscription effect run.
+        if (isReconnect && this.onReconnect) {
+          this.onReconnect();
         }
       };
 

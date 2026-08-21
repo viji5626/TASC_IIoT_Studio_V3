@@ -510,7 +510,11 @@ export const INDUSTRIAL_SYMBOLS: IndustrialSymbolItem[] = [
 interface SymbolLibraryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectSymbol: (symbol: IndustrialSymbolItem, format: 'svg' | 'png') => void;
+  onSelectSymbol: (
+    symbol: IndustrialSymbolItem,
+    format: 'svg' | 'png',
+    bindingConfig?: { dataSourceMode?: 'driver' | 'mqtt'; driverTagId?: string; topic?: string }
+  ) => void;
 }
 
 export const SymbolLibraryModal: React.FC<SymbolLibraryModalProps> = ({
@@ -522,6 +526,17 @@ export const SymbolLibraryModal: React.FC<SymbolLibraryModalProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [insertFormat, setInsertFormat] = useState<'svg' | 'png'>('svg');
   const [activePreviewSymbol, setActivePreviewSymbol] = useState<IndustrialSymbolItem | null>(null);
+  const [bindingSourceMode, setBindingSourceMode] = useState<'driver' | 'mqtt'>('driver');
+  const [targetBindingTag, setTargetBindingTag] = useState<string>('');
+
+  const handleInsert = (symbol: IndustrialSymbolItem, format: 'svg' | 'png') => {
+    const bindingConfig = {
+      dataSourceMode: bindingSourceMode,
+      driverTagId: bindingSourceMode === 'driver' ? (targetBindingTag.trim() || undefined) : undefined,
+      topic: bindingSourceMode === 'mqtt' ? (targetBindingTag.trim() || undefined) : undefined
+    };
+    onSelectSymbol(symbol, format, bindingConfig);
+  };
 
   const filteredSymbols = useMemo(() => {
     return INDUSTRIAL_SYMBOLS.filter((symbol) => {
@@ -638,7 +653,7 @@ export const SymbolLibraryModal: React.FC<SymbolLibraryModalProps> = ({
           {/* Grid Area */}
           <div className="flex-1 flex flex-col overflow-hidden p-5 bg-slate-900/60">
             {/* Search Input Bar */}
-            <div className="mb-4 relative">
+            <div className="mb-3 relative">
               <i className="fas fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-sm"></i>
               <input
                 type="text"
@@ -656,6 +671,54 @@ export const SymbolLibraryModal: React.FC<SymbolLibraryModalProps> = ({
                   <i className="fas fa-times-circle"></i>
                 </button>
               )}
+            </div>
+
+            {/* Telemetry Binding & Driver Tag Selection Bar */}
+            <div className="mb-4 bg-slate-950/80 border border-slate-800 rounded-2xl p-2.5 flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center space-x-2">
+                <span className="text-[11px] font-bold text-slate-300 flex items-center space-x-1.5">
+                  <i className="fas fa-bolt text-amber-400"></i>
+                  <span>Binding Source:</span>
+                </span>
+                <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setBindingSourceMode('driver')}
+                    className={`px-2.5 py-0.5 text-[10px] font-bold rounded cursor-pointer transition-all ${
+                      bindingSourceMode === 'driver'
+                        ? 'bg-emerald-500 text-slate-950 font-extrabold shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Driver Tag
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBindingSourceMode('mqtt')}
+                    className={`px-2.5 py-0.5 text-[10px] font-bold rounded cursor-pointer transition-all ${
+                      bindingSourceMode === 'mqtt'
+                        ? 'bg-sky-500 text-slate-950 font-extrabold shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    MQTT Topic
+                  </button>
+                </div>
+              </div>
+
+              {/* Tag or Topic input */}
+              <div className="flex-1 min-w-[220px] flex items-center space-x-1.5">
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {bindingSourceMode === 'driver' ? 'Driver Tag:' : 'MQTT Topic:'}
+                </span>
+                <input
+                  type="text"
+                  value={targetBindingTag}
+                  onChange={(e) => setTargetBindingTag(e.target.value)}
+                  placeholder={bindingSourceMode === 'driver' ? "e.g. MODBUS_HOLDING_40001 (or auto-assign)" : "e.g. scada/equipment/topic"}
+                  className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-emerald-300 font-mono outline-none focus:border-emerald-500"
+                />
+              </div>
             </div>
 
             {/* Symbol Grid */}
@@ -696,7 +759,7 @@ export const SymbolLibraryModal: React.FC<SymbolLibraryModalProps> = ({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            onSelectSymbol(symbol, 'svg');
+                            handleInsert(symbol, 'svg');
                           }}
                           className="flex-1 py-1 bg-sky-500/20 hover:bg-sky-500 text-sky-300 hover:text-slate-950 border border-sky-500/40 rounded-lg text-[10px] font-extrabold transition-all text-center cursor-pointer"
                           title="Insert SVG Vector"
@@ -707,7 +770,7 @@ export const SymbolLibraryModal: React.FC<SymbolLibraryModalProps> = ({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            onSelectSymbol(symbol, 'png');
+                            handleInsert(symbol, 'png');
                           }}
                           className="flex-1 py-1 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/40 rounded-lg text-[10px] font-extrabold transition-all text-center cursor-pointer"
                           title="Insert PNG Image"
@@ -749,7 +812,7 @@ export const SymbolLibraryModal: React.FC<SymbolLibraryModalProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    onSelectSymbol(activePreviewSymbol, 'svg');
+                    handleInsert(activePreviewSymbol, 'svg');
                     setActivePreviewSymbol(null);
                   }}
                   className="py-2.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-slate-950 font-black rounded-xl text-xs transition-all shadow-lg shadow-sky-500/20 cursor-pointer flex items-center justify-center space-x-2"
@@ -760,7 +823,7 @@ export const SymbolLibraryModal: React.FC<SymbolLibraryModalProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    onSelectSymbol(activePreviewSymbol, 'png');
+                    handleInsert(activePreviewSymbol, 'png');
                     setActivePreviewSymbol(null);
                   }}
                   className="py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black rounded-xl text-xs transition-all shadow-lg shadow-emerald-500/20 cursor-pointer flex items-center justify-center space-x-2"

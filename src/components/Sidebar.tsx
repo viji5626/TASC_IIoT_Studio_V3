@@ -50,6 +50,8 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   const menuItems = isClient ? [
     { id: AppView.CONNECTIONS, icon: 'fa-network-wired', label: 'All Connections' },
+    { id: AppView.HISTORIAN_TREND, icon: 'fa-chart-line', label: 'Historian & Trends' },
+    { id: AppView.REPORTING, icon: 'fa-chart-bar', label: 'Reports' },
     { id: AppView.USER_MANUAL, icon: 'fa-book-bookmark', label: 'User Manual & Docs' },
     { id: 'quick_tour', icon: 'fa-wand-magic-sparkles', label: 'Quick Product Tour' },
     { id: AppView.SETTINGS, icon: 'fa-gear', label: 'App Settings' },
@@ -58,6 +60,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: AppView.ADD_CONNECTION, icon: 'fa-server', label: 'MQTT Broker Settings' },
     { id: AppView.TOPIC_MANAGER, icon: 'fa-sitemap', label: 'MQTT Topic Manager' },
     { id: AppView.TAG_MANAGER, icon: 'fa-tags', label: 'MQTT Tag Manager' },
+    { id: AppView.HISTORIAN_TREND, icon: 'fa-chart-line', label: 'Historian & Trends' },
+    { id: AppView.REPORTING, icon: 'fa-chart-bar', label: 'Reports (Template & AI)' },
     { id: AppView.AI_ASSISTANT, icon: 'fa-wand-magic-sparkles', label: 'AI Assistant' },
     { id: AppView.DRIVER_CONNECTIONS, icon: 'fa-plug-circle-bolt', label: 'Driver Connections', isDriverSection: true },
     { id: AppView.DRIVER_TAG_MANAGER, icon: 'fa-database', label: 'Driver Tag Manager', isDriverSection: true },
@@ -69,6 +73,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: AppView.BACKUP, icon: 'fa-cloud-arrow-up', label: 'Backup & Restore', isLocked: userRole === 'community' },
     { id: 'about', icon: 'fa-circle-info', label: 'About TASC IIoT Studio' },
   ];
+
 
   const activeThemeObj = getAppTheme(currentTheme);
 
