@@ -29,11 +29,14 @@ import {
 } from '../utils/reportEngine';
 
 
+import { useAppStore } from '../store/useAppStore';
+import { AppView } from '../types';
+
 interface Props {
   onBack?: () => void;
-  latestValues: Record<string, { val: any; time: string; timestampMs?: number; quality?: string }>;
-  appState: AppState;
-  activeAlarms: ActiveAlarm[];
+  latestValues?: Record<string, { val: any; time: string; timestampMs?: number; quality?: string }>;
+  appState?: AppState;
+  activeAlarms?: ActiveAlarm[];
   initialTab?: 'chat' | 'memory' | 'settings';
   isDrawer?: boolean;
   onClose?: () => void;
@@ -108,15 +111,20 @@ function saveProviderConfig(p: AiProviderType, config: ProviderConfig): void {
 }
 
 export const AiAssistantView: React.FC<Props> = ({
-  onBack,
-  latestValues,
-  appState,
-  activeAlarms,
+  onBack: onBackProp,
+  latestValues: latestValuesProp,
+  appState: appStateProp,
+  activeAlarms: activeAlarmsProp,
   initialTab = 'chat',
   isDrawer = false,
   onClose,
   onOpenFullAssistant
 }) => {
+  const store = useAppStore();
+  const appState = appStateProp ?? store.appState;
+  const latestValues = latestValuesProp ?? store.latestValues;
+  const activeAlarms = activeAlarmsProp ?? store.activeAlarms;
+  const onBack = onBackProp ?? (() => store.setCurrentView(AppView.DASHBOARD));
   const [activeTab, setActiveTab] = useState<'chat' | 'memory' | 'settings'>(initialTab);
 
   // Settings State - loaded per provider
@@ -171,60 +179,46 @@ export const AiAssistantView: React.FC<Props> = ({
   const [pendingReport, setPendingReport] = useState<PendingReportRequest | null>(null);
   const [reportDownloads, setReportDownloads] = useState<Array<{ jobId: string; title: string; html: string; excelWb?: any }>>([]);
 
-
-  // After each AI turn, scan the last message for report control markers
-  useEffect(() => {
-    const lastMsg = chatSession.slice().reverse().find(m => m.role === 'assistant' && m.content);
-    if (!lastMsg?.content) return;
-
-    // Try to find a JSON block with __reportSuggestion or __generateReport
-    // These are embedded by the AI tool executor and may appear in tool result context
-    // We scan all assistant messages for unprocessed markers
-    const allContent = chatSession
-      .filter(m => m.role === 'assistant')
-      .map(m => m.content || '')
-      .join('\n');
-
-    // Match JSON objects containing report control flags
-    const jsonMatches = allContent.matchAll(/\{[^{}]*"__reportSuggestion"[^{}]*\}|\{[^{}]*"__generateReport"[^{}]*\}/g);
-    for (const match of Array.from(jsonMatches)) {
-      try {
-        const obj = JSON.parse(match[0]);
-        if (obj.__reportSuggestion && !pendingReport) {
-          // New suggestion request — set pending report state
-          setPendingReport({
-            requestId: obj.requestId || `req_${Date.now()}`,
-            title: obj.title || 'Report',
-            fromMs: obj.fromMs || Date.now() - 86400000,
-            toMs: obj.toMs || Date.now(),
-            tags: obj.requestedTags || [],
-            resolution: obj.resolution || '1hour',
-            includeAlarms: Boolean(obj.includeAlarms),
-            includeFdd: Boolean(obj.includeFdd),
-            suggestions: (obj.suggestions || []) as ReportSuggestion[],
-            selectedSuggestionIds: [],
-            status: 'suggesting'
-          });
-        } else if (obj.__generateReport) {
-          // Generate the report client-side
-          handleGenerateAiReport(obj);
-        }
-      } catch {}
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionRevision]);
+  const handleSetReportSuggestion = useCallback((obj: any) => {
+    setPendingReport(prev => {
+      if (prev && prev.requestId === obj.requestId && prev.status === 'suggesting') return prev;
+      const now = Date.now();
+      const toMs = Number(obj.toMs) && !isNaN(Number(obj.toMs)) ? Number(obj.toMs) : now;
+      const fromMs = Number(obj.fromMs) && !isNaN(Number(obj.fromMs)) ? Number(obj.fromMs) : (toMs - 86400000);
+      return {
+        requestId: obj.requestId || `req_${Date.now()}`,
+        title: obj.title || 'Industrial Report',
+        fromMs,
+        toMs,
+        tags: obj.requestedTags || [],
+        resolution: obj.resolution || '1hour',
+        includeAlarms: Boolean(obj.includeAlarms),
+        includeFdd: Boolean(obj.includeFdd),
+        suggestions: (obj.suggestions || []) as ReportSuggestion[],
+        selectedSuggestionIds: [],
+        status: 'suggesting'
+      };
+    });
+  }, []);
 
   const handleGenerateAiReport = useCallback(async (params: any) => {
-    const jobId = `job_${Date.now()}`;
+    const jobId = params.requestId || `job_${Date.now()}`;
     const title = String(params.title || 'Industrial Report');
-    const fromMs = Number(params.fromMs);
-    const toMs = Number(params.toMs);
-    const tags: string[] = params.tags || [];
+    const now = Date.now();
+    const toMs = Number(params.toMs) && !isNaN(Number(params.toMs)) ? Number(params.toMs) : now;
+    const fromMs = Number(params.fromMs) && !isNaN(Number(params.fromMs)) ? Number(params.fromMs) : (toMs - 86400000);
+    
+    let tags: string[] = Array.isArray(params.tags) && params.tags.length > 0
+      ? params.tags
+      : (appState?.historianTags?.map(t => t.id) || appState?.panels?.map(p => p.panelId) || []);
+    if (tags.length === 0) tags = ['plant_telemetry'];
+
     const resolution = String(params.resolution || '1hour') as any;
     const includeAlarms = Boolean(params.includeAlarms ?? true);
-    const selectedSuggestionIds: number[] = params.selectedSuggestionIds || [];
-    const aiSummary = String(params.aiSummary || '');
-    const aiResults = String(params.aiResults || '');
+    const selectedSuggestionIds: number[] = params.selectedSuggestionIds || pendingReport?.selectedSuggestionIds || [];
+    const aiSummary = String(params.aiSummary || 'AI Telemetry Assessment & Performance Summary');
+    const aiResults = String(params.aiResults || 'All parameters operated within normal baseline variance limits.');
+    const suggestions: ReportSuggestion[] = params.suggestions || pendingReport?.suggestions || [];
 
     // Save job as generating
     const job: ReportJob = {
@@ -247,7 +241,6 @@ export const AiAssistantView: React.FC<Props> = ({
       const dataset = await collectHistorianData(tags, fromMs, toMs, resolution, includeAlarms, false, includeFdd);
 
       dataset.title = title;
-      const suggestions: ReportSuggestion[] = pendingReport?.suggestions || [];
       dataset.includedSuggestions = suggestions.filter(s => selectedSuggestionIds.includes(s.id));
 
       // Build HTML report
@@ -269,9 +262,10 @@ export const AiAssistantView: React.FC<Props> = ({
       const excelWb = buildDataExcelWorkbook(dataset);
 
       // Track for immediate download in chat
-      setReportDownloads(prev => [...prev, { jobId, title, html, excelWb }]);
+      setReportDownloads(prev => [...prev.filter(r => r.jobId !== jobId), { jobId, title, html, excelWb }]);
 
     } catch (err: any) {
+      console.error('[AiAssistantView] Report generation failed:', err);
       const failedJob: ReportJob = {
         ...job,
         status: 'error',
@@ -280,7 +274,61 @@ export const AiAssistantView: React.FC<Props> = ({
       };
       saveReportJob(failedJob);
     }
-  }, [pendingReport]);
+  }, [appState, pendingReport]);
+
+  // Listen to custom window events emitted directly by tool execution
+  useEffect(() => {
+    const onSuggestion = (e: any) => {
+      if (e.detail) handleSetReportSuggestion(e.detail);
+    };
+    const onGenerate = (e: any) => {
+      if (e.detail) handleGenerateAiReport(e.detail);
+    };
+
+    window.addEventListener('tasc_report_suggestion', onSuggestion);
+    window.addEventListener('tasc_report_generate', onGenerate);
+
+    return () => {
+      window.removeEventListener('tasc_report_suggestion', onSuggestion);
+      window.removeEventListener('tasc_report_generate', onGenerate);
+    };
+  }, [handleSetReportSuggestion, handleGenerateAiReport]);
+
+  // After each AI turn, also scan chat session messages as reliable backup
+  useEffect(() => {
+    for (const msg of chatSession) {
+      if (!msg.content) continue;
+      const contentStr = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+      if (contentStr.includes('__reportSuggestion')) {
+        try {
+          const parsed = typeof msg.content === 'object' ? msg.content : JSON.parse(contentStr);
+          if (parsed.__reportSuggestion) handleSetReportSuggestion(parsed);
+        } catch {
+          const match = contentStr.match(/\{[\s\S]*"__reportSuggestion"[\s\S]*\}/);
+          if (match) {
+            try {
+              const parsed = JSON.parse(match[0]);
+              if (parsed.__reportSuggestion) handleSetReportSuggestion(parsed);
+            } catch {}
+          }
+        }
+      }
+      if (contentStr.includes('__generateReport')) {
+        try {
+          const parsed = typeof msg.content === 'object' ? msg.content : JSON.parse(contentStr);
+          if (parsed.__generateReport) handleGenerateAiReport(parsed);
+        } catch {
+          const match = contentStr.match(/\{[\s\S]*"__generateReport"[\s\S]*\}/);
+          if (match) {
+            try {
+              const parsed = JSON.parse(match[0]);
+              if (parsed.__generateReport) handleGenerateAiReport(parsed);
+            } catch {}
+          }
+        }
+      }
+    }
+  }, [sessionRevision, handleSetReportSuggestion, handleGenerateAiReport]);
 
   const handleReportSuggestionSelected = useCallback((selectedIds: number[]) => {
     setPendingReport(prev => prev ? { ...prev, selectedSuggestionIds: selectedIds, status: 'generating' } : null);

@@ -26,19 +26,24 @@ import { CoachMarkOverlay } from './CoachMarkOverlay';
 import { isTourSuppressed } from '../utils/tourRegistry';
 import { useCurrency } from '../utils/currencyManager';
 
+import { useAppStore } from '../store/useAppStore';
+
 interface FddPredictiveMaintenanceModalProps {
   isOpen: boolean;
   onClose: () => void;
-  latestValues: Record<string, { val: any; time: string; timestampMs?: number; quality?: string }>;
-  appState: AppState;
+  latestValues?: Record<string, { val: any; time: string; timestampMs?: number; quality?: string }>;
+  appState?: AppState;
 }
 
 export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceModalProps> = ({
   isOpen,
   onClose,
-  latestValues,
-  appState
+  latestValues: latestValuesProp,
+  appState: appStateProp
 }) => {
+  const store = useAppStore();
+  const appState = appStateProp ?? store.appState;
+  const latestValues = latestValuesProp ?? store.latestValues;
   const [fddState, setFddState] = useState<FddState>(() => getFddState());
   const [isFddTourOpen, setIsFddTourOpen] = useState<boolean>(false);
   const [currency, setCurrency] = useCurrency();

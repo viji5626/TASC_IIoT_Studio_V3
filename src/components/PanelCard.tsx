@@ -53,11 +53,12 @@ const PanelCard: React.FC<PanelCardProps> = ({
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Dedicated Equipment Trip Evaluation
-  const tripResult = isPanelTripped(panel, latestValues);
+  const isLineGraph = panel.type === PanelType.LINE_GRAPH || panel.type === 'line_graph';
+  const tripResult = isLineGraph ? { isTripped: false, message: '' } : isPanelTripped(panel, latestValues);
   const isTripped = tripResult.isTripped;
 
   // Telemetry Timeout / Disconnection Watchdog Evaluation
-  const telemetryStatus = getPanelTelemetryStatus(panel, latestValues);
+  const telemetryStatus = isLineGraph ? { hasData: true, isStale: false, isBad: false, isOffline: false, statusText: 'GOOD' as const } : getPanelTelemetryStatus(panel, latestValues);
   const isOffline = telemetryStatus.isOffline;
 
   useEffect(() => {

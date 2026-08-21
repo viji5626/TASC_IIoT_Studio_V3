@@ -19,10 +19,12 @@ import {
 import { scanAppTags } from '../utils/tagManager';
 import LineGraph from './LineGraph';
 
+import { useAppStore } from '../store/useAppStore';
+
 interface HistorianTrendViewProps {
-  appState: AppState;
-  onUpdateAppState: (newState: AppState) => void;
-  onBack: () => void;
+  appState?: AppState;
+  onUpdateAppState?: (newState: AppState) => void;
+  onBack?: () => void;
   onNavigate?: (view: AppView) => void;
   latestValues?: Record<string, { val: any; time: string; quality?: string }>;
 }
@@ -33,12 +35,18 @@ const DEFAULT_COLORS = [
 ];
 
 export const HistorianTrendView: React.FC<HistorianTrendViewProps> = ({
-  appState,
-  onUpdateAppState,
-  onBack,
-  onNavigate,
-  latestValues = {}
+  appState: appStateProp,
+  onUpdateAppState: onUpdateAppStateProp,
+  onBack: onBackProp,
+  onNavigate: onNavigateProp,
+  latestValues: latestValuesProp
 }) => {
+  const store = useAppStore();
+  const appState = appStateProp ?? store.appState;
+  const onUpdateAppState = onUpdateAppStateProp ?? store.setAppState;
+  const onNavigate = onNavigateProp ?? store.setCurrentView;
+  const onBack = onBackProp ?? (() => store.setCurrentView(AppView.DASHBOARD));
+  const latestValues = latestValuesProp ?? store.latestValues;
   const [activeTab, setActiveTab] = useState<'tags' | 'settings' | 'visualizer'>('tags');
   const [searchQuery, setSearchQuery] = useState('');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'mqtt' | 'driver'>('all');
@@ -1073,8 +1081,9 @@ export const HistorianTrendView: React.FC<HistorianTrendViewProps> = ({
             <div className="flex-1 bg-slate-950 border border-slate-800 rounded-2xl p-3 min-h-[480px] shadow-lg">
               <LineGraph
                 panel={visualizerPanel}
+                pens={visualizerPanel.pens}
                 latestValues={latestValues}
-                historyValues={{}}
+                historyValues={store.historyValues}
                 isClientMode={false}
               />
             </div>

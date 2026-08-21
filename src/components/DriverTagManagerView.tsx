@@ -6,15 +6,17 @@ import { parseMelsecAddress } from '../drivers/mitsubishi_melsec/melsecAddressPa
 import { CoachMarkOverlay } from './CoachMarkOverlay';
 import { isTourSuppressed } from '../utils/tourRegistry';
 
+import { useAppStore } from '../store/useAppStore';
+
 interface DriverTagManagerViewProps {
   onBack?: () => void;
-  appState: AppState;
+  appState?: AppState;
   latestValues?: Record<string, { val: any; time: string; quality?: string }>;
   onNavigate?: (view: AppView) => void;
-  onAdd: (tag: DriverTag) => void;
-  onUpdate: (tag: DriverTag) => void;
-  onDelete: (tagId: string) => void;
-  onImport: (tags: DriverTag[]) => void;
+  onAdd?: (tag: DriverTag) => void;
+  onUpdate?: (tag: DriverTag) => void;
+  onDelete?: (tagId: string) => void;
+  onImport?: (tags: DriverTag[]) => void;
 }
 
 const PROTOCOL_BADGES: Record<DriverProtocol, { label: string; color: string }> = {
@@ -63,15 +65,24 @@ const emptyTag = (defaultConnId: string = ''): Partial<DriverTag> => ({
 });
 
 const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
-  onBack,
-  appState,
-  latestValues = {},
-  onNavigate,
-  onAdd,
-  onUpdate,
-  onDelete,
-  onImport
+  onBack: onBackProp,
+  appState: appStateProp,
+  latestValues: latestValuesProp,
+  onNavigate: onNavigateProp,
+  onAdd: onAddProp,
+  onUpdate: onUpdateProp,
+  onDelete: onDeleteProp,
+  onImport: onImportProp
 }) => {
+  const store = useAppStore();
+  const appState = appStateProp ?? store.appState;
+  const latestValues = latestValuesProp ?? store.latestValues;
+  const onNavigate = onNavigateProp ?? store.setCurrentView;
+  const onBack = onBackProp ?? (() => store.setCurrentView(AppView.DASHBOARD));
+  const onAdd = onAddProp ?? store.handleAddDriverTag;
+  const onUpdate = onUpdateProp ?? store.handleUpdateDriverTag;
+  const onDelete = onDeleteProp ?? store.handleDeleteDriverTag;
+  const onImport = onImportProp ?? store.handleImportDriverTags;
   const tags = appState.driverTags || [];
   const connections = appState.driverConnections || [];
   const fileInputRef = useRef<HTMLInputElement>(null);

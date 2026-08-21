@@ -17,19 +17,21 @@ import { getDynamicElementTransform, evaluateMotionDynamics, evaluateRotationDyn
 import { useDeviceCapability } from '../utils/deviceDetection';
 import { HmiCanvasLeftDock } from './HmiCanvasLeftDock';
 
+import { useAppStore } from '../store/useAppStore';
+
 interface WebHmiCanvasViewProps {
-  appState: AppState;
-  activeDashboardId: string;
+  appState?: AppState;
+  activeDashboardId?: string;
   onSelectDashboard?: (dashId: string) => void;
-  onUpdateAppState: (newState: AppState) => void;
+  onUpdateAppState?: (newState: AppState) => void;
   onPublish?: (topic: string, payload: string | number) => void;
-  latestValues: Record<string, { val: any; time: string }>;
+  latestValues?: Record<string, { val: any; time: string }>;
   historyValues?: Record<string, { value: number; time: string }[]>;
   userRole?: string;
   isFullscreen?: boolean;
-  onOpenAddPanel: () => void;
-  onEditPanel: (panel: Panel) => void;
-  onDeletePanel: (panelId: string) => void;
+  onOpenAddPanel?: () => void;
+  onEditPanel?: (panel: Panel) => void;
+  onDeletePanel?: (panelId: string) => void;
   onClonePanel?: (panel: Panel) => void;
 }
 
@@ -262,18 +264,32 @@ const DEMO_PRESETS: DemoPreset[] = [
 ];
 
 export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
-  appState,
-  activeDashboardId,
-  onSelectDashboard,
-  onUpdateAppState,
-  onPublish,
-  latestValues,
-  historyValues = {},
-  isFullscreen = false,
-  onOpenAddPanel,
-  onEditPanel,
-  onDeletePanel
+  appState: appStateProp,
+  activeDashboardId: activeDashboardIdProp,
+  onSelectDashboard: onSelectDashboardProp,
+  onUpdateAppState: onUpdateAppStateProp,
+  onPublish: onPublishProp,
+  latestValues: latestValuesProp,
+  historyValues: historyValuesProp,
+  isFullscreen: isFullscreenProp,
+  onOpenAddPanel: onOpenAddPanelProp,
+  onEditPanel: onEditPanelProp,
+  onDeletePanel: onDeletePanelProp,
+  onClonePanel: onClonePanelProp
 }) => {
+  const store = useAppStore();
+  const appState = appStateProp ?? store.appState;
+  const activeDashboardId = activeDashboardIdProp ?? store.activeDashboardId;
+  const onSelectDashboard = onSelectDashboardProp ?? store.handleSelectDashboard;
+  const onUpdateAppState = onUpdateAppStateProp ?? store.setAppState;
+  const onPublish = onPublishProp ?? store.handlePublish;
+  const latestValues = latestValuesProp ?? store.latestValues;
+  const historyValues = historyValuesProp ?? store.historyValues ?? {};
+  const isFullscreen = isFullscreenProp ?? store.isFullscreen;
+  const onOpenAddPanel = onOpenAddPanelProp ?? store.handleOpenAddPanel;
+  const onEditPanel = onEditPanelProp ?? ((p: Panel) => store.setEditingPanel(p));
+  const onDeletePanel = onDeletePanelProp ?? store.handleDeletePanel;
+  const onClonePanel = onClonePanelProp ?? store.handleQuickClonePanel;
   const { isDesktop, isMobile } = useDeviceCapability();
   const isClientMode = appState.userRole === 'client' || appState.productEdition === 'client' || !!appState.isLockedPackage;
 
@@ -519,7 +535,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   const [selectedNodeInfo, setSelectedNodeInfo] = useState<{ panelId: string; nodeIndex: number } | null>(null);
 
   // Left Studio Dock (Explorer & Config Tabs) State
-  const [isLeftDockOpen, setIsLeftDockOpen] = useState<boolean>(isDesktop);
+  const [isLeftDockOpen, setIsLeftDockOpen] = useState<boolean>(false);
   const [activeDockTab, setActiveDockTab] = useState<'explorer' | 'config' | 'dynamics'>('explorer');
   const [activeSubPartSelection, setActiveSubPartSelection] = useState<{ panelId: string; partId: string } | null>(null);
   const [dockMode, setDockMode] = useState<'push' | 'overlay'>('push');

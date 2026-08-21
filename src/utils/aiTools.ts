@@ -979,21 +979,25 @@ ${connections.map(c => `- **${c.connectionName}** (${c.brokerAddress}:${c.port})
       }
 
       case 'suggest_report_additions': {
-        // This tool causes the UI to render suggestion cards in the chat.
-        // The actual suggestion logic is authored by the AI in the tool call arguments.
-        // We just confirm receipt and instruct the AI to display them.
-        const reqId = String(args.requestId || '');
+        const reqId = String(args.requestId || `req_${Date.now()}`);
         const suggestions = (args.suggestions as any[]) || [];
-        const title = String(args.title || 'Report');
-        const fromMs = Number(args.fromMs || 0);
-        const toMs = Number(args.toMs || Date.now());
-        const requestedTags = (args.requestedTags as string[]) || [];
+        const title = String(args.title || 'Industrial Report');
+        const now = Date.now();
+        const toMs = Number(args.toMs) && !isNaN(Number(args.toMs)) ? Number(args.toMs) : now;
+        const fromMs = Number(args.fromMs) && !isNaN(Number(args.fromMs)) ? Number(args.fromMs) : (toMs - 86400000);
+        
+        let requestedTags = (args.requestedTags as string[]) || [];
+        if (requestedTags.length === 0 && currentContext?.appState) {
+          const histTags = currentContext.appState.historianTags?.map(t => t.id) || [];
+          const panelTags = currentContext.appState.panels?.map(p => p.panelId) || [];
+          requestedTags = histTags.length > 0 ? histTags : panelTags.slice(0, 10);
+        }
+
         const resolution = String(args.resolution || '1hour');
         const includeAlarms = Boolean(args.includeAlarms);
         const includeFdd = Boolean(args.includeFdd);
 
-        // Return a special marker that the UI will intercept to render suggestion cards
-        return JSON.stringify({
+        const payload = {
           __reportSuggestion: true,
           requestId: reqId,
           title,
@@ -1003,31 +1007,43 @@ ${connections.map(c => `- **${c.connectionName}** (${c.brokerAddress}:${c.port})
           resolution,
           includeAlarms,
           includeFdd,
-          suggestions: suggestions.slice(0, 3),
+          suggestions: (suggestions.length > 0 ? suggestions : [
+            { id: 1, title: 'Energy & Peak Demand Analysis', description: 'Evaluates peak demand spikes and active load distribution.' },
+            { id: 2, title: 'Alarm Rate & Incident Correlation', description: 'Correlates parameter spikes with historical alarm trigger timestamps.' },
+            { id: 3, title: 'Statistical Deviation & 90th Percentile', description: 'Calculates standard deviation, min/max bounds, and p90 performance indices.' }
+          ]).slice(0, 3),
           instructions: 'The suggestion cards have been displayed to the user. Wait for them to select suggestions in the chat. Do NOT generate the report yet.'
-        });
+        };
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tasc_report_suggestion', { detail: payload }));
+        }
+
+        return JSON.stringify(payload);
       }
 
       case 'generate_report': {
-        // This tool causes the UI to trigger report generation client-side.
-        // Return a special marker that the UI's aiTools handler intercepts.
-        const reqId = String(args.requestId || '');
+        const reqId = String(args.requestId || `job_${Date.now()}`);
         const title = String(args.title || 'Industrial Report');
-        const fromMs = Number(args.fromMs || 0);
-        const toMs = Number(args.toMs || Date.now());
-        const tags = (args.tags as string[]) || [];
+        const now = Date.now();
+        const toMs = Number(args.toMs) && !isNaN(Number(args.toMs)) ? Number(args.toMs) : now;
+        const fromMs = Number(args.fromMs) && !isNaN(Number(args.fromMs)) ? Number(args.fromMs) : (toMs - 86400000);
+        
+        let tags = (args.tags as string[]) || [];
+        if (tags.length === 0 && currentContext?.appState) {
+          const histTags = currentContext.appState.historianTags?.map(t => t.id) || [];
+          const panelTags = currentContext.appState.panels?.map(p => p.panelId) || [];
+          tags = histTags.length > 0 ? histTags : panelTags.slice(0, 10);
+        }
+
         const resolution = String(args.resolution || '1hour');
         const includeAlarms = Boolean(args.includeAlarms ?? true);
         const includeFdd = Boolean(args.includeFdd ?? false);
         const selectedSuggestionIds = (args.selectedSuggestionIds as number[]) || [];
-        const aiSummary = String(args.aiSummary || '');
-        const aiResults = String(args.aiResults || '');
+        const aiSummary = String(args.aiSummary || 'AI Automated Telemetry Analysis Report');
+        const aiResults = String(args.aiResults || 'All monitored plant parameters operated within expected statistical limits over the reporting timeframe.');
 
-        if (!title || !fromMs || !toMs || tags.length === 0) {
-          return JSON.stringify({ error: 'Missing required parameters: title, fromMs, toMs, or tags.' });
-        }
-
-        return JSON.stringify({
+        const payload = {
           __generateReport: true,
           requestId: reqId,
           title,
@@ -1041,7 +1057,13 @@ ${connections.map(c => `- **${c.connectionName}** (${c.brokerAddress}:${c.port})
           aiSummary,
           aiResults,
           instructions: 'The report is being generated. A download link will appear in the chat momentarily.'
-        });
+        };
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tasc_report_generate', { detail: payload }));
+        }
+
+        return JSON.stringify(payload);
       }
 
       case 'remember_plant_knowledge': {

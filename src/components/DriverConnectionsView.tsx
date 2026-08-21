@@ -3,13 +3,15 @@ import { AppState, AppView, DriverConnection, DriverProtocol } from '../types';
 import { CoachMarkOverlay } from './CoachMarkOverlay';
 import { isTourSuppressed } from '../utils/tourRegistry';
 
+import { useAppStore } from '../store/useAppStore';
+
 interface DriverConnectionsViewProps {
   onBack?: () => void;
-  appState: AppState;
+  appState?: AppState;
   onNavigate?: (view: AppView) => void;
-  onAdd: (conn: DriverConnection) => void;
-  onUpdate: (conn: DriverConnection) => void;
-  onDelete: (connectionId: string) => void;
+  onAdd?: (conn: DriverConnection) => void;
+  onUpdate?: (conn: DriverConnection) => void;
+  onDelete?: (connectionId: string) => void;
 }
 
 const PROTOCOL_LABELS: Record<DriverProtocol, string> = {
@@ -121,13 +123,20 @@ const emptyConn = (): Partial<DriverConnection> => ({
 });
 
 const DriverConnectionsView: React.FC<DriverConnectionsViewProps> = ({
-  onBack,
-  appState,
-  onNavigate,
-  onAdd,
-  onUpdate,
-  onDelete
+  onBack: onBackProp,
+  appState: appStateProp,
+  onNavigate: onNavigateProp,
+  onAdd: onAddProp,
+  onUpdate: onUpdateProp,
+  onDelete: onDeleteProp
 }) => {
+  const store = useAppStore();
+  const appState = appStateProp ?? store.appState;
+  const onNavigate = onNavigateProp ?? store.setCurrentView;
+  const onBack = onBackProp ?? (() => store.setCurrentView(AppView.DASHBOARD));
+  const onAdd = onAddProp ?? store.handleAddDriverConnection;
+  const onUpdate = onUpdateProp ?? store.handleUpdateDriverConnection;
+  const onDelete = onDeleteProp ?? store.handleDeleteDriverConnection;
   const connections = appState.driverConnections || [];
   const [isDriverTourOpen, setIsDriverTourOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);

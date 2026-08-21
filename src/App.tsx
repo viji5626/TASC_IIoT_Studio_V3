@@ -1,19 +1,13 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import mqtt, { MqttClient } from 'mqtt';
+import React from 'react';
 import { 
   AppView, 
   AppState, 
   MqttConnection, 
   Dashboard, 
   Panel, 
-  PanelType,
-  MqttMessageLog,
-  ProductEdition,
-  ActiveAlarm,
-  HistorianTag,
-  HistorianConfig
+  ProductEdition
 } from './types';
-import PanelCard from './components/PanelCard';
+import { AppContextProvider, useAppContext } from './store/AppContext';
 import BentoGrid from './components/BentoGrid';
 import AddPanelModal from './components/AddPanelModal';
 import EditPanelModal from './components/EditPanelModal';
@@ -28,7 +22,6 @@ import SettingsView from './components/SettingsView';
 import BackupRestoreView from './components/BackupRestoreView';
 import ShareConnectionModal from './components/ShareConnectionModal';
 import PinModal from './components/PinModal';
-import ClientGateView from './components/ClientGateView';
 import LandingPage from './components/LandingPage';
 import ExportClientPackageModal from './components/ExportClientPackageModal';
 import ExitSessionModal from './components/ExitSessionModal';
@@ -40,2377 +33,161 @@ import DriverConnectionsView from './components/DriverConnectionsView';
 import DriverTagManagerView from './components/DriverTagManagerView';
 import OpcUaBrowserView from './components/OpcUaBrowserView';
 import DriverDiagnosticsView from './components/DriverDiagnosticsView';
-import { DriverBridgeClient } from './utils/driverBridgeClient';
-import { getDriverTagById } from './utils/driverTagManager';
-import { registerCustomTag } from './utils/tagManager';
 import AppLogo from './components/AppLogo';
 import EngineeringChoiceModal from './components/EngineeringChoiceModal';
 import WebHmiCanvasView from './components/WebHmiCanvasView';
-import { getJsonValue, formatBrokerWebSocketUrl, mqttWildcardMatch } from './utils/mqttHelper';
-import { applyThemeToDocument, getAppTheme } from './utils/theme';
-import { EditionManager, sanitizeAppState } from './utils/EditionManager';
-import { getSampleProject } from './utils/sampleProjectPreset';
+import { sanitizeAppState } from './utils/EditionManager';
 import { ConfirmModal } from './components/ConfirmModal';
 import { FddPredictiveMaintenanceModal } from './components/FddPredictiveMaintenanceModal';
 import { CoachMarkOverlay } from './components/CoachMarkOverlay';
 import { UserManualView } from './components/UserManualView';
 import { ReportingView } from './components/ReportingView';
-import { initReportScheduler, getUnreadScheduledCount } from './utils/reportScheduler';
-import { initAiMemoryWorker } from './utils/aiChunkingWorker';
-
 import { useDeviceCapability } from './utils/deviceDetection';
 import { MultiDriverStatusPill } from './components/MultiDriverStatusPill';
-import {
-  saveCommunityState,
-  saveCommercialState,
-  getCommunitySavedPackage,
-  getCommercialSavedPackage,
-  COMMERCIAL_SAVED_FLAG,
-  LEGACY_SAVED_FLAG
-} from './utils/editionStorage';
-import { isPanelTripped } from './utils/tripHelper';
-import { recordAlarmTriggerEvent, recordAlarmAckEvent, recordAlarmResolvedEvent } from './utils/alarmHistorianEngine';
+import { saveCommercialState } from './utils/editionStorage';
 import { AlarmHistorianModal } from './components/AlarmHistorianModal';
-import {
-  initTrendHistorianDB,
-  enqueueTelemetryPoint,
-  pruneFIFOByRetention,
-  getHistorianRetentionConfig,
-  getIsPrivateBrowsing
-} from './utils/trendHistorianEngine';
 import { AiAssistantView } from './components/AiAssistantView';
 import { AiChatFab } from './components/AiChatFab';
 import { AiChatDrawer } from './components/AiChatDrawer';
 import { AiErrorBoundary } from './components/AiErrorBoundary';
-import { triggerHaptic, stopHaptic, initMobileHapticPriming, triggerAckHaptic } from './utils/hapticFeedback';
 
-const INITIAL_STATE: AppState = {
-  connections: [
-    {
-      connectionId: 'conn_demo',
-      connectionName: 'LOCAL DEMO BROKER',
-      brokerAddress: 'broker.emqx.io',
-      port: 8084,
-      protocol: 'Websocket',
-      autoConnect: true,
-      cleanSession: true,
-      keepAlive: 60,
-      enableWillMessage: false,
-      connected: false
-    }
-  ],
-  dashboards: [
-    {
-      dashboardId: 'dash_main',
-      dashboardName: 'Main Dashboard',
-      connectionId: 'conn_demo',
-      isHome: true,
-      themeColor: '#38bdf8'
-    }
-  ],
-  panels: [],
-  driverConnections: [
-
-    {
-      connectionId: 'conn_modbus_local',
-      connectionName: 'Local Modbus TCP Server',
-      protocol: 'modbus_tcp',
-      host: '127.0.0.1',
-      port: 502,
-      unitId: 1,
-      enabled: true,
-      connected: false
-    }
-  ],
-
-  driverTags: [
-    {
-      tagId: 'tag_modbus_reg0',
-      tagName: 'Modbus_Holding_Reg_0',
-      protocol: 'modbus_tcp',
-      sourceType: 'manual',
-      connectionId: 'conn_modbus_local',
-      registerType: 'holding_register',
-      address: 0,
-      dataType: 'int16',
-      accessType: 'read',
-      pollRate: 100,
-      enabled: true,
-      unit: ''
-    }
-  ],
-  historianConfig: {
-    enabled: true,
-    logIntervalSeconds: 10,
-    retentionValue: 30,
-    retentionUnit: 'DAYS',
-    logStorageCapMb: 1000,
-    archiveAfterMonths: 1,
-    archiveClusterDuration: '1_WEEK'
-  },
-  historianTags: []
-};
-
-export function App() {
-  // Persistence state
-  const [appState, setAppState] = useState<AppState>(() => {
-    try {
-      const saved = localStorage.getItem('mqtt_dash_pro_state');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.connections && parsed.dashboards && parsed.panels) {
-          return sanitizeAppState(parsed);
-        }
-      }
-    } catch {}
-    return sanitizeAppState(INITIAL_STATE);
-  });
-
-  useEffect(() => {
-    localStorage.setItem('mqtt_dash_pro_state', JSON.stringify(appState));
-    applyThemeToDocument(appState.appTheme);
-  }, [appState]);
-
-  // Initialize Telemetry Trend Historian DB on startup
-  useEffect(() => {
-    initTrendHistorianDB().then((ok) => {
-      if (!ok) {
-        setIsHistorianPrivateBrowsing(getIsPrivateBrowsing());
-      }
-    });
-
-    // Periodic FIFO pruner sweep (every 10 minutes)
-    const prunerTimer = setInterval(() => {
-      const cfg = getHistorianRetentionConfig();
-      if (cfg) {
-        pruneFIFOByRetention(cfg.retentionValue, cfg.retentionUnit, cfg.storageCapMb);
-      }
-    }, 10 * 60 * 1000);
-
-    return () => clearInterval(prunerTimer);
-  }, []);
-
-  const activeThemeObj = getAppTheme(appState.appTheme);
-
-  // User Role & Product Edition State
-  const [userRole, setUserRole] = useState<'admin' | 'client' | 'gate' | 'community'>(() => {
-    return appState.userRole || 'gate';
-  });
-
-  const [productEdition, setProductEdition] = useState<ProductEdition>(() => {
-    return appState.productEdition || ProductEdition.LANDING;
-  });
-
-  const [clientInfo, setClientInfo] = useState<AppState['clientInfo']>(() => {
-    return appState.clientInfo || undefined;
-  });
-
-  const [isExportClientPackageOpen, setIsExportClientPackageOpen] = useState(false);
-  const [showClientReadOnlyNotice, setShowClientReadOnlyNotice] = useState(false);
-  const [communityLimitNotice, setCommunityLimitNotice] = useState<string | null>(null);
-  const [isExitSessionModalOpen, setIsExitSessionModalOpen] = useState(false);
-  const [isClearAllModalOpen, setIsClearAllModalOpen] = useState(false);
-  const [isAiDrawerOpen, setIsAiDrawerOpen] = useState(false);
-  // Historian private browsing mode warning banner
-  const [isHistorianPrivateBrowsing, setIsHistorianPrivateBrowsing] = useState(false);
-  const [confirmModal, setConfirmModal] = useState<{
-    isOpen: boolean;
-    title: string;
-    message: string;
-    confirmLabel?: string;
-    confirmVariant?: 'danger' | 'primary';
-    onConfirm: () => void;
-  }>({
-    isOpen: false,
-    title: '',
-    message: '',
-    onConfirm: () => {}
-  });
-
-  const handleRequestExitSession = () => {
-    setIsExitSessionModalOpen(true);
-  };
-
-  const handleRequestClearAll = () => {
-    setIsClearAllModalOpen(true);
-  };
-
-  const handleConfirmClearAll = () => {
-    const cleanDefaultDash: Dashboard = {
-      dashboardId: 'dash_main',
-      dashboardName: 'Main Dashboard',
-      connectionId: '',
-      isHome: true,
-      themeColor: '#f59e0b'
-    };
-
-    const newCleanState: AppState = {
-      ...appState,
-      connections: [],
-      dashboards: [cleanDefaultDash],
-      panels: [],
-      activeDashboardId: 'dash_main',
-      activeConnectionId: ''
-    };
-
-    setAppState(newCleanState);
-    setActiveDashboardId('dash_main');
-    setActiveConnectionId('');
-
-    try {
-      localStorage.setItem('mqtt_dash_pro_state', JSON.stringify(newCleanState));
-    } catch {}
-
-    setIsClearAllModalOpen(false);
-  };
-
-  const handleSaveAndExitSession = () => {
-    const isCommunity = 
-      appState.packageOrigin === 'community' ||
-      userRole === 'community' || 
-      productEdition === ProductEdition.COMMUNITY ||
-      appState.clientInfo?.clientName === 'Community Edition Save' ||
-      (!appState.clientInfo?.isSignedPackage && userRole !== 'admin');
-
-    if (isCommunity) {
-      // Save solely to the Community isolated slot with Community signature
-      saveCommunityState(appState);
-    } else {
-      // Save to Commercial / Client Runtime / Engineering slot
-      saveCommercialState(appState);
-      setIsClientSetupSaved(true);
-    }
-    setIsExitSessionModalOpen(false);
-    setUserRole('gate');
-    setProductEdition(ProductEdition.LANDING);
-  };
-
-  const handleExitSessionWithoutSave = () => {
-    setIsExitSessionModalOpen(false);
-    setUserRole('gate');
-    setProductEdition(ProductEdition.LANDING);
-  };
-
-  // Client setup persistence acknowledgement state
-  const [isClientSetupSaved, setIsClientSetupSaved] = useState<boolean>(() => {
-    try {
-      return !!getCommercialSavedPackage();
-    } catch {
-      return false;
-    }
-  });
-
-  // Fullscreen state supporting both Native Browser Fullscreen and Mobile / Weblet Virtual Fullscreen
-  const [isNativeFullscreen, setIsNativeFullscreen] = useState(false);
-  const [isVirtualFullscreen, setIsVirtualFullscreen] = useState(false);
-
-  const isFullscreen = isNativeFullscreen || isVirtualFullscreen;
-
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      const isNative = !!(
-        document.fullscreenElement ||
-        (document as any).webkitFullscreenElement ||
-        (document as any).mozFullScreenElement ||
-        (document as any).msFullscreenElement
-      );
-      setIsNativeFullscreen(isNative);
-    };
-
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
-    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
-
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
-      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
-    };
-  }, []);
-
-  const handleToggleFullscreen = () => {
-    if (isFullscreen) {
-      setIsVirtualFullscreen(false);
-      const isNative = !!(
-        document.fullscreenElement ||
-        (document as any).webkitFullscreenElement ||
-        (document as any).mozFullScreenElement ||
-        (document as any).msFullscreenElement
-      );
-      if (isNative) {
-        const exitFn =
-          document.exitFullscreen ||
-          (document as any).webkitExitFullscreen ||
-          (document as any).mozCancelFullScreen ||
-          (document as any).msExitFullscreen;
-        if (exitFn) {
-          try {
-            exitFn.call(document).catch(() => {});
-          } catch (err) {}
-        }
-      }
-    } else {
-      setIsVirtualFullscreen(true);
-      const docEl = document.documentElement as any;
-      const reqFn =
-        docEl.requestFullscreen ||
-        docEl.webkitRequestFullscreen ||
-        docEl.mozRequestFullScreen ||
-        docEl.msRequestFullscreen;
-      if (reqFn) {
-        try {
-          reqFn.call(docEl).catch(() => {
-            // Virtual fullscreen handles mobile / Weblet app wrappers if native request is blocked
-          });
-        } catch (err) {
-          // Virtual fullscreen handles mobile / Weblet app wrappers
-        }
-      }
-    }
-  };
-
-  const handleExitFullscreen = () => {
-    setIsVirtualFullscreen(false);
-    const isNative = !!(
-      document.fullscreenElement ||
-      (document as any).webkitFullscreenElement ||
-      (document as any).mozFullScreenElement ||
-      (document as any).msFullscreenElement
-    );
-    if (isNative) {
-      const exitFn =
-        document.exitFullscreen ||
-        (document as any).webkitExitFullscreen ||
-        (document as any).mozCancelFullScreen ||
-        (document as any).msExitFullscreen;
-      if (exitFn) {
-        try {
-          exitFn.call(document).catch(() => {});
-        } catch (err) {}
-      }
-    }
-  };
-
-  const autoFullscreenDoneRef = useRef(false);
-
-  const handleClearClientSavedSetup = () => {
-    const cleanDefaultState = sanitizeAppState(INITIAL_STATE);
-    try {
-      localStorage.removeItem('tasc_client_setup_saved');
-      localStorage.setItem('mqtt_dash_pro_state', JSON.stringify(cleanDefaultState));
-    } catch {}
-    setIsClientSetupSaved(false);
-    setAppState(cleanDefaultState);
-    setClientInfo(undefined);
-    autoFullscreenDoneRef.current = false;
-    setUserRole('gate');
-    setProductEdition(ProductEdition.LANDING);
-    setCurrentView(AppView.DASHBOARD);
-  };
-
-  const handleLoadSavedClientSetup = () => {
-    try {
-      const savedPkg = getCommercialSavedPackage();
-      if (savedPkg && savedPkg.state) {
-        const sanitized = sanitizeAppState(savedPkg.state);
-        const newAppState: AppState = {
-          ...sanitized,
-          userRole: 'client',
-          productEdition: ProductEdition.CLIENT_RUNTIME,
-          packageOrigin: 'commercial',
-          isLockedPackage: true
-        };
-        setAppState(newAppState);
-        setUserRole('client');
-        setProductEdition(ProductEdition.CLIENT_RUNTIME);
-        if (sanitized.clientInfo) {
-          setClientInfo(sanitized.clientInfo);
-        }
-        if (sanitized.dashboards[0]) {
-          setActiveDashboardId(sanitized.dashboards[0].dashboardId);
-        }
-        if (sanitized.connections[0]) {
-          setActiveConnectionId(sanitized.connections[0].connectionId);
-        }
-        setIsClientSetupSaved(true);
-        setCurrentView(AppView.DASHBOARD);
-        return;
-      }
-    } catch (err) {
-      console.error('Failed to load saved client setup:', err);
-    }
-  };
-
-  const handleLoadSavedCommunitySetup = (asClientMode = false) => {
-    try {
-      const savedPkg = getCommunitySavedPackage();
-      if (savedPkg && savedPkg.state) {
-        const sanitized = sanitizeAppState(savedPkg.state);
-        if (asClientMode) {
-          // Open community save in Client Edition runtime (operator locked mode)
-          const newAppState: AppState = {
-            ...sanitized,
-            userRole: 'client',
-            productEdition: ProductEdition.CLIENT_RUNTIME,
-            packageOrigin: 'community',
-            isLockedPackage: true,
-            clientInfo: {
-              clientName: 'Community Edition Save',
-              isSignedPackage: false
-            }
-          };
-          setAppState(newAppState);
-          setUserRole('client');
-          setProductEdition(ProductEdition.CLIENT_RUNTIME);
-        } else {
-          // Resume Community Edition (full editing unlocked, 1-screen & 10-widget limits)
-          const newAppState: AppState = {
-            ...sanitized,
-            userRole: 'community',
-            productEdition: ProductEdition.COMMUNITY,
-            packageOrigin: 'community',
-            isLockedPackage: false
-          };
-          setAppState(newAppState);
-          setUserRole('community');
-          setProductEdition(ProductEdition.COMMUNITY);
-        }
-
-        if (sanitized.dashboards[0]) {
-          setActiveDashboardId(sanitized.dashboards[0].dashboardId);
-        }
-        if (sanitized.connections[0]) {
-          setActiveConnectionId(sanitized.connections[0].connectionId);
-        }
-        setCurrentView(AppView.DASHBOARD);
-        return;
-      }
-    } catch (err) {
-      console.error('Failed to load saved community setup:', err);
-    }
-  };
-
-  // Sync state changes to persistence
-  useEffect(() => {
-    setAppState(prev => ({
-      ...prev,
-      userRole,
-      productEdition,
-      clientInfo
-    }));
-  }, [userRole, productEdition, clientInfo]);
-  // View state
-  const [currentView, setCurrentView] = useState<AppView>(AppView.DASHBOARD);
-
-  // Reset autoFullscreenDoneRef when not in Client Edition
-  useEffect(() => {
-    const isClient = userRole === 'client' || productEdition === ProductEdition.CLIENT_RUNTIME || !!appState.isLockedPackage;
-    if (!isClient) {
-      autoFullscreenDoneRef.current = false;
-    }
-  }, [userRole, productEdition, appState.isLockedPackage]);
-
-  // Auto-fullscreen ONCE after 2 seconds when launching Client Edition
-  useEffect(() => {
-    const isClient = userRole === 'client' || productEdition === ProductEdition.CLIENT_RUNTIME || !!appState.isLockedPackage;
-    if (isClient && currentView === AppView.DASHBOARD && !autoFullscreenDoneRef.current) {
-      const timer = setTimeout(() => {
-        if (!autoFullscreenDoneRef.current) {
-          autoFullscreenDoneRef.current = true;
-          if (!isFullscreen) {
-            handleToggleFullscreen();
-          }
-        }
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [userRole, productEdition, appState.isLockedPackage, currentView]);
+function AppContent() {
+  const {
+    appState,
+    setAppState,
+    userRole,
+    setUserRole,
+    productEdition,
+    setProductEdition,
+    clientInfo,
+    setClientInfo,
+    isLocked,
+    showLockedNotice,
+    setShowLockedNotice,
+    isPinModalOpen,
+    setIsPinModalOpen,
+    pinModalMode,
+    setPinModalMode,
+    pendingAction,
+    setPendingAction,
+    isFullscreen,
+    handleToggleFullscreen,
+    handleExitFullscreen,
+    isTourOpen,
+    setIsTourOpen,
+    unreadScheduledReports,
+    setUnreadScheduledReports,
+    isClientSetupSaved,
+    setIsClientSetupSaved,
+    isExportClientPackageOpen,
+    setIsExportClientPackageOpen,
+    showClientReadOnlyNotice,
+    setShowClientReadOnlyNotice,
+    communityLimitNotice,
+    setCommunityLimitNotice,
+    isExitSessionModalOpen,
+    setIsExitSessionModalOpen,
+    isClearAllModalOpen,
+    confirmModal,
+    setConfirmModal,
+    currentView,
+    setCurrentView,
+    activeConnectionId,
+    setActiveConnectionId,
+    activeDashboardId,
+    setActiveDashboardId,
+    activeMode,
+    setActiveMode,
+    isLayoutMode,
+    setIsLayoutMode,
+    selectedPanelId,
+    isEngineeringChoiceOpen,
+    setIsEngineeringChoiceOpen,
+    activeConnection,
+    activeDashboard,
+    activePanels,
+    editionMgr,
+    activeThemeObj,
+    latestValues,
+    historyValues,
+    mqttConnected,
+    isSimulated,
+    activeAlarms,
+    latestAlarmTriggered,
+    isAlarmModalOpen,
+    setIsAlarmModalOpen,
+    isAlarmHistorianModalOpen,
+    setIsAlarmHistorianModalOpen,
+    isFddModalOpen,
+    setIsFddModalOpen,
+    isVibrateEnabled,
+    setIsVibrateEnabled,
+    isSoundEnabled,
+    setIsSoundEnabled,
+    isAutoPopupEnabled,
+    setIsAutoPopupEnabled,
+    handleAcknowledgeAlarm,
+    handleAcknowledgeAllAlarms,
+    isSidebarOpen,
+    setIsSidebarOpen,
+    isDashMenuOpen,
+    setIsDashMenuOpen,
+    isAddPanelOpen,
+    setIsAddPanelOpen,
+    editingPanel,
+    setEditingPanel,
+    editingDashboard,
+    setEditingDashboard,
+    editingConnection,
+    setEditingConnection,
+    activeConnMenuId,
+    setActiveConnMenuId,
+    sharingConnection,
+    setSharingConnection,
+    isCloneModalOpen,
+    setIsCloneModalOpen,
+    isAiDrawerOpen,
+    setIsAiDrawerOpen,
+    handlePublish,
+    handleAddPanelSelect,
+    handleSavePanel,
+    handleDeletePanel,
+    handleClonePanels,
+    handleQuickClonePanel,
+    handleReorderPanels,
+    handleQuickResizePanel,
+    handleCreateConnection,
+    handleDeleteConnection,
+    handleCopyConnection,
+    handleAddDriverConnection,
+    handleUpdateDriverConnection,
+    handleDeleteDriverConnection,
+    handleAddDriverTag,
+    handleUpdateDriverTag,
+    handleDeleteDriverTag,
+    handleImportDriverTags,
+    handleImportOpcUaTag,
+    handleDeleteDashboard,
+    handleCopyDashboard,
+    handleEditDashboard,
+    handleOpenActiveBrokerSettings,
+    handleShareDashboard,
+    handleSelectDashboard,
+    handleToggleLock,
+    handleEditLayout,
+    handleOpenAddPanel,
+    handleLoadHatcheryDemo,
+    handleSaveAndExitSession,
+    handleExitSessionWithoutSave,
+    handleClearClientSavedSetup,
+    handleLoadSavedClientSetup,
+    handleLoadSavedCommunitySetup,
+    handleRequestExitSession,
+    handleRequestClearAll,
+    handleConfirmClearAll
+  } = useAppContext();
 
   const { isDesktop, isMobile } = useDeviceCapability();
-  const [activeMode, setActiveMode] = useState<'grid' | 'hmi'>('grid');
-
-
-  const [isEngineeringChoiceOpen, setIsEngineeringChoiceOpen] = useState(false);
-  const [activeConnectionId, setActiveConnectionId] = useState<string>(
-    appState.connections[0]?.connectionId || ''
-  );
-  const [activeDashboardId, setActiveDashboardId] = useState<string>(
-    appState.dashboards[0]?.dashboardId || ''
-  );
-
-  // UI Modals & Drawers
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isDashMenuOpen, setIsDashMenuOpen] = useState(false);
-  const [isAddPanelOpen, setIsAddPanelOpen] = useState(false);
-  const [editingPanel, setEditingPanel] = useState<Partial<Panel> | null>(null);
-  const [editingDashboard, setEditingDashboard] = useState<Dashboard | null>(null);
-  const [editingConnection, setEditingConnection] = useState<MqttConnection | undefined>(undefined);
-  const [activeConnMenuId, setActiveConnMenuId] = useState<string | null>(null);
-  const [activeDashTabMenuId, setActiveDashTabMenuId] = useState<string | null>(null);
-  const [sharingConnection, setSharingConnection] = useState<MqttConnection | null>(null);
-  const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
-  const [isLocked, setIsLocked] = useState<boolean>(() => appState.isLocked ?? false);
-  const [showLockedNotice, setShowLockedNotice] = useState<boolean>(false);
-  const [isLayoutMode, setIsLayoutMode] = useState(false);
-  const [selectedPanelId, setSelectedPanelId] = useState<string | null>(null);
-
-  const [unreadScheduledReports, setUnreadScheduledReports] = useState<number>(0);
-
-  // Initialize Background Report Scheduler Engine & unread tracking
-  useEffect(() => {
-    initReportScheduler();
-    setUnreadScheduledReports(getUnreadScheduledCount());
-
-    const onScheduledReportEvent = () => {
-      setUnreadScheduledReports(getUnreadScheduledCount());
-    };
-
-    window.addEventListener('tasc_scheduled_report_event', onScheduledReportEvent);
-    return () => window.removeEventListener('tasc_scheduled_report_event', onScheduledReportEvent);
-  }, []);
-
-  // Auto-dismiss locked notice after 5 seconds
-  useEffect(() => {
-    initMobileHapticPriming();
-  }, []);
-
-  // Initialize Dedicated Client-Side AI Memory & Pre-Chunking Worker
-  useEffect(() => {
-    const cleanup = initAiMemoryWorker();
-    return cleanup;
-  }, []);
-
-
-
-  // Auto-initialize HistorianConfig and auto-migrate legacy LineGraph pens into historianTags if empty
-  useEffect(() => {
-    setAppState(prev => {
-      let changed = false;
-      let newHistConfig = prev.historianConfig;
-      if (!newHistConfig) {
-        newHistConfig = {
-          enabled: true,
-          logIntervalSeconds: 10,
-          retentionValue: 30,
-          retentionUnit: 'DAYS',
-          logStorageCapMb: 1000,
-          archiveAfterMonths: 1,
-          archiveClusterDuration: '1_WEEK'
-        };
-        changed = true;
-      }
-
-      let newHistTags = prev.historianTags || [];
-      if (newHistTags.length === 0 && prev.panels && prev.panels.length > 0) {
-        const migrated: HistorianTag[] = [];
-        prev.panels.forEach(p => {
-          if (p.type === PanelType.LINE_GRAPH) {
-            if (p.pens && p.pens.length > 0) {
-              p.pens.forEach((pen, i) => {
-                if (pen.topic || pen.driverTagId) {
-                  migrated.push({
-                    id: pen.id || `htag_${Date.now()}_${i}`,
-                    name: pen.name || `Trend Pen ${i + 1}`,
-                    sourceType: pen.driverTagId ? 'driver' : 'mqtt',
-                    topic: pen.topic,
-                    jsonPath: pen.jsonPath,
-                    driverTagId: pen.driverTagId,
-                    unit: pen.unit,
-                    color: pen.color,
-                    enabled: pen.loggingEnabled !== false,
-                    createdAt: new Date().toISOString()
-                  });
-                }
-              });
-            } else if (p.topic || p.driverTagId) {
-              migrated.push({
-                id: `htag_${Date.now()}_0`,
-                name: p.title || 'Trend Signal',
-                sourceType: p.driverTagId ? 'driver' : 'mqtt',
-                topic: p.topic,
-                jsonPath: p.jsonPath,
-                driverTagId: p.driverTagId,
-                unit: p.unit,
-                color: p.color || '#38bdf8',
-                enabled: true,
-                createdAt: new Date().toISOString()
-              });
-            }
-          }
-        });
-        if (migrated.length > 0) {
-          newHistTags = migrated;
-          changed = true;
-        }
-      }
-
-      if (changed) {
-        return {
-          ...prev,
-          historianConfig: newHistConfig,
-          historianTags: newHistTags
-        };
-      }
-      return prev;
-    });
-  }, []);
-
-  useEffect(() => {
-    if (isLocked) {
-      setShowLockedNotice(true);
-      const timer = setTimeout(() => {
-        setShowLockedNotice(false);
-      }, 5000);
-      return () => clearTimeout(timer);
-    } else {
-      setShowLockedNotice(false);
-    }
-  }, [isLocked]);
-
-  // Security PIN modal state & Runtime Control Safeguard
-  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
-  const [pinModalMode, setPinModalMode] = useState<'enter' | 'set'>('enter');
-  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
-  const [isRuntimeUnlocked, setIsRuntimeUnlocked] = useState(false);
-
-  // Runtime control safeguard auto-lock timeout logic (Default: 2 minutes)
-  const runtimeTimeoutTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  const resetRuntimeTimeoutTimer = useCallback(() => {
-    if (runtimeTimeoutTimerRef.current) {
-      clearTimeout(runtimeTimeoutTimerRef.current);
-      runtimeTimeoutTimerRef.current = null;
-    }
-
-    const timeoutMinutes = appState.runtimePinTimeoutMinutes ?? 2;
-    if (isRuntimeUnlocked && timeoutMinutes > 0) {
-      const timeoutMs = timeoutMinutes * 60 * 1000;
-      runtimeTimeoutTimerRef.current = setTimeout(() => {
-        console.log(`Runtime safeguard auto-locked after ${timeoutMinutes} minutes idle timeout.`);
-        setIsRuntimeUnlocked(false);
-      }, timeoutMs);
-    }
-  }, [isRuntimeUnlocked, appState.runtimePinTimeoutMinutes]);
-
-  useEffect(() => {
-    resetRuntimeTimeoutTimer();
-    return () => {
-      if (runtimeTimeoutTimerRef.current) {
-        clearTimeout(runtimeTimeoutTimerRef.current);
-      }
-    };
-  }, [resetRuntimeTimeoutTimer]);
-
-  const handleQuickResizePanel = (panelId: string, colSpan: number, rowSpan: number) => {
-    setAppState(prev => ({
-      ...prev,
-      panels: prev.panels.map(p => p.panelId === panelId ? { ...p, colSpan, rowSpan } : p)
-    }));
-  };
-
-  const handleToggleLock = () => {
-    if (isLocked) {
-      if (appState.editPin) {
-        setPinModalMode('enter');
-        setPendingAction(() => () => {
-          setIsLocked(false);
-          setIsRuntimeUnlocked(true);
-          setAppState(prev => ({ ...prev, isLocked: false }));
-        });
-        setIsPinModalOpen(true);
-      } else {
-        setIsLocked(false);
-        setIsRuntimeUnlocked(true);
-        setAppState(prev => ({ ...prev, isLocked: false }));
-      }
-    } else {
-      setIsLocked(true);
-      setIsRuntimeUnlocked(false);
-      setIsLayoutMode(false);
-      setShowLockedNotice(true);
-      setAppState(prev => ({ ...prev, isLocked: true }));
-    }
-  };
-
-  const handleEditLayout = () => {
-    if (isLocked) {
-      if (appState.editPin) {
-        setPinModalMode('enter');
-        setPendingAction(() => () => {
-          setIsLocked(false);
-          setIsRuntimeUnlocked(true);
-          setIsLayoutMode(true);
-          setAppState(prev => ({ ...prev, isLocked: false }));
-        });
-        setIsPinModalOpen(true);
-      } else {
-        setIsLocked(false);
-        setIsRuntimeUnlocked(true);
-        setIsLayoutMode(true);
-        setAppState(prev => ({ ...prev, isLocked: false }));
-      }
-    } else {
-      setIsLayoutMode(prev => !prev);
-    }
-  };
-
-  const handleOpenAddPanel = () => {
-    if (isLocked) {
-      if (appState.editPin) {
-        setPinModalMode('enter');
-        setPendingAction(() => () => {
-          setIsLocked(false);
-          setIsRuntimeUnlocked(true);
-          setIsAddPanelOpen(true);
-          setAppState(prev => ({ ...prev, isLocked: false }));
-        });
-        setIsPinModalOpen(true);
-      } else {
-        setIsLocked(false);
-        setIsRuntimeUnlocked(true);
-        setIsAddPanelOpen(true);
-        setAppState(prev => ({ ...prev, isLocked: false }));
-      }
-    } else {
-      setIsAddPanelOpen(true);
-    }
-  };
-
-  // Simulation mode
-  const [isSimulated, setIsSimulated] = useState<boolean>(false);
-
-  // Real-time MQTT data stores
-  const [latestValues, setLatestValues] = useState<Record<string, { val: any; time: string; timestampMs?: number; quality?: string }>>({});
-  const [historyValues, setHistoryValues] = useState<Record<string, { value: number; time: string }[]>>({});
-  const [mqttLogs, setMqttLogs] = useState<MqttMessageLog[]>([]);
-  const [mqttConnected, setMqttConnected] = useState(false);
-  const [nowMs, setNowMs] = useState<number>(Date.now());
-
-  // 1-Second ticker for live element telemetry timeout & stale detection
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNowMs(Date.now());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Inbuilt Alarm System State & Haptic/Sound/Popup Toggles
-  const [activeAlarms, setActiveAlarms] = useState<ActiveAlarm[]>([]);
-  const [isAlarmModalOpen, setIsAlarmModalOpen] = useState(false);
-  const [isAlarmHistorianModalOpen, setIsAlarmHistorianModalOpen] = useState(false);
-  const [isFddModalOpen, setIsFddModalOpen] = useState(false);
-  const [isTourOpen, setIsTourOpen] = useState<boolean>(() => {
-    try {
-      return !localStorage.getItem('tasc_product_tour_completed');
-    } catch {
-      return false;
-    }
-  });
-  const [isVibrateEnabled, setIsVibrateEnabled] = useState(true);
-
-  const [isSoundEnabled, setIsSoundEnabled] = useState(true);
-  const [isAutoPopupEnabled, setIsAutoPopupEnabled] = useState(true);
-  const [acknowledgedAlarms, setAcknowledgedAlarms] = useState<Record<string, boolean>>({});
-  const [latestAlarmTriggered, setLatestAlarmTriggered] = useState<ActiveAlarm | null>(null);
-  const prevAlarmKeysRef = useRef<string[]>([]);
-  const prevAlarmCountRef = useRef<number>(0);
-
-  // Live Alarm Evaluation Loop
-  useEffect(() => {
-    const newAlarmsList: ActiveAlarm[] = [];
-
-    appState.panels.forEach(panel => {
-      const isSymbolPanel = !!panel.symbolId || !!panel.symbolAnimType;
-      const isOutputPanel = [
-        PanelType.GAUGE,
-        PanelType.LINE_GRAPH,
-        PanelType.PROGRESS,
-        PanelType.TEXT_OUTPUT,
-        PanelType.LOG,
-        PanelType.LED,
-        PanelType.NODE_STATUS
-      ].includes(panel.type as PanelType) || panel.type === 'log' || panel.type === 'text_display' || isSymbolPanel;
-
-      // Dedicated Equipment Trip Tag & Fault Alarm Evaluation
-      const tripStatus = isPanelTripped(panel, latestValues);
-      if (tripStatus.isTripped) {
-        const tripAlarmKey = `${panel.panelId}_TRIP`;
-        newAlarmsList.push({
-          alarmKey: tripAlarmKey,
-          panelId: panel.panelId,
-          panelName: panel.panelName || 'Equipment',
-          dashboardId: panel.dashboardId,
-          zone: 'TRIP',
-          value: tripStatus.tripValue,
-          unit: '',
-          threshold: 1,
-          message: tripStatus.message,
-          color: tripStatus.tripColor,
-          timestamp: new Date().toLocaleTimeString(),
-          acknowledged: !!acknowledgedAlarms[tripAlarmKey]
-        });
-      }
-
-      if (!isOutputPanel) return;
-
-      const panelValObj = latestValues[panel.panelId] || (panel.topic ? latestValues[panel.topic] : undefined);
-      if (!panelValObj) return;
-
-      const rawVal = panelValObj.val;
-      const numVal = typeof rawVal === 'number' ? rawVal : parseFloat(rawVal);
-      if (isNaN(numVal)) return;
-
-      const min = panel.payloadMin ?? 0;
-      const max = panel.payloadMax ?? 100;
-      const range = max - min || 1;
-
-      const lowLimit = panel.lowThreshold !== undefined ? panel.lowThreshold : (min + range * 0.25);
-      const highLimit = panel.highThreshold !== undefined ? panel.highThreshold : (min + range * 0.75);
-
-      let matchedZone: 'LOW' | 'MID' | 'HIGH' | null = null;
-      let alarmMsg = '';
-      let alarmColor = '';
-      let thresholdVal = 0;
-
-      if (numVal <= lowLimit && panel.enableLowAlarm) {
-        matchedZone = 'LOW';
-        alarmMsg = panel.lowAlarmMsg || 'Low Zone Warning';
-        alarmColor = panel.firstColor || '#f59e0b';
-        thresholdVal = lowLimit;
-      } else if (numVal > lowLimit && numVal <= highLimit && panel.enableMidAlarm) {
-        matchedZone = 'MID';
-        alarmMsg = panel.midAlarmMsg || 'Mid Zone Warning';
-        alarmColor = panel.secondColor || '#10b981';
-        thresholdVal = highLimit;
-      } else if (numVal > highLimit && panel.enableHighAlarm) {
-        matchedZone = 'HIGH';
-        alarmMsg = panel.highAlarmMsg || 'High Critical Alarm';
-        alarmColor = panel.thirdColor || '#f43f5e';
-        thresholdVal = highLimit;
-      }
-
-      if (matchedZone) {
-        const alarmKey = `${panel.panelId}_${matchedZone}`;
-        newAlarmsList.push({
-          alarmKey,
-          panelId: panel.panelId,
-          panelName: panel.panelName || 'Symbol Asset',
-          dashboardId: panel.dashboardId,
-          zone: matchedZone,
-          value: numVal,
-          unit: panel.unit || '',
-          threshold: thresholdVal,
-          message: alarmMsg,
-          color: alarmColor,
-          timestamp: panelValObj.time || new Date().toLocaleTimeString(),
-          acknowledged: !!acknowledgedAlarms[alarmKey]
-        });
-      }
-    });
-
-    setActiveAlarms(newAlarmsList);
-
-    // 1. Record triggered events into Historian Engine
-    newAlarmsList.forEach(alarm => {
-      const panelObj = appState.panels.find(p => p.panelId === alarm.panelId);
-      recordAlarmTriggerEvent({
-        alarmKey: alarm.alarmKey,
-        panelId: alarm.panelId,
-        panelName: alarm.panelName,
-        dashboardId: alarm.dashboardId,
-        zone: alarm.zone,
-        value: alarm.value,
-        unit: alarm.unit,
-        threshold: alarm.threshold,
-        message: alarm.message,
-        color: alarm.color,
-        timestamp: alarm.timestamp,
-        topic: panelObj?.topic,
-        jsonPath: panelObj?.tripJsonPath || panelObj?.jsonPath
-      });
-    });
-
-    // 2. Detect cleared alarms and record resolution in Historian Engine
-    const currentAlarmKeys = newAlarmsList.map(a => a.alarmKey);
-    const clearedKeys = prevAlarmKeysRef.current.filter(k => !currentAlarmKeys.includes(k));
-    clearedKeys.forEach(key => {
-      recordAlarmResolvedEvent(key);
-    });
-
-    // Check if new alarm triggered or alarm count changed
-    const newKeysFound = currentAlarmKeys.filter(k => !prevAlarmKeysRef.current.includes(k));
-    const countChanged = newAlarmsList.length !== prevAlarmCountRef.current;
-
-    if (newKeysFound.length > 0 || (countChanged && newAlarmsList.length > prevAlarmCountRef.current)) {
-      const newestAlarm = newAlarmsList.find(a => newKeysFound.includes(a.alarmKey)) || newAlarmsList[newAlarmsList.length - 1];
-      if (newestAlarm) {
-        setLatestAlarmTriggered(newestAlarm);
-      }
-
-      // Automatically open alarm pop-up modal IF auto-popup is enabled
-      if (isAutoPopupEnabled) {
-        setIsAlarmModalOpen(true);
-      }
-    }
-
-    prevAlarmKeysRef.current = currentAlarmKeys;
-    prevAlarmCountRef.current = newAlarmsList.length;
-  }, [latestValues, appState.panels, acknowledgedAlarms, isAutoPopupEnabled]);
-
-  // Dedicated 5-Second Recurring Mobile Haptic & Industrial Alarm Sound Siren Loop
-  useEffect(() => {
-    const unackAlarmsCount = activeAlarms.filter(a => !a.acknowledged).length;
-
-    if (unackAlarmsCount === 0 || typeof window === 'undefined') {
-      stopHaptic();
-      return;
-    }
-
-    const triggerHapticAndSound = () => {
-      // 1. Mobile Haptic Vibration (Industrial dual-pulse pattern across 5s if enabled)
-      if (isVibrateEnabled) {
-        triggerHaptic([400, 150, 400, 150, 400]);
-      }
-
-      // 2. Web Audio Dual-Tone Industrial Alarm Siren Sound Pulse (if sound enabled)
-      if (isSoundEnabled) {
-        try {
-          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-          if (AudioContextClass) {
-            const ctx = new AudioContextClass();
-            if (ctx.state === 'suspended') {
-              ctx.resume();
-            }
-            const now = ctx.currentTime;
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-
-            osc.type = 'sawtooth';
-            // Alternating industrial siren pitch: 880Hz -> 660Hz -> 880Hz pulse
-            osc.frequency.setValueAtTime(880, now);
-            osc.frequency.setValueAtTime(660, now + 0.15);
-            osc.frequency.setValueAtTime(880, now + 0.30);
-
-            gain.gain.setValueAtTime(0.15, now);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
-
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.start(now);
-            osc.stop(now + 0.45);
-          }
-        } catch {}
-      }
-    };
-
-    // Fire immediately when unacknowledged alarm starts
-    triggerHapticAndSound();
-
-    // Repeat every 5 seconds (5000ms) while active unacknowledged alarms persist
-    const hapticInterval = setInterval(triggerHapticAndSound, 5000);
-
-    return () => {
-      clearInterval(hapticInterval);
-      stopHaptic();
-    };
-  }, [activeAlarms, isVibrateEnabled, isSoundEnabled]);
-
-  const handleAcknowledgeAlarm = (alarmKey: string) => {
-    triggerAckHaptic();
-    setAcknowledgedAlarms(prev => ({ ...prev, [alarmKey]: true }));
-    recordAlarmAckEvent(alarmKey);
-  };
-
-  const handleAcknowledgeAllAlarms = () => {
-    triggerAckHaptic();
-    const updated: Record<string, boolean> = {};
-    activeAlarms.forEach(a => {
-      updated[a.alarmKey] = true;
-      recordAlarmAckEvent(a.alarmKey);
-    });
-    setAcknowledgedAlarms(prev => ({ ...prev, ...updated }));
-  };
-
-  const clientRef = useRef<MqttClient | null>(null);
-
-  // Driver Bridge — parallel to MQTT, does not interact with clientRef
-  const driverBridgeClientRef = useRef<DriverBridgeClient | null>(null);
-  const lastSubscribedKeyRef = useRef<string>('');
-
-  const handleDriverConnectionHealth = useCallback((payload: import('./types').DriverConnectionHealthPayload) => {
-    setAppState(prev => {
-      if (!prev.driverConnections) return prev;
-      const updatedConns = prev.driverConnections.map(c => {
-        if (c.connectionId === payload.connectionId) {
-          return {
-            ...c,
-            connected: payload.connectionState === 'connected',
-            connectionState: payload.connectionState,
-            lastConnectedAt: payload.lastConnectedAt || c.lastConnectedAt,
-            lastDisconnectedAt: payload.lastDisconnectedAt || c.lastDisconnectedAt,
-            lastError: payload.lastError,
-            retryCount: payload.retryCount,
-            consecutiveFailureCount: payload.consecutiveFailureCount
-          };
-        }
-        return c;
-      });
-      return { ...prev, driverConnections: updatedConns };
-    });
-  }, []);
-
-  const processDriverTagValue = useCallback((update: import('./types').DriverTagValue) => {
-    const timeStr = new Date().toLocaleTimeString();
-    const now = Date.now();
-    
-    setLatestValues(prev => {
-      const existingPanel = prev[update.panelId];
-      const existingTag = prev[update.tagId];
-      
-      const isBad = update.quality === 'bad';
-      const hasNewValue = update.value !== null && update.value !== undefined;
-      
-      const panelVal = hasNewValue ? update.value : (isBad ? null : existingPanel?.val);
-      const tagVal = hasNewValue ? update.value : (isBad ? null : existingTag?.val);
-      
-      const panelTimestamp = now;
-      const tagTimestamp = now;
-
-      const lastGoodValue = hasNewValue ? update.value : (update.lastGoodValue ?? existingTag?.lastGoodValue ?? existingPanel?.lastGoodValue);
-      const lastGoodTimestamp = hasNewValue ? (update.timestamp || new Date().toISOString()) : (update.lastGoodTimestamp || existingTag?.lastGoodTimestamp || existingPanel?.lastGoodTimestamp);
-
-      const nextState: Record<string, any> = {
-        ...prev,
-        [update.panelId]: {
-          val: panelVal,
-          time: timeStr,
-          timestampMs: panelTimestamp,
-          quality: update.quality || 'good',
-          lastGoodValue,
-          lastGoodTimestamp
-        },
-        [update.tagId]: {
-          val: tagVal,
-          time: timeStr,
-          timestampMs: tagTimestamp,
-          quality: update.quality || 'good',
-          lastGoodValue,
-          lastGoodTimestamp
-        }
-      };
-
-      if (update.tagName) {
-        nextState[update.tagName] = {
-          val: tagVal,
-          time: timeStr,
-          timestampMs: tagTimestamp,
-          quality: update.quality || 'good',
-          lastGoodValue,
-          lastGoodTimestamp
-        };
-      }
-
-      return nextState;
-    });
-
-    setAppState(prev => {
-      if (!prev.driverTags) return prev;
-      let changed = false;
-      const isBad = update.quality === 'bad';
-      const hasNewValue = update.value !== null && update.value !== undefined;
-
-      const updatedTags = prev.driverTags.map(t => {
-        if (t.tagId === update.tagId || t.tagName === update.tagId || (update.tagName && t.tagName === update.tagName)) {
-          const newQuality = (update.quality || 'good') as any;
-          const newRuntime = isBad ? ('bad' as const) : ('healthy' as const);
-          const newVal = hasNewValue ? update.value : (isBad ? null : t.lastValue);
-          if (t.quality !== newQuality || t.runtimeState !== newRuntime || t.lastValue !== newVal) {
-            changed = true;
-          }
-          return {
-            ...t,
-            quality: newQuality,
-            runtimeState: newRuntime,
-            lastValue: newVal,
-            lastGoodValue: hasNewValue ? update.value : (update.lastGoodValue ?? t.lastGoodValue),
-            lastGoodTimestamp: hasNewValue ? (update.timestamp || new Date().toISOString()) : (update.lastGoodTimestamp ?? t.lastGoodTimestamp),
-            lastTimestamp: update.timestamp || new Date().toISOString()
-          };
-        }
-        return t;
-      });
-      return changed ? { ...prev, driverTags: updatedTags } : prev;
-    });
-
-    // Record driver tag values into historyValues and Historian Engine
-    const numVal = typeof update.value === 'number' ? update.value : parseFloat(String(update.value ?? ''));
-    if (!isNaN(numVal) && update.value !== null && update.value !== undefined) {
-      setHistoryValues(prev => {
-        const tagHist = prev[update.tagId] || [];
-        const newPt = { value: numVal, time: timeStr, timestampMs: now };
-        const updated: Record<string, { value: number; time: string; timestampMs?: number }[]> = {
-          ...prev,
-          [update.tagId]: [...tagHist, newPt].slice(-3600),
-          [update.panelId]: [...(prev[update.panelId] || []), newPt].slice(-3600)
-        };
-
-        // 1. Centralized Historian Engine continuous logging
-        const histCfg = appStateRef.current.historianConfig;
-        const globalHistEnabled = histCfg?.enabled !== false;
-        const globalInterval = histCfg?.logIntervalSeconds || 10;
-
-        if (globalHistEnabled && appStateRef.current.historianTags) {
-          appStateRef.current.historianTags.forEach(ht => {
-            if (ht.enabled !== false && ht.sourceType === 'driver' && (ht.driverTagId === update.tagId || ht.id === update.tagId)) {
-              const effectiveInterval = ht.useCustomInterval && ht.customIntervalSeconds ? ht.customIntervalSeconds : globalInterval;
-              enqueueTelemetryPoint(ht.id, ht.driverTagId || ht.id, numVal, effectiveInterval, ht.id);
-            }
-          });
-        }
-
-        // 2. Legacy panel pen updates and backwards compatibility
-        (appStateRef.current.panels || []).forEach(p => {
-          if (p.pens && p.pens.length > 0) {
-            p.pens.forEach(pen => {
-              if (pen.driverTagId === update.tagId || pen.topic === update.tagId) {
-                const penHist = prev[pen.id] || [];
-                updated[pen.id] = [...penHist, newPt].slice(-3600);
-                if (p.type === PanelType.LINE_GRAPH && p.enableHistorianLogging && p.logIntervalSeconds && pen.loggingEnabled !== false) {
-                  enqueueTelemetryPoint(p.panelId, pen.id || pen.topic || update.tagId, numVal, p.logIntervalSeconds, pen.id);
-                }
-              }
-            });
-          } else if (p.dataSourceMode === 'driver' && (p.driverTagId === update.tagId || p.topic === update.tagId)) {
-            if (p.type === PanelType.LINE_GRAPH && p.enableHistorianLogging && p.logIntervalSeconds) {
-              enqueueTelemetryPoint(p.panelId, update.tagId, numVal, p.logIntervalSeconds);
-            }
-          }
-        });
-
-        return updated;
-      });
-    }
-  }, []);
-
-  // Active Connection & Dashboard
-  const activeConnection = appState.connections.find(c => c.connectionId === activeConnectionId) || appState.connections[0];
-  
-  // Get dashboards belonging to active connection
-  const activeConnectionDashboards = appState.dashboards.filter(
-    d => d.connectionId === activeConnection?.connectionId
-  );
-
-  const activeDashboard = 
-    activeConnectionDashboards.find(d => d.dashboardId === activeDashboardId) ||
-    activeConnectionDashboards[0] ||
-    appState.dashboards.find(d => d.dashboardId === activeDashboardId) ||
-    appState.dashboards[0];
-
-  const activePanels = appState.panels.filter(p => p.dashboardId === activeDashboard?.dashboardId);
-
-  // Always up-to-date refs for stable callback closures
-  const appStateRef = useRef(appState);
-  useEffect(() => {
-    appStateRef.current = appState;
-  }, [appState]);
-
-  const activeDashboardRef = useRef(activeDashboard);
-  useEffect(() => {
-    activeDashboardRef.current = activeDashboard;
-  }, [activeDashboard]);
-
-  // Ensure every active connection has at least one dashboard (enforcing 1-screen max in Community mode)
-  useEffect(() => {
-    if (!activeConnection) return;
-    const editionMgr = EditionManager.fromState(appState);
-    const isCommunity = editionMgr.IsCommunity();
-    
-    const dashesForConn = appState.dashboards.filter(d => d.connectionId === activeConnection.connectionId);
-    if (dashesForConn.length === 0) {
-      if (isCommunity && appState.dashboards.length > 0) {
-        // In Community mode, bind existing single screen to new connection instead of breaking 1-screen limit
-        const updatedDash: Dashboard = {
-          ...appState.dashboards[0],
-          connectionId: activeConnection.connectionId
-        };
-        setAppState(prev => sanitizeAppState({
-          ...prev,
-          dashboards: [updatedDash]
-        }));
-        setActiveDashboardId(updatedDash.dashboardId);
-      } else {
-        const defaultDash: Dashboard = {
-          dashboardId: `dash_${Date.now()}`,
-          dashboardName: `${activeConnection.connectionName || 'Broker'} Dashboard`,
-          connectionId: activeConnection.connectionId,
-          isHome: true,
-          icon: 'fa-house',
-          themeColor: '#0ea5e9'
-        };
-        setAppState(prev => sanitizeAppState({
-          ...prev,
-          dashboards: isCommunity ? [defaultDash] : [...prev.dashboards, defaultDash]
-        }));
-        setActiveDashboardId(defaultDash.dashboardId);
-      }
-    }
-  }, [activeConnection, appState.dashboards]);
-
-  // Sync activeDashboardId when activeConnectionId changes
-  useEffect(() => {
-    if (!activeConnectionId) return;
-    const connDashboards = appState.dashboards.filter(d => d.connectionId === activeConnectionId);
-    if (connDashboards.length > 0) {
-      const isCurrentInConn = connDashboards.some(d => d.dashboardId === activeDashboardId);
-      if (!isCurrentInConn) {
-        setActiveDashboardId(connDashboards[0].dashboardId);
-      }
-    }
-  }, [activeConnectionId, appState.dashboards]);
-
-  const handleSelectDashboard = (dashId: string) => {
-    const targetDash = appState.dashboards.find(d => d.dashboardId === dashId);
-    if (targetDash) {
-      setActiveDashboardId(targetDash.dashboardId);
-      if (targetDash.connectionId) {
-        setActiveConnectionId(targetDash.connectionId);
-      }
-    } else {
-      setActiveDashboardId(dashId);
-    }
-  };
-
-  // Helper for message payload parsing
-  const processIncomingMessage = useCallback((topic: string, payloadStr: string) => {
-    const timeStr = new Date().toLocaleTimeString();
-
-    setMqttLogs(prev => [
-      {
-        id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-        topic,
-        payload: payloadStr,
-        timestamp: timeStr
-      },
-      ...prev.slice(0, 99)
-    ]);
-
-    const cleanTopic = topic.trim();
-    const currentAppState = appStateRef.current;
-    const currentDash = activeDashboardRef.current;
-
-    // Update panel matching topics
-    currentAppState.panels.forEach(panel => {
-      if (!panel.topic && !panel.publishTopic && (!panel.pens || panel.pens.length === 0)) return;
-      const penTopics = (panel.pens || []).map(p => p.topic?.trim()).filter(Boolean) as string[];
-      const rawTopics = [panel.topic?.trim(), panel.publishTopic?.trim(), ...penTopics].filter(Boolean) as string[];
-      const prefix = currentDash?.prefixTopic ? currentDash.prefixTopic.trim() : '';
-
-      let matches = false;
-      for (const rawPanelTopic of rawTopics) {
-        const fullTopic = panel.disableDashboardPrefix 
-          ? rawPanelTopic 
-          : `${prefix}${rawPanelTopic}`;
-
-        if (
-          cleanTopic === fullTopic ||
-          cleanTopic === rawPanelTopic ||
-          cleanTopic.endsWith('/' + rawPanelTopic) ||
-          cleanTopic.endsWith(rawPanelTopic) ||
-          rawPanelTopic.endsWith('/' + cleanTopic) ||
-          mqttWildcardMatch(fullTopic, cleanTopic) ||
-          mqttWildcardMatch(rawPanelTopic, cleanTopic)
-        ) {
-          matches = true;
-          break;
-        }
-      }
-
-      if (matches) {
-        let extracted: any = payloadStr;
-
-        const effectiveJsonPath = panel.jsonPath || (panel.pens && panel.pens.length > 0 ? panel.pens[0]?.jsonPath : undefined);
-
-        if (effectiveJsonPath) {
-          const jsonVal = getJsonValue(payloadStr, effectiveJsonPath);
-          if (jsonVal !== undefined) {
-            extracted = jsonVal;
-          }
-        } else if (panel.isJSONPayload) {
-          try {
-            extracted = JSON.parse(payloadStr);
-          } catch {
-            extracted = payloadStr;
-          }
-        }
-
-        setLatestValues(prev => {
-          const existing = prev[panel.panelId];
-          return {
-            ...prev,
-            [panel.panelId]: {
-              val: extracted,
-              rawPayload: payloadStr,
-              time: timeStr,
-              timestampMs: Date.now(),
-              quality: 'good',
-              sentTime: existing?.sentTime
-            }
-          };
-        });
-
-        // Process telemetry / trend values for history and historian engine
-        setHistoryValues(prev => {
-          const pId = panel.panelId;
-          const top = panel.topic;
-          const currentIdArr = prev[pId] || [];
-          const currentTopArr = top ? (prev[top] || []) : [];
-          const multiPenUpdates: Record<string, any[]> = {};
-
-          // 1. Process multi-pens if configured
-          if (panel.pens && panel.pens.length > 0) {
-            panel.pens.forEach(pen => {
-              const queryPath = (pen.jsonPath && pen.jsonPath.trim()) ? pen.jsonPath.trim() : (panel.jsonPath || '');
-              let penVal: any;
-              if (queryPath) {
-                penVal = getJsonValue(payloadStr, queryPath);
-              } else if (typeof extracted === 'number') {
-                penVal = extracted;
-              } else {
-                penVal = getJsonValue(payloadStr, '');
-              }
-
-              const penNum = typeof penVal === 'number' ? penVal : parseFloat(String(penVal ?? ''));
-              if (!isNaN(penNum)) {
-                const penPoint = { value: penNum, time: timeStr, timestampMs: Date.now() };
-                const curPenArr = prev[pen.id] || [];
-                const newArr = [...curPenArr, penPoint].slice(-3600);
-                multiPenUpdates[pen.id] = newArr;
-
-                if (pen.topic && pen.topic !== panel.topic) {
-                  multiPenUpdates[pen.topic] = newArr;
-                }
-
-                // Log into historian engine
-                if (panel.type === PanelType.LINE_GRAPH && panel.enableHistorianLogging && panel.logIntervalSeconds && pen.loggingEnabled !== false) {
-                  enqueueTelemetryPoint(panel.panelId, pen.topic || panel.topic || pen.id, penNum, panel.logIntervalSeconds, pen.id);
-                }
-              }
-            });
-          }
-
-          // 2. Process primary panel value (for single pen mode or standard panels)
-          let primaryNumVal: number | null = null;
-          let primaryValToParse = extracted;
-          if (panel.jsonPath && (typeof extracted !== 'number' || isNaN(extracted))) {
-            const extractedJson = getJsonValue(payloadStr, panel.jsonPath);
-            if (extractedJson !== undefined) {
-              primaryValToParse = extractedJson;
-            }
-          }
-          const parsedPrimary = typeof primaryValToParse === 'number' ? primaryValToParse : parseFloat(String(primaryValToParse ?? ''));
-          if (!isNaN(parsedPrimary)) {
-            primaryNumVal = parsedPrimary;
-          }
-
-          let updatedPrimaryId = currentIdArr;
-          let updatedPrimaryTop = currentTopArr;
-          if (primaryNumVal !== null) {
-            const newPoint = { value: primaryNumVal, time: timeStr, timestampMs: Date.now() };
-            updatedPrimaryId = [...currentIdArr, newPoint].slice(-3600);
-            if (top) {
-              updatedPrimaryTop = [...currentTopArr, newPoint].slice(-3600);
-            }
-
-            if (panel.type === PanelType.LINE_GRAPH && panel.enableHistorianLogging && panel.logIntervalSeconds && (!panel.pens || panel.pens.length === 0)) {
-              if (panel.topic) {
-                enqueueTelemetryPoint(panel.panelId, panel.topic, primaryNumVal, panel.logIntervalSeconds);
-              }
-            }
-          }
-
-          return {
-            ...prev,
-            [pId]: updatedPrimaryId,
-            ...(top ? { [top]: updatedPrimaryTop } : {}),
-            ...multiPenUpdates
-          };
-        });
-      }
-    });
-
-    // 3. Centralized Historian Engine continuous logging for MQTT Tags
-    const histCfg = appStateRef.current.historianConfig;
-    const globalHistEnabled = histCfg?.enabled !== false;
-    const globalInterval = histCfg?.logIntervalSeconds || 10;
-
-    if (globalHistEnabled && appStateRef.current.historianTags) {
-      let parsedPayload: any = null;
-      try {
-        parsedPayload = JSON.parse(payloadStr);
-      } catch {
-        parsedPayload = payloadStr;
-      }
-
-      appStateRef.current.historianTags.forEach(ht => {
-        if (ht.enabled !== false && ht.sourceType === 'mqtt' && ht.topic) {
-          if (mqttWildcardMatch(ht.topic, topic)) {
-            let histNum: number | null = null;
-            if (ht.jsonPath) {
-              const val = getJsonValue(payloadStr, ht.jsonPath);
-              if (typeof val === 'number') histNum = val;
-              else if (val !== undefined) histNum = parseFloat(String(val));
-            } else {
-              if (typeof parsedPayload === 'number') histNum = parsedPayload;
-              else histNum = parseFloat(String(parsedPayload ?? payloadStr));
-            }
-            if (histNum !== null && !isNaN(histNum)) {
-              const effectiveInterval = ht.useCustomInterval && ht.customIntervalSeconds ? ht.customIntervalSeconds : globalInterval;
-              enqueueTelemetryPoint(ht.id, ht.topic, histNum, effectiveInterval, ht.id);
-            }
-          }
-        }
-      });
-    }
-  }, []);
-
-  // MQTT Connection Manager
-  useEffect(() => {
-    if (!activeConnection || isSimulated) {
-      if (clientRef.current) {
-        clientRef.current.end(true);
-        clientRef.current = null;
-      }
-      setMqttConnected(false);
-      return;
-    }
-
-    try {
-      const wsUrl = formatBrokerWebSocketUrl(activeConnection);
-      console.log('Connecting to MQTT WebSocket:', wsUrl);
-
-      const client = mqtt.connect(wsUrl, {
-        clientId: activeConnection.clientId || `mqtt_dash_${Math.random().toString(16).substring(2, 8)}`,
-        username: activeConnection.username || undefined,
-        password: activeConnection.password || undefined,
-        keepalive: activeConnection.keepAlive || 60,
-        clean: activeConnection.cleanSession,
-        reconnectPeriod: 5000,
-        connectTimeout: 10000
-      });
-
-      clientRef.current = client;
-
-      client.on('connect', () => {
-        setMqttConnected(true);
-        console.log('MQTT Connected successfully to', activeConnection.connectionName);
-      });
-
-      client.on('message', (topic, message) => {
-        processIncomingMessage(topic, message.toString());
-      });
-
-      client.on('error', (err) => {
-        console.warn('MQTT connection error:', err);
-        setMqttConnected(false);
-      });
-
-      client.on('close', () => {
-        setMqttConnected(false);
-      });
-
-      return () => {
-        if (client) {
-          client.end(true);
-        }
-      };
-    } catch (err) {
-      console.warn('Failed to initialize MQTT connection:', err);
-      setMqttConnected(false);
-    }
-  }, [
-    activeConnection?.connectionId, 
-    activeConnection?.brokerAddress, 
-    activeConnection?.port, 
-    activeConnection?.protocol, 
-    isSimulated, 
-    processIncomingMessage
-  ]);
-
-  // MQTT Dynamic Topic Subscriptions Manager
-  useEffect(() => {
-    if (!mqttConnected || !clientRef.current || isSimulated) return;
-
-    const topicsToSubscribe = new Set<string>();
-
-    appState.panels.forEach(panel => {
-      const rawTopics = [panel.topic?.trim(), panel.publishTopic?.trim(), panel.tripTopic?.trim()].filter(Boolean) as string[];
-      rawTopics.forEach(rawTopic => {
-        topicsToSubscribe.add(rawTopic);
-        if (activeDashboard?.prefixTopic) {
-          topicsToSubscribe.add(`${activeDashboard.prefixTopic.trim()}${rawTopic}`);
-        }
-      });
-    });
-
-    if (activeDashboard?.prefixTopic && activeDashboard.prefixTopic.trim()) {
-      const p = activeDashboard.prefixTopic.trim();
-      topicsToSubscribe.add(p.endsWith('/') ? `${p}#` : `${p}/#`);
-    }
-
-    topicsToSubscribe.forEach(topic => {
-      try {
-        clientRef.current?.subscribe(topic, { qos: 0 }, (err) => {
-          if (err) {
-            console.warn(`Failed to subscribe to topic ${topic}:`, err);
-          } else {
-            console.log(`Subscribed to topic: ${topic}`);
-          }
-        });
-      } catch (e) {
-        console.warn(`Error subscribing to ${topic}:`, e);
-      }
-    });
-  }, [mqttConnected, appState.panels, activeDashboard?.prefixTopic, isSimulated]);
-
-  // Reconnect handler: resets the subscription dedupe key and triggers state update
-  // so the subscription useEffect re-fires and sends a fresh subscribe to the backend.
-  const [bridgeReconnectCount, setBridgeReconnectCount] = useState(0);
-
-  const handleDriverBridgeReconnect = useCallback(() => {
-    console.log('[DriverBridge] Reconnected — forcing re-subscription.');
-    lastSubscribedKeyRef.current = ''; // clear dedupe ref
-    setBridgeReconnectCount(c => c + 1); // trigger effect execution
-  }, []);
-
-  // Driver Bridge Lifecycle — connects/disconnects independently of MQTT
-  useEffect(() => {
-    // Create the bridge client once
-    if (!driverBridgeClientRef.current) {
-      driverBridgeClientRef.current = new DriverBridgeClient(
-        processDriverTagValue,
-        handleDriverConnectionHealth,
-        handleDriverBridgeReconnect
-      );
-    }
-    driverBridgeClientRef.current.connect();
-
-    return () => {
-      driverBridgeClientRef.current?.disconnect();
-    };
-  }, [processDriverTagValue, handleDriverConnectionHealth, handleDriverBridgeReconnect]);
-
-  // Sync driver-mode subscriptions to the bridge whenever panels, tags, connections change or WS reconnects
-  useEffect(() => {
-    const bridge = driverBridgeClientRef.current;
-    if (!bridge) return;
-
-    const enabledConns = (appState.driverConnections || []).filter(c => c.enabled !== false);
-    
-    const isConnEnabled = (connId: string) => {
-      return true; // Allow polling for all enabled driver tags (using matched or fallback connection)
-    };
-
-    const findConnection = (connId: string) => {
-      const match = enabledConns.find(c => c.connectionId === connId || c.connectionName === connId);
-      if (match) return match;
-      if (enabledConns.length > 0) return enabledConns[0];
-      // Virtual default connection fallback for 127.0.0.1:502 Modbus TCP
-      return {
-        connectionId: connId || 'conn_default_modbus',
-        connectionName: 'Local Modbus TCP',
-        protocol: 'modbus_tcp' as const,
-        host: '127.0.0.1',
-        port: 502,
-        unitId: 1,
-        enabled: true
-      };
-    };
-
-    const allTagsToPoll = (appState.driverTags || []).filter(t => t.enabled !== false && isConnEnabled(t.connectionId));
-
-    const driverPanels = activePanels.filter(p => p.dataSourceMode === 'driver' && p.driverTagId);
-    const panelMapByTagId = new Map(driverPanels.map(p => [p.driverTagId, p.panelId]));
-
-    const subscriptions = allTagsToPoll.map(tag => {
-      const connection = findConnection(tag.connectionId);
-      const panelId = panelMapByTagId.get(tag.tagId) || `tag_panel_${tag.tagId}`;
-
-      return {
-        tagId: tag.tagId,
-        panelId,
-        connectionId: tag.connectionId || connection?.connectionId || 'drv_default',
-        pollRate: Number(tag.pollRate) || 100,
-        tag,
-        connection
-      };
-    });
-
-    const subKey = JSON.stringify(subscriptions.map(s => `${s.tagId}:${s.panelId}:${s.pollRate}:${s.connection?.host}:${s.connection?.port}:${s.connection?.enabled}:${s.tag?.address}:${s.tag?.registerType}:${s.tag?.enabled}`));
-    if (lastSubscribedKeyRef.current === subKey) return;
-    lastSubscribedKeyRef.current = subKey;
-
-    if (subscriptions.length > 0) {
-      bridge.subscribe(subscriptions);
-    } else {
-      bridge.unsubscribeAll();
-    }
-  }, [activePanels, appState.driverTags, appState.driverConnections, bridgeReconnectCount]);
-
-  // Demo Data Simulation Engine
-  useEffect(() => {
-    if (!isSimulated) return;
-
-    const interval = setInterval(() => {
-      const timeStr = new Date().toLocaleTimeString();
-
-      activePanels.forEach(panel => {
-        if (panel.dataSourceMode === 'driver') return;
-        let simVal: any;
-
-        switch (panel.type) {
-          case PanelType.GAUGE: {
-            const min = panel.payloadMin ?? 10;
-            const max = panel.payloadMax ?? 50;
-            const prev = latestValues[panel.panelId]?.val ?? (min + (max - min) / 2);
-            simVal = Math.max(min, Math.min(max, prev + (Math.random() - 0.48) * 3));
-            break;
-          }
-          case PanelType.LINE_GRAPH: {
-            const prev = latestValues[panel.panelId]?.val ?? 12.5;
-            simVal = Math.max(0, prev + (Math.random() - 0.49) * 2.5);
-            break;
-          }
-          case PanelType.PROGRESS: {
-            const prev = latestValues[panel.panelId]?.val ?? 80;
-            simVal = Math.max(10, Math.min(100, prev + (Math.random() - 0.52) * 2));
-            break;
-          }
-          case PanelType.LED:
-            simVal = Math.random() > 0.3 ? '1' : '0';
-            break;
-          case PanelType.NODE_STATUS:
-            simVal = 'online';
-            break;
-          case PanelType.IMAGE:
-          case 'image' as any:
-          case 'symbol' as any: {
-            if (panel.symbolId || panel.symbolAnimType) {
-              const min = panel.payloadMin ?? 0;
-              const max = panel.payloadMax ?? 100;
-              const prev = latestValues[panel.panelId]?.val ?? (min + (max - min) * 0.85);
-              simVal = Math.max(min, Math.min(max, prev + (Math.random() - 0.48) * 3));
-            } else {
-              return;
-            }
-            break;
-          }
-          default:
-            return;
-        }
-
-        setLatestValues(prev => {
-          const existing = prev[panel.panelId];
-          return {
-            ...prev,
-            [panel.panelId]: {
-              val: simVal,
-              time: timeStr,
-              sentTime: existing?.sentTime
-            }
-          };
-        });
-
-        const numVal = typeof simVal === 'number' ? simVal : parseFloat(simVal);
-        if (!isNaN(numVal)) {
-          setHistoryValues(prev => {
-            const pId = panel.panelId;
-            const top = panel.topic;
-            const currentIdArr = prev[pId] || [];
-            const currentTopArr = top ? (prev[top] || []) : [];
-            const newPoint = { value: numVal, time: timeStr };
-            return {
-              ...prev,
-              [pId]: [...currentIdArr, newPoint].slice(-200),
-              ...(top ? { [top]: [...currentTopArr, newPoint].slice(-200) } : {})
-            };
-          });
-
-          // Feed into historian engine for simulated panels too
-          if (panel.type === PanelType.LINE_GRAPH && panel.enableHistorianLogging && panel.logIntervalSeconds) {
-            enqueueTelemetryPoint(panel.panelId, panel.topic, numVal, panel.logIntervalSeconds);
-          }
-        }
-      });
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [isSimulated, activePanels, latestValues]);
-
-  // Core MQTT Publish Execution
-  const executePublish = (topic: string, payload: string | number) => {
-    resetRuntimeTimeoutTimer();
-    const timeStr = new Date().toLocaleTimeString();
-    const payloadStr = String(payload);
-
-    // Driver Tag write path
-    const driverPanel = appState.panels.find(p =>
-      p.dataSourceMode === 'driver' &&
-      (p.driverWriteTagId || p.driverTagId) &&
-      (p.topic === topic || p.publishTopic === topic || !p.topic)
-    );
-
-    if (driverPanel) {
-      const tagId = driverPanel.driverWriteTagId || driverPanel.driverTagId;
-      if (tagId) {
-        const tag = getDriverTagById(appState, tagId);
-        if (tag && driverBridgeClientRef.current) {
-          driverBridgeClientRef.current.writeTag(tag.tagId, tag.connectionId, payload);
-          return; // Don't also publish to MQTT
-        }
-      }
-    }
-
-    if (clientRef.current && clientRef.current.connected) {
-      clientRef.current.publish(topic, payloadStr);
-    }
-
-    setMqttLogs(prev => [
-      {
-        id: `pub_${Date.now()}`,
-        topic,
-        payload: `[PUBLISHED] ${payloadStr}`,
-        timestamp: timeStr
-      },
-      ...prev.slice(0, 99)
-    ]);
-
-    // Local echo & publish timestamp update
-    const currentDash = activeDashboardRef.current;
-    const prefix = currentDash?.prefixTopic ? currentDash.prefixTopic.trim() : '';
-
-    appState.panels.forEach(p => {
-      const rawTopics = [p.topic?.trim(), p.publishTopic?.trim()].filter(Boolean) as string[];
-      const isMatch = rawTopics.some(rt => {
-        const fullTopic = p.disableDashboardPrefix ? rt : `${prefix}${rt}`;
-        return topic === rt || topic === fullTopic || topic.endsWith('/' + rt) || topic.endsWith(rt);
-      });
-
-      if (isMatch) {
-        let extractedVal: any = payload;
-        if (p.isJSONPayload || p.jsonPath || (typeof payload === 'string' && (payload.startsWith('{') || payload.startsWith('[')))) {
-          const parsed = getJsonValue(payload, p.jsonPath || '');
-          if (parsed !== undefined) {
-            extractedVal = parsed;
-          }
-        }
-        setLatestValues(prev => {
-          const existing = prev[p.panelId];
-          return {
-            ...prev,
-            [p.panelId]: {
-              val: extractedVal,
-              time: existing?.time || '',
-              sentTime: timeStr
-            }
-          };
-        });
-      }
-    });
-  };
-
-  // Publish MQTT Handler with Safeguard Security PIN check
-  const handlePublish = (topic: string, payload: string | number) => {
-    // If Security PIN is assigned and runtime control is locked, prompt for PIN first!
-    if (appState.editPin && !isRuntimeUnlocked) {
-      setPinModalMode('enter');
-      setPendingAction(() => () => {
-        setIsRuntimeUnlocked(true);
-        executePublish(topic, payload);
-      });
-      setIsPinModalOpen(true);
-      return;
-    }
-
-    // No PIN assigned (or already unlocked), execute write directly!
-    executePublish(topic, payload);
-  };
-
-  // Panel CRUD
-  const handleAddPanelSelect = (type: string) => {
-    setIsAddPanelOpen(false);
-    const editionMgr = EditionManager.fromState(appState);
-    const check = editionMgr.CanCreateWidget(appState, 1);
-    if (!check.allowed) {
-      if (editionMgr.IsClient()) {
-        setShowClientReadOnlyNotice(true);
-        setTimeout(() => setShowClientReadOnlyNotice(false), 4500);
-      } else if (check.reason) {
-        setCommunityLimitNotice(check.reason);
-        setTimeout(() => setCommunityLimitNotice(null), 5000);
-      }
-      return;
-    }
-
-    let targetDashId = activeDashboard?.dashboardId;
-    let targetConnId = activeConnection?.connectionId || appState.connections[0]?.connectionId || 'conn_demo';
-
-    if (!targetDashId) {
-      targetDashId = `dash_${Date.now()}`;
-      const autoDash: Dashboard = {
-        dashboardId: targetDashId,
-        dashboardName: 'Main Dashboard',
-        connectionId: targetConnId,
-        isHome: true,
-        icon: 'fa-house',
-        themeColor: '#0ea5e9'
-      };
-      setAppState(prev => ({ ...prev, dashboards: [...prev.dashboards, autoDash] }));
-      setActiveDashboardId(targetDashId);
-    }
-
-    setEditingPanel({
-      type,
-      dashboardId: targetDashId,
-      connectionId: targetConnId,
-      panelName: `New ${type.toUpperCase()}`,
-      topic: `sensors/${type}`,
-      qos: 0
-    });
-  };
-
-  const handleSavePanel = (panelData: any) => {
-    const editionMgr = EditionManager.fromState(appState);
-    const isNewPanel = !panelData.panelId || !appState.panels.some(p => p.panelId === panelData.panelId);
-
-    if (isNewPanel) {
-      const check = editionMgr.CanCreateWidget(appState, 1);
-      if (!check.allowed) {
-        if (editionMgr.IsClient()) {
-          setShowClientReadOnlyNotice(true);
-          setTimeout(() => setShowClientReadOnlyNotice(false), 4500);
-        } else if (check.reason) {
-          setCommunityLimitNotice(check.reason);
-          setTimeout(() => setCommunityLimitNotice(null), 5000);
-        }
-        setEditingPanel(null);
-        return;
-      }
-    } else {
-      const check = editionMgr.CanEditWidget();
-      if (!check.allowed) {
-        if (editionMgr.IsClient()) {
-          setShowClientReadOnlyNotice(true);
-          setTimeout(() => setShowClientReadOnlyNotice(false), 4500);
-        }
-        setEditingPanel(null);
-        return;
-      }
-    }
-
-    const targetConnId = panelData.connectionId || activeConnection?.connectionId || appState.connections[0]?.connectionId || 'conn_demo';
-    let targetDashId = panelData.dashboardId || activeDashboard?.dashboardId || activeConnectionDashboards[0]?.dashboardId;
-
-    let updatedDashboards = appState.dashboards;
-    if (!targetDashId) {
-      targetDashId = `dash_${Date.now()}`;
-      const autoDash: Dashboard = {
-        dashboardId: targetDashId,
-        dashboardName: 'Main Dashboard',
-        connectionId: targetConnId,
-        isHome: true,
-        icon: 'fa-house',
-        themeColor: '#0ea5e9'
-      };
-      updatedDashboards = [...updatedDashboards, autoDash];
-    }
-
-    const completePanel: Panel = {
-      ...panelData,
-      dashboardId: targetDashId,
-      connectionId: targetConnId,
-      panelId: panelData.panelId || `panel_${Date.now()}`
-    };
-
-    setAppState(prev => {
-      const existingPanelIdx = prev.panels.findIndex(p => p.panelId === completePanel.panelId);
-      const newPanels = existingPanelIdx >= 0
-        ? prev.panels.map(p => p.panelId === completePanel.panelId ? completePanel : p)
-        : [...prev.panels, completePanel];
-
-      let nextState: AppState = {
-        ...prev,
-        dashboards: updatedDashboards,
-        panels: newPanels
-      };
-
-      if (completePanel.jsonPath && completePanel.jsonPath.trim()) {
-        nextState = registerCustomTag(nextState, {
-          tagName: completePanel.jsonPath.trim(),
-          tagType: 'read',
-          sourceType: 'manual',
-          parsingDefinition: completePanel.jsonPath.trim(),
-          description: `Used by widget ${completePanel.panelName}`
-        });
-      }
-
-      if (completePanel.publishPattern && completePanel.publishPattern.trim()) {
-        nextState = registerCustomTag(nextState, {
-          tagName: completePanel.publishPattern.trim(),
-          tagType: 'write',
-          sourceType: 'manual',
-          parsingDefinition: completePanel.publishPattern.trim(),
-          description: `Used by widget ${completePanel.panelName}`
-        });
-      }
-
-      return nextState;
-    });
-
-    setActiveConnectionId(targetConnId);
-    setActiveDashboardId(targetDashId);
-    setCurrentView(AppView.DASHBOARD);
-    setEditingPanel(null);
-  };
-
-  const handleDeletePanel = (panelId: string) => {
-    const editionMgr = EditionManager.fromState({ ...appState, userRole });
-    const check = editionMgr.CanDeleteWidget();
-    if (!check.allowed) {
-      if (editionMgr.IsClient()) {
-        setShowClientReadOnlyNotice(true);
-        setTimeout(() => setShowClientReadOnlyNotice(false), 4500);
-      }
-      return;
-    }
-    setConfirmModal({
-      isOpen: true,
-      title: 'Delete Widget',
-      message: 'Are you sure you want to delete this widget?',
-      confirmLabel: 'Delete Widget',
-      confirmVariant: 'danger',
-      onConfirm: () => {
-        setAppState(prev => ({ ...prev, panels: prev.panels.filter(p => p.panelId !== panelId) }));
-        setConfirmModal(prev => ({ ...prev, isOpen: false }));
-      }
-    });
-  };
-
-  const handleClonePanels = (panelIds: string[]) => {
-    const editionMgr = EditionManager.fromState(appState);
-    const check = editionMgr.CanCloneWidget(appState, panelIds.length);
-    if (!check.allowed) {
-      if (editionMgr.IsClient()) {
-        setShowClientReadOnlyNotice(true);
-        setTimeout(() => setShowClientReadOnlyNotice(false), 4500);
-      } else if (check.reason) {
-        setCommunityLimitNotice(check.reason);
-        setTimeout(() => setCommunityLimitNotice(null), 5000);
-      }
-      setIsCloneModalOpen(false);
-      return;
-    }
-
-    const cloned = appState.panels
-      .filter(p => panelIds.includes(p.panelId))
-      .map(p => ({
-        ...p,
-        panelId: `panel_clone_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-        dashboardId: activeDashboard?.dashboardId || p.dashboardId,
-        panelName: `${p.panelName} (Copy)`
-      }));
-
-    setAppState(prev => ({ ...prev, panels: [...prev.panels, ...cloned] }));
-    setIsCloneModalOpen(false);
-  };
-
-  const handleQuickClonePanel = (panel: Panel) => {
-    const editionMgr = EditionManager.fromState(appState);
-    const check = editionMgr.CanCloneWidget(appState, 1);
-    if (!check.allowed) {
-      if (editionMgr.IsClient()) {
-        setShowClientReadOnlyNotice(true);
-        setTimeout(() => setShowClientReadOnlyNotice(false), 4500);
-      } else if (check.reason) {
-        setCommunityLimitNotice(check.reason);
-        setTimeout(() => setCommunityLimitNotice(null), 5000);
-      }
-      return;
-    }
-    handleClonePanels([panel.panelId]);
-  };
-
-  const handleReorderPanels = (reorderedActivePanels: Panel[]) => {
-    if (!activeDashboard) return;
-    setAppState(prev => {
-      const otherPanels = prev.panels.filter(p => p.dashboardId !== activeDashboard.dashboardId);
-      return {
-        ...prev,
-        panels: [...otherPanels, ...reorderedActivePanels]
-      };
-    });
-  };
-
-  // Connection CRUD
-  const handleCreateConnection = (connData: MqttConnection, dashboardsData: Dashboard[]) => {
-    const editionMgr = EditionManager.fromState(appState);
-    const check = editionMgr.CanEditBroker();
-    if (!check.allowed) {
-      if (editionMgr.IsClient()) {
-        setShowClientReadOnlyNotice(true);
-        setTimeout(() => setShowClientReadOnlyNotice(false), 4500);
-      }
-      setCurrentView(AppView.DASHBOARD);
-      return;
-    }
-
-    const connId = connData.connectionId || `conn_${Date.now()}`;
-    const newConn = { ...connData, connectionId: connId };
-
-    const formattedDashboards = dashboardsData.map(d => ({ ...d, connectionId: connId }));
-
-    setAppState(prev => {
-      const existingConnIdx = prev.connections.findIndex(c => c.connectionId === connId);
-      const newConns = existingConnIdx >= 0 
-        ? prev.connections.map(c => c.connectionId === connId ? newConn : c)
-        : [...prev.connections, newConn];
-
-      let updatedDashboards = [...prev.dashboards];
-
-      if (formattedDashboards.length > 0) {
-        const otherDashes = prev.dashboards.filter(d => d.connectionId !== connId);
-        updatedDashboards = [...otherDashes, ...formattedDashboards];
-      } else if (prev.dashboards.length === 0) {
-        // Only if there are ZERO dashboards in the whole app, create a default Main Dashboard
-        const defaultDash: Dashboard = {
-          dashboardId: `dash_${Date.now()}`,
-          dashboardName: 'Main Dashboard',
-          connectionId: connId,
-          isHome: true,
-          icon: 'fa-house',
-          themeColor: '#0ea5e9'
-        };
-        updatedDashboards = [defaultDash];
-      } else {
-        // Associate connectionId with dashboards that don't have one set
-        updatedDashboards = prev.dashboards.map(d => !d.connectionId ? { ...d, connectionId: connId } : d);
-      }
-
-      return {
-        ...prev,
-        connections: newConns,
-        dashboards: updatedDashboards
-      };
-    });
-
-    setActiveConnectionId(connId);
-
-    if (formattedDashboards.length > 0) {
-      setActiveDashboardId(formattedDashboards[0].dashboardId);
-    } else {
-      setAppState(prev => {
-        if (!prev.dashboards.some(d => d.dashboardId === activeDashboardId) && prev.dashboards.length > 0) {
-          const homeOrFirst = prev.dashboards.find(d => d.isHome) || prev.dashboards[0];
-          setActiveDashboardId(homeOrFirst.dashboardId);
-        }
-        return prev;
-      });
-    }
-
-    setCurrentView(AppView.DASHBOARD);
-  };
-
-  const handleDeleteConnection = (connId: string) => {
-    const editionMgr = EditionManager.fromState({ ...appState, userRole });
-    const check = editionMgr.CanDeleteBroker();
-    if (!check.allowed) {
-      if (editionMgr.IsClient()) {
-        setShowClientReadOnlyNotice(true);
-        setTimeout(() => setShowClientReadOnlyNotice(false), 4500);
-      }
-      return;
-    }
-    const targetConn = appState.connections.find(c => c.connectionId === connId);
-    const connName = targetConn ? targetConn.connectionName : 'this connection';
-
-    setConfirmModal({
-      isOpen: true,
-      title: 'Delete Connection',
-      message: `Are you sure you want to delete "${connName}" and all associated dashboards and widgets?`,
-      confirmLabel: 'Delete Connection',
-      confirmVariant: 'danger',
-      onConfirm: () => {
-        setAppState(prev => {
-          if (activeConnectionId === connId) {
-            const remaining = appState.connections.filter(c => c.connectionId !== connId);
-            setActiveConnectionId(remaining[0]?.connectionId || '');
-          }
-          return {
-            ...prev,
-            connections: prev.connections.filter(c => c.connectionId !== connId),
-            dashboards: prev.dashboards.filter(d => d.connectionId !== connId),
-            panels: prev.panels.filter(p => p.connectionId !== connId)
-          };
-        });
-        setActiveConnMenuId(null);
-        setConfirmModal(prev => ({ ...prev, isOpen: false }));
-      }
-    });
-  };
-
-  const handleCopyConnection = (connId: string) => {
-    const editionMgr = EditionManager.fromState({ ...appState, userRole });
-    const check = editionMgr.CanEditBroker();
-    if (!check.allowed) {
-      if (editionMgr.IsClient()) {
-        setShowClientReadOnlyNotice(true);
-        setTimeout(() => setShowClientReadOnlyNotice(false), 4500);
-      }
-      return;
-    }
-
-    const sourceConn = appState.connections.find(c => c.connectionId === connId);
-    if (!sourceConn) return;
-
-    const newConnId = `conn_${Date.now()}`;
-    const newConn: MqttConnection = {
-      ...sourceConn,
-      connectionId: newConnId,
-      connectionName: `${sourceConn.connectionName} (Copy)`
-    };
-
-    const sourceDashboards = appState.dashboards.filter(d => d.connectionId === connId);
-    const dashIdMap: Record<string, string> = {};
-
-    const newDashboards: Dashboard[] = sourceDashboards.map(d => {
-      const newDashId = `dash_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
-      dashIdMap[d.dashboardId] = newDashId;
-      return {
-        ...d,
-        dashboardId: newDashId,
-        connectionId: newConnId
-      };
-    });
-
-    const sourcePanels = appState.panels.filter(p => sourceDashboards.some(d => d.dashboardId === p.dashboardId));
-    const newPanels: Panel[] = sourcePanels.map(p => ({
-      ...p,
-      panelId: `panel_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-      connectionId: newConnId,
-      dashboardId: dashIdMap[p.dashboardId] || p.dashboardId
-    }));
-
-    setAppState(prev => ({
-      ...prev,
-      connections: [...prev.connections, newConn],
-      dashboards: [...prev.dashboards, ...newDashboards],
-      panels: [...prev.panels, ...newPanels]
-    }));
-    setActiveConnMenuId(null);
-  };
-
-  const handleAddDriverConnection = (conn: import('./types').DriverConnection) => {
-    setAppState(prev => ({
-      ...prev,
-      driverConnections: [...(prev.driverConnections || []), conn]
-    }));
-  };
-
-  const handleUpdateDriverConnection = (conn: import('./types').DriverConnection) => {
-    setAppState(prev => ({
-      ...prev,
-      driverConnections: (prev.driverConnections || []).map(c =>
-        c.connectionId === conn.connectionId ? conn : c
-      )
-    }));
-  };
-
-  const handleDeleteDriverConnection = (connectionId: string) => {
-    setAppState(prev => ({
-      ...prev,
-      driverConnections: (prev.driverConnections || []).filter(c => c.connectionId !== connectionId)
-    }));
-  };
-
-  const handleAddDriverTag = (tag: import('./types').DriverTag) => {
-    setAppState(prev => ({
-      ...prev,
-      driverTags: [...(prev.driverTags || []), { ...tag, createdAt: new Date().toISOString() }]
-    }));
-  };
-
-  const handleUpdateDriverTag = (tag: import('./types').DriverTag) => {
-    setAppState(prev => ({
-      ...prev,
-      driverTags: (prev.driverTags || []).map(t =>
-        t.tagId === tag.tagId ? { ...tag, updatedAt: new Date().toISOString() } : t
-      )
-    }));
-  };
-
-  const handleDeleteDriverTag = (tagId: string) => {
-    setAppState(prev => ({
-      ...prev,
-      driverTags: (prev.driverTags || []).filter(t => t.tagId !== tagId)
-    }));
-  };
-
-  const handleImportDriverTags = (tags: import('./types').DriverTag[]) => {
-    setAppState(prev => ({
-      ...prev,
-      driverTags: [
-        ...(prev.driverTags || []).filter(t => !tags.some(imported => imported.tagId === t.tagId)),
-        ...tags
-      ]
-    }));
-  };
-
-  // OPC UA Browser import handler — adds a single browsed node as a DriverTag
-  const handleImportOpcUaTag = (tag: import('./types').DriverTag) => {
-    setAppState(prev => {
-      const alreadyExists = (prev.driverTags || []).some(
-        t => t.nodeId === tag.nodeId && t.connectionId === tag.connectionId
-      );
-      if (alreadyExists) return prev;
-      return {
-        ...prev,
-        driverTags: [...(prev.driverTags || []), { ...tag, createdAt: new Date().toISOString() }]
-      };
-    });
-  };
-
-  const handleDeleteDashboard = (dashId: string) => {
-    const editionMgr = EditionManager.fromState({ ...appState, userRole });
-    const check = editionMgr.CanDeleteScreen();
-    if (!check.allowed) {
-      if (editionMgr.IsClient()) {
-        setShowClientReadOnlyNotice(true);
-        setTimeout(() => setShowClientReadOnlyNotice(false), 4500);
-      }
-      return;
-    }
-
-    const targetDash = appState.dashboards.find(d => d.dashboardId === dashId);
-    const dashName = targetDash ? targetDash.name : 'this screen';
-
-    setConfirmModal({
-      isOpen: true,
-      title: 'Delete Screen / Dashboard',
-      message: `Are you sure you want to delete "${dashName}"? All widgets on this screen will be permanently removed.`,
-      confirmLabel: 'Delete Screen',
-      confirmVariant: 'danger',
-      onConfirm: () => {
-        setAppState(prev => {
-          let remainingDashboards = prev.dashboards.filter(d => d.dashboardId !== dashId);
-          if (remainingDashboards.length === 0) {
-            const newDefaultDash: Dashboard = {
-              dashboardId: `dash_main_${Date.now()}`,
-              dashboardName: 'Main Screen',
-              connectionId: prev.connections[0]?.connectionId || '',
-              isHome: true,
-              icon: 'fa-desktop',
-              themeColor: '#38bdf8'
-            };
-            remainingDashboards = [newDefaultDash];
-            setActiveDashboardId(newDefaultDash.dashboardId);
-          } else {
-            if (!remainingDashboards.some(d => d.isHome)) {
-              remainingDashboards[0] = { ...remainingDashboards[0], isHome: true };
-            }
-            if (activeDashboardId === dashId) {
-              const homeDash = remainingDashboards.find(d => d.isHome) || remainingDashboards[0];
-              setActiveDashboardId(homeDash.dashboardId);
-            }
-          }
-          return {
-            ...prev,
-            dashboards: remainingDashboards,
-            panels: prev.panels.filter(p => p.dashboardId !== dashId)
-          };
-        });
-        setActiveDashTabMenuId(null);
-        setConfirmModal(prev => ({ ...prev, isOpen: false }));
-      }
-    });
-  };
-
-  const handleCopyDashboard = (dashId: string) => {
-    const editionMgr = EditionManager.fromState(appState);
-    const check = editionMgr.CanCreateScreen(appState);
-    if (!check.allowed) {
-      if (editionMgr.IsClient()) {
-        setShowClientReadOnlyNotice(true);
-        setTimeout(() => setShowClientReadOnlyNotice(false), 4500);
-      } else if (check.reason) {
-        setCommunityLimitNotice(check.reason);
-        setTimeout(() => setCommunityLimitNotice(null), 5000);
-      }
-      return;
-    }
-
-    const sourceDash = appState.dashboards.find(d => d.dashboardId === dashId);
-    if (!sourceDash) return;
-
-    const newDashId = `dash_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
-    const newDash: Dashboard = {
-      ...sourceDash,
-      dashboardId: newDashId,
-      dashboardName: `${sourceDash.dashboardName} (Copy)`
-    };
-
-    const sourcePanels = appState.panels.filter(p => p.dashboardId === dashId);
-    const newPanels: Panel[] = sourcePanels.map(p => ({
-      ...p,
-      panelId: `panel_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-      dashboardId: newDashId
-    }));
-
-    setAppState(prev => ({
-      ...prev,
-      dashboards: [...prev.dashboards, newDash],
-      panels: [...prev.panels, ...newPanels]
-    }));
-    setActiveDashboardId(newDashId);
-  };
-
-  const handleEditDashboard = (dash: Dashboard) => {
-    const editionMgr = EditionManager.fromState(appState);
-    const check = editionMgr.CanEditScreen();
-    if (!check.allowed) {
-      if (editionMgr.IsClient()) {
-        setShowClientReadOnlyNotice(true);
-        setTimeout(() => setShowClientReadOnlyNotice(false), 4500);
-      }
-      return;
-    }
-
-    setEditingDashboard(dash);
-  };
-
-  const handleOpenActiveBrokerSettings = () => {
-    const editionMgr = EditionManager.fromState(appState);
-    const check = editionMgr.CanEditBroker();
-    if (!check.allowed) {
-      if (editionMgr.IsClient()) {
-        setShowClientReadOnlyNotice(true);
-        setTimeout(() => setShowClientReadOnlyNotice(false), 4500);
-      }
-      return;
-    }
-    const conn = appState.connections.find(c => c.connectionId === activeConnectionId) || appState.connections[0];
-    if (conn) {
-      setEditingConnection(conn);
-      setCurrentView(AppView.ADD_CONNECTION);
-    }
-  };
-
-  const handleShareDashboard = (dash: Dashboard) => {
-    const conn = appState.connections.find(c => c.connectionId === dash.connectionId);
-    if (conn) {
-      setSharingConnection(conn);
-    }
-  };
 
   // Render Landing Page view when on startup gate
   if (userRole === 'gate' || productEdition === ProductEdition.LANDING) {
@@ -2418,8 +195,16 @@ export function App() {
       <LandingPage
         appState={appState}
         hasSavedClientSetup={isClientSetupSaved}
-        onLoadSavedClientSetup={handleLoadSavedClientSetup}
-        onLoadSavedCommunitySetup={handleLoadSavedCommunitySetup}
+        onLoadSavedClientSetup={() => handleLoadSavedClientSetup((dashId, connId) => {
+          if (dashId) setActiveDashboardId(dashId);
+          if (connId) setActiveConnectionId(connId);
+          setCurrentView(AppView.DASHBOARD);
+        })}
+        onLoadSavedCommunitySetup={(asClientMode) => handleLoadSavedCommunitySetup(asClientMode, (dashId, connId) => {
+          if (dashId) setActiveDashboardId(dashId);
+          if (connId) setActiveConnectionId(connId);
+          setCurrentView(AppView.DASHBOARD);
+        })}
         onSelectCommunityMode={() => {
           const freshDash: Dashboard = {
             dashboardId: 'dash_main',
@@ -2439,7 +224,7 @@ export function App() {
             dashboards: prev.dashboards.length > 0 && prev.panels.length === 0 ? prev.dashboards : [freshDash],
             panels: []
           }));
-          setActiveDashboardId(prev => prev || 'dash_main');
+          setActiveDashboardId('dash_main');
           setIsEngineeringChoiceOpen(true);
           setCurrentView(AppView.DASHBOARD);
         }}
@@ -2462,12 +247,10 @@ export function App() {
             dashboards: prev.dashboards.length > 0 && prev.panels.length === 0 ? prev.dashboards : [freshDash],
             panels: []
           }));
-          setActiveDashboardId(prev => prev || 'dash_main');
+          setActiveDashboardId('dash_main');
           setIsEngineeringChoiceOpen(true);
           setCurrentView(AppView.DASHBOARD);
         }}
-
-
         onImportClientPackage={(newAppState, clientName, expiresAt, preferredWorkstationMode) => {
           const finalState: AppState = {
             ...newAppState,
@@ -2494,7 +277,6 @@ export function App() {
           if (newAppState.connections[0]) {
             setActiveConnectionId(newAppState.connections[0].connectionId);
           }
-          // Save imported commercial client package to isolated commercial slot
           saveCommercialState(finalState);
           setIsClientSetupSaved(true);
           setCurrentView(AppView.DASHBOARD);
@@ -2504,26 +286,7 @@ export function App() {
     );
   }
 
-  const handleLoadHatcheryDemo = () => {
-    if (window.confirm('Load Water System Sample Project? This will replace your dashboards with a clean 5-widget sample HMI screen.')) {
-      const connId = activeConnectionId || 'conn_demo';
-      const isCommunity = editionMgr.IsCommunity();
-      const { dashboards, panels } = getSampleProject(connId, undefined, undefined, isCommunity);
-      
-      setAppState(prev => sanitizeAppState({
-        ...prev,
-        dashboards: isCommunity ? dashboards : [...prev.dashboards.filter(d => !d.dashboardId.includes('water') && !d.dashboardId.includes('air') && !d.dashboardId.includes('daman') && d.dashboardName !== 'Main Dashboard'), ...dashboards],
-        panels: isCommunity ? panels : [...prev.panels.filter(p => !p.dashboardId.includes('water') && !p.dashboardId.includes('air') && !p.dashboardId.includes('daman')), ...panels]
-      }));
-
-      if (dashboards.length > 0) {
-        setActiveDashboardId(dashboards[0].dashboardId);
-      }
-    }
-  };
-
-  const editionMgr = EditionManager.fromState(appState);
-  const activeMqttConnection = appState.connections.find(c => c.connectionId === activeConnectionId) || appState.connections[0];
+  const activeMqttConnection = activeConnection;
 
   // Render main screen view
   return (
@@ -2542,7 +305,6 @@ export function App() {
         }`}
       >
         <div className={`flex items-center gap-1.5 sm:gap-2 ${isDesktop ? 'flex-wrap' : 'shrink-0'}`}>
-
           
           {/* Sticky Left Brand Container (Hamburger + Logo + Title) */}
           <div className="flex items-center space-x-1.5 shrink-0 sticky left-0 theme-header z-30 pr-1.5">
@@ -2560,7 +322,7 @@ export function App() {
               size="sm" 
               accentColor={activeThemeObj.primary} 
               isCommunity={userRole === 'community' || productEdition === ProductEdition.COMMUNITY} 
-              />
+            />
             <span className="font-extrabold text-white text-xs sm:text-sm tracking-tight whitespace-nowrap shrink-0 hidden lg:inline">TASC IIoT Studio</span>
           </div>
 
@@ -2663,7 +425,6 @@ export function App() {
               </span>
             )}
           </button>
-
 
           {userRole === 'community' || productEdition === ProductEdition.COMMUNITY ? (
             <div className="flex items-center space-x-1.5 shrink-0">
@@ -2962,8 +723,6 @@ export function App() {
           )}
         </div>
 
-
-
         {/* Right Toolbar */}
         <div className={`flex items-center gap-1.5 ${isDesktop ? 'flex-wrap' : 'shrink-0'}`}>
 
@@ -2973,7 +732,6 @@ export function App() {
                 <button 
                   type="button"
                   onClick={() => {
-                    const editionMgr = EditionManager.fromState(appState);
                     const check = editionMgr.CanCreateScreen(appState);
                     if (!check.allowed) {
                       if (editionMgr.IsClient()) {
@@ -3064,8 +822,6 @@ export function App() {
               </div>
             )}
 
-
-
             {isLayoutMode && (
               <div className="bg-amber-500/15 border border-amber-500/30 rounded-2xl p-3 mb-4 flex items-center justify-between text-amber-300 text-xs font-semibold animate-in fade-in">
                 <div className="flex items-center space-x-2">
@@ -3106,21 +862,7 @@ export function App() {
             )}
 
             {activeMode === 'hmi' ? (
-              <WebHmiCanvasView
-                appState={appState}
-                activeDashboardId={activeDashboardId}
-                onSelectDashboard={handleSelectDashboard}
-                onUpdateAppState={setAppState}
-                onPublish={handlePublish}
-                latestValues={latestValues}
-                historyValues={historyValues}
-                userRole={userRole}
-                isFullscreen={isFullscreen}
-                onOpenAddPanel={handleOpenAddPanel}
-                onEditPanel={(p) => setEditingPanel(p)}
-                onDeletePanel={handleDeletePanel}
-                onClonePanel={handleQuickClonePanel}
-              />
+              <WebHmiCanvasView />
             ) : activePanels.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-4">
                 <div 
@@ -3203,9 +945,6 @@ export function App() {
 
             <div className="space-y-4">
               {appState.connections.map(conn => {
-                const connDashboards = appState.dashboards.filter(d => d.connectionId === conn.connectionId);
-                const connPanels = appState.panels.filter(p => connDashboards.some(d => d.dashboardId === p.dashboardId));
-
                 return (
                   <div key={conn.connectionId} className="bg-slate-900/80 p-5 rounded-3xl border border-slate-800 flex items-center justify-between hover:border-sky-500/40 transition-all shadow-xl relative">
                     <div className="flex items-center space-x-4">
@@ -3367,37 +1106,15 @@ export function App() {
         )}
 
         {currentView === AppView.HISTORIAN_TREND && (
-          <HistorianTrendView
-            onBack={() => setCurrentView(AppView.DASHBOARD)}
-            appState={appState}
-            onUpdateAppState={(newState) => setAppState(newState)}
-            onNavigate={setCurrentView}
-            latestValues={latestValues}
-          />
+          <HistorianTrendView />
         )}
 
         {currentView === AppView.DRIVER_CONNECTIONS && (
-          <DriverConnectionsView
-            onBack={() => setCurrentView(AppView.DASHBOARD)}
-            appState={appState}
-            onNavigate={setCurrentView}
-            onAdd={handleAddDriverConnection}
-            onUpdate={handleUpdateDriverConnection}
-            onDelete={handleDeleteDriverConnection}
-          />
+          <DriverConnectionsView />
         )}
 
         {currentView === AppView.DRIVER_TAG_MANAGER && (
-          <DriverTagManagerView
-            onBack={() => setCurrentView(AppView.DASHBOARD)}
-            appState={appState}
-            latestValues={latestValues}
-            onNavigate={setCurrentView}
-            onAdd={handleAddDriverTag}
-            onUpdate={handleUpdateDriverTag}
-            onDelete={handleDeleteDriverTag}
-            onImport={handleImportDriverTags}
-          />
+          <DriverTagManagerView />
         )}
 
         {currentView === AppView.OPC_UA_BROWSER && (
@@ -3436,12 +1153,7 @@ export function App() {
 
         {currentView === AppView.AI_ASSISTANT && (
           <AiErrorBoundary>
-            <AiAssistantView
-              onBack={() => setCurrentView(AppView.DASHBOARD)}
-              latestValues={latestValues}
-              appState={appState}
-              activeAlarms={activeAlarms}
-            />
+            <AiAssistantView />
           </AiErrorBoundary>
         )}
 
@@ -3493,7 +1205,6 @@ export function App() {
         onToggleLock={handleToggleLock}
         onEditLayout={handleEditLayout}
         onAddDashboard={() => {
-          const editionMgr = EditionManager.fromState(appState);
           const check = editionMgr.CanCreateScreen(appState);
           if (!check.allowed) {
             if (check.reason) {
@@ -3538,14 +1249,6 @@ export function App() {
         panel={editingPanel || {}}
         isOpen={!!editingPanel}
         onClose={() => setEditingPanel(null)}
-        onSave={handleSavePanel}
-        appState={appState}
-        onAddHistorianTag={(newTag) => {
-          setAppState(prev => ({
-            ...prev,
-            historianTags: [...(prev.historianTags || []).filter(t => t.id !== newTag.id), newTag]
-          }));
-        }}
       />
 
       {editingDashboard && (
@@ -3600,15 +1303,13 @@ export function App() {
 
       <ClearAllModal
         isOpen={isClearAllModalOpen}
-        onClose={() => setIsClearAllModalOpen(false)}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
         onConfirmClearAll={handleConfirmClearAll}
         widgetCount={appState.panels.length}
         connectionCount={appState.connections.length}
         dashboardCount={appState.dashboards.length}
         editionName={userRole === 'community' || productEdition === ProductEdition.COMMUNITY ? 'Community Edition' : 'Engineering Studio'}
       />
-
-
 
       {/* Mandatory Client Edition Save Setup Modal */}
       {!isClientSetupSaved && (userRole === 'client' || productEdition === ProductEdition.CLIENT_RUNTIME) && (
@@ -3688,8 +1389,6 @@ export function App() {
         <FddPredictiveMaintenanceModal
           isOpen={isFddModalOpen}
           onClose={() => setIsFddModalOpen(false)}
-          latestValues={latestValues}
-          appState={appState}
         />
       )}
 
@@ -3703,7 +1402,7 @@ export function App() {
         onOpenHistorian={() => setIsAlarmHistorianModalOpen(true)}
       />
 
-      {/* AI Copilot FAB — shown on Dashboard and Web HMI only, never for client role */}
+      {/* AI Copilot FAB */}
       {userRole !== 'client' &&
        (currentView === AppView.DASHBOARD || currentView === AppView.WEB_HMI) && (
         <AiChatFab onClick={() => setIsAiDrawerOpen(true)} />
@@ -3767,6 +1466,14 @@ export function App() {
         onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
       />
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <AppContextProvider>
+      <AppContent />
+    </AppContextProvider>
   );
 }
 

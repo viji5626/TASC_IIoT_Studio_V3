@@ -9,16 +9,34 @@ import { estimateStorageFootprint, saveHistorianRetentionConfig, getIsStoragePer
 import DriverTagSelector from './DriverTagSelector';
 import { evaluateMotionDynamics, evaluateRotationDynamics, getDynamicElementTransform } from '../utils/dynamicsHelper';
 
+import { useAppStore } from '../store/useAppStore';
+
 interface EditPanelModalProps {
   panel: Partial<Panel>;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (updatedPanel: any) => void;
+  onSave?: (updatedPanel: any) => void;
   appState?: AppState;
   onAddHistorianTag?: (tag: HistorianTag) => void;
 }
 
-const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose, onSave, appState, onAddHistorianTag }) => {
+const EditPanelModal: React.FC<EditPanelModalProps> = ({ 
+  panel, 
+  isOpen, 
+  onClose, 
+  onSave: onSaveProp, 
+  appState: appStateProp, 
+  onAddHistorianTag: onAddHistorianTagProp 
+}) => {
+  const store = useAppStore();
+  const appState = appStateProp ?? store.appState;
+  const onSave = onSaveProp ?? store.handleSavePanel;
+  const onAddHistorianTag = onAddHistorianTagProp ?? ((newTag: HistorianTag) => {
+    store.setAppState(prev => ({
+      ...prev,
+      historianTags: [...(prev.historianTags || []).filter(t => t.id !== newTag.id), newTag]
+    }));
+  });
   const [formData, setFormData] = useState<any>(panel);
   const [pickingIconFor, setPickingIconFor] = useState<'on' | 'off' | null>(null);
   const [pickingColorFor, setPickingColorFor] = useState<'iconOn' | 'iconOff' | 'first' | 'second' | 'third' | null>(null);
@@ -285,7 +303,7 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
   const isAlarmLog = formData.type === PanelType.ALARM_LOG || (formData.type as string) === 'alarm_log';
   const isSetpointInput = isSlider || isTextInput;
   const isOptionsType = formData.type === PanelType.COMBO_BOX || formData.type === PanelType.RADIO_BUTTONS || formData.type === PanelType.MULTI_STATE;
-  const isLineGraph = formData.type === PanelType.LINE_GRAPH;
+  const isLineGraph = formData.type === PanelType.LINE_GRAPH || (formData.type as string) === 'line_graph' || (formData.type as string) === 'chart';
   const isRadioButtons = formData.type === PanelType.RADIO_BUTTONS;
   const isComboBox = formData.type === PanelType.COMBO_BOX;
 
@@ -1198,7 +1216,8 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
           {/* ══════════════════════════════════════════════════════════════════════════════ */}
           {/* ─── TAG-BASED ANIMATION & DYNAMICS (MOTION PATH & ROTATION) ────────────────── */}
           {/* ══════════════════════════════════════════════════════════════════════════════ */}
-          <div className="space-y-5 pt-3 border-t border-[#262626] bg-gradient-to-b from-[#111827] via-[#0f172a] to-[#0b0f19] p-5 rounded-2xl border border-sky-500/40 shadow-2xl">
+          {!isLineGraph && (
+            <div className="space-y-5 pt-3 border-t border-[#262626] bg-gradient-to-b from-[#111827] via-[#0f172a] to-[#0b0f19] p-5 rounded-2xl border border-sky-500/40 shadow-2xl">
             {/* Header with Status Badges */}
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
               <div className="flex items-center space-x-2.5">
@@ -2173,8 +2192,9 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({ panel, isOpen, onClose,
               )}
             </div>
           </div>
+          )}
 
-          {!isStaticOrDecorative && (
+          {!isStaticOrDecorative && !isLineGraph && (
             <>
               {/* Dedicated Equipment Trip Tag & Fault Alarm Controls */}
               <div className="space-y-4 pt-3 border-t border-[#262626] bg-[#1a0f12] p-4 rounded-xl border border-red-500/40 shadow-inner">

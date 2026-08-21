@@ -846,6 +846,9 @@ export async function queryHistoricalRange(
   endMs: number,
   targetDisplayPoints: number = 1000
 ): Promise<TrendLogPoint[]> {
+  if (!db) {
+    await initTrendHistorianDB();
+  }
   if (!db) return [];
 
   // 1. Fetch hot raw points in range

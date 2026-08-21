@@ -25,7 +25,7 @@ export function getPanelTelemetryStatus(
 
   const hasDataBinding = Boolean(panel.topic?.trim() || panel.driverTagId || dynamicTagKey);
 
-  // Static, decorative, clock, or non-telemetry elements without bindings are never marked offline
+  // Static, decorative, clock, alarm log, or trend line graphs are never marked offline
   const isStaticOrNonTelemetry =
     panel.type === 'static_text' ||
     (panel.type as string) === 'static_text' ||
@@ -33,6 +33,10 @@ export function getPanelTelemetryStatus(
     panel.type === 'clock' ||
     panel.type === 'screen_jump' ||
     panel.type === 'alarm_log' ||
+    panel.type === 'line_graph' ||
+    (panel.type as string) === 'line_graph' ||
+    panel.type === 'chart' ||
+    (panel.type as string) === 'chart' ||
     (panel.type === 'image' && !hasDataBinding) ||
     (!hasDataBinding);
 
