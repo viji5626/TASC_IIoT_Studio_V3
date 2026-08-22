@@ -1,0 +1,341 @@
+{
+  "timestamp": "2026-08-22T02:18:07.358Z",
+  "totalSymbols": 79,
+  "errorCount": 0,
+  "warningCount": 0,
+  "issues": [
+    {
+      "symbolId": "hvac.duct.tee.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'hvac.duct.tee.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "hvac.duct.reducer.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'hvac.duct.reducer.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "hvac.fan.axial_inline.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'hvac.fan.axial_inline.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "hvac.damper.vcd.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'hvac.damper.vcd.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "hvac.damper.motorized_fire.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'hvac.damper.motorized_fire.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "hvac.terminal.diffuser_4way.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'hvac.terminal.diffuser_4way.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "hvac.terminal.vav_box.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'hvac.terminal.vav_box.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "hvac.terminal.fcu.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'hvac.terminal.fcu.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "hvac.duct.silencer_attenuator.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'hvac.duct.silencer_attenuator.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "hvac.duct.bellmouth_intake.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'hvac.duct.bellmouth_intake.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "hvac.duct.exhaust_stack_rain_cap.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'hvac.duct.exhaust_stack_rain_cap.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "fans.fd_fan.centrifugal.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'fans.fd_fan.centrifugal.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "fans.axial.vane_axial.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'fans.axial.vane_axial.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "fans.roof.upblast_exhauster.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'fans.roof.upblast_exhauster.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "fans.blower.sirocco_double_inlet.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'fans.blower.sirocco_double_inlet.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "pulleys.vbelt.multi_groove_sheave.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'pulleys.vbelt.multi_groove_sheave.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "pulleys.timing.toothed_synchronous.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'pulleys.timing.toothed_synchronous.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "pulleys.flat.crowned_idler.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'pulleys.flat.crowned_idler.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "pumps.slurry.heavy_duty_lined.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'pumps.slurry.heavy_duty_lined.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "pumps.vertical.turbine_sump.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'pumps.vertical.turbine_sump.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "pumps.inline.multistage_vertical.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'pumps.inline.multistage_vertical.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "pumps.diaphragm.air_operated_double.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'pumps.diaphragm.air_operated_double.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "pumps.gear.external_rotary.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'pumps.gear.external_rotary.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "dampers.butterfly.round.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'dampers.butterfly.round.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "dampers.backdraft.gravity_louver.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'dampers.backdraft.gravity_louver.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "dampers.guillotine.slide_gate.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'dampers.guillotine.slide_gate.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "motors.explosion_proof.flameproof.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'motors.explosion_proof.flameproof.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "mining.crusher.cone.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'mining.crusher.cone.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "mining.screen.vibrating.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'mining.screen.vibrating.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "mining.feeder.apron.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'mining.feeder.apron.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "mathand.packaging.case_sealer.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'mathand.packaging.case_sealer.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "mathand.diverter.pneumatic_pusher.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'mathand.diverter.pneumatic_pusher.flat2d' has no matching .3d counterpart variant."
+    },
+    {
+      "symbolId": "mathand.filling.rotary_capper.flat2d",
+      "type": "info",
+      "code": "MISSING_3D_VARIANT",
+      "message": "Symbol 'mathand.filling.rotary_capper.flat2d' has no matching .3d counterpart variant."
+    }
+  ],
+  "duplicateIds": [],
+  "missingVariants": [
+    {
+      "symbolId": "hvac.duct.tee.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "hvac.duct.reducer.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "hvac.fan.axial_inline.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "hvac.damper.vcd.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "hvac.damper.motorized_fire.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "hvac.terminal.diffuser_4way.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "hvac.terminal.vav_box.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "hvac.terminal.fcu.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "hvac.duct.silencer_attenuator.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "hvac.duct.bellmouth_intake.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "hvac.duct.exhaust_stack_rain_cap.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "fans.fd_fan.centrifugal.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "fans.axial.vane_axial.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "fans.roof.upblast_exhauster.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "fans.blower.sirocco_double_inlet.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "pulleys.vbelt.multi_groove_sheave.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "pulleys.timing.toothed_synchronous.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "pulleys.flat.crowned_idler.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "pumps.slurry.heavy_duty_lined.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "pumps.vertical.turbine_sump.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "pumps.inline.multistage_vertical.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "pumps.diaphragm.air_operated_double.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "pumps.gear.external_rotary.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "dampers.butterfly.round.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "dampers.backdraft.gravity_louver.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "dampers.guillotine.slide_gate.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "motors.explosion_proof.flameproof.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "mining.crusher.cone.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "mining.screen.vibrating.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "mining.feeder.apron.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "mathand.packaging.case_sealer.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "mathand.diverter.pneumatic_pusher.flat2d",
+      "missing": "3d"
+    },
+    {
+      "symbolId": "mathand.filling.rotary_capper.flat2d",
+      "missing": "3d"
+    }
+  ]
+}

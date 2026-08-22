@@ -10,8 +10,9 @@ export function isMobileDevice(): boolean {
   const ua = navigator.userAgent || '';
   const isMobileUa = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(ua);
   const isTouchSmallScreen = (navigator.maxTouchPoints > 1 && window.innerWidth < 1024);
+  const isSmallScreen = window.innerWidth < 768;
 
-  return isMobileUa || isTouchSmallScreen;
+  return isMobileUa || isTouchSmallScreen || isSmallScreen;
 }
 
 /**

@@ -80,13 +80,16 @@ export function getPanelTelemetryStatus(
     liveData = latestValues[cleanTopic];
   }
 
+  // Check if watchdog / stale timeout is enabled on this panel
+  const isWatchdogEnabled = panel.enableStaleTimeout !== false;
+
   if (!liveData) {
     return {
       hasData: false,
-      isStale: true,
-      isBad: true,
-      isOffline: true,
-      statusText: 'NO_DATA'
+      isStale: isWatchdogEnabled,
+      isBad: isWatchdogEnabled,
+      isOffline: isWatchdogEnabled,
+      statusText: isWatchdogEnabled ? 'NO_DATA' : 'GOOD'
     };
   }
 
@@ -96,7 +99,7 @@ export function getPanelTelemetryStatus(
       hasData: liveData.val !== undefined && liveData.val !== null,
       isStale: false,
       isBad: true,
-      isOffline: true,
+      isOffline: isWatchdogEnabled,
       statusText: 'BAD',
       lastUpdatedMs: liveData.timestampMs
     };
@@ -105,10 +108,10 @@ export function getPanelTelemetryStatus(
   if (liveData.val === undefined || liveData.val === null) {
     return {
       hasData: false,
-      isStale: true,
-      isBad: true,
-      isOffline: true,
-      statusText: 'NO_DATA',
+      isStale: isWatchdogEnabled,
+      isBad: isWatchdogEnabled,
+      isOffline: isWatchdogEnabled,
+      statusText: isWatchdogEnabled ? 'NO_DATA' : 'GOOD',
       lastUpdatedMs: liveData.timestampMs
     };
   }
@@ -116,7 +119,7 @@ export function getPanelTelemetryStatus(
   // Stale Watchdog Timeout Calculation
   // Default timeout interval is 10 seconds if not explicitly set
   const timeoutSec = panel.staleTimeoutSeconds !== undefined ? panel.staleTimeoutSeconds : 10;
-  const isTimeoutEnabled = panel.enableStaleTimeout !== false && timeoutSec > 0;
+  const isTimeoutEnabled = isWatchdogEnabled && timeoutSec > 0;
 
   if (isTimeoutEnabled && liveData.timestampMs) {
     const elapsedSec = (nowMs - liveData.timestampMs) / 1000;

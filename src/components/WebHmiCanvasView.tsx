@@ -11,11 +11,15 @@ import { getSmartIconAnimationClass, SmartIcon } from '../utils/iconAnimator';
 import { isPanelTripped } from '../utils/tripHelper';
 import { getPanelTelemetryStatus } from '../utils/staleHelper';
 import { AlarmHistorianWidget } from './AlarmHistorianWidget';
+import { TASCGrid } from './sql';
 import { EditionManager } from '../utils/EditionManager';
 import { ColorBoxPopover } from './ColorBoxPopover';
 import { getDynamicElementTransform, evaluateMotionDynamics, evaluateRotationDynamics, getEffectiveMotionPathPoints, evaluatePanelDynamics } from '../utils/dynamicsHelper';
 import { useDeviceCapability } from '../utils/deviceDetection';
 import { HmiCanvasLeftDock } from './HmiCanvasLeftDock';
+import { HmiCanvas3dViewport } from '../3d/canvas/HmiCanvas3dViewport';
+import { ProjectLibraryBrowser } from '../3d/library/ProjectLibraryBrowser';
+import { ProjectLibrary } from '../3d/library/ProjectLibrary';
 
 import { useAppStore } from '../store/useAppStore';
 
@@ -35,232 +39,14 @@ interface WebHmiCanvasViewProps {
   onClonePanel?: (panel: Panel) => void;
 }
 
-interface DemoPreset {
-  id: string;
-  title: string;
-  desc: string;
-  icon: string;
-  bgClass: string;
-  textClass: string;
-  elementCount: number;
-}
+import { getSmoothCurvePath, getPipeFilletPath } from '../utils/hmiPathMath';
+import { CANVAS_PRESET_COLORS, ELEMENT_PRESET_COLORS } from './canvas/CanvasPresetColors';
+import { LiveClockWidget } from './canvas/LiveClockWidget';
 
-const CANVAS_PRESET_COLORS = [
-  { name: 'Industrial Dark', color: '#030712' },
-  { name: 'SCADA Slate', color: '#0f172a' },
-  { name: 'Charcoal Grid', color: '#18181b' },
-  { name: 'Blueprint Navy', color: '#091e3a' },
-  { name: 'Retro Matrix', color: '#021a0f' },
-  { name: 'Light Factory Gray', color: '#f1f5f9' },
-  { name: 'Pure Dark', color: '#000000' }
-];
-
-const getSmoothCurvePath = (pts: Array<{ x: number; y: number }>): string => {
-  if (!pts || pts.length === 0) return '';
-  if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`;
-  if (pts.length === 2) return `M ${pts[0].x} ${pts[0].y} L ${pts[1].x} ${pts[1].y}`;
-
-  let d = `M ${pts[0].x} ${pts[0].y}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[i === 0 ? i : i - 1];
-    const p1 = pts[i];
-    const p2 = pts[i + 1];
-    const p3 = pts[i + 2 < pts.length ? i + 2 : i + 1];
-
-    const cp1x = p1.x + (p2.x - p0.x) / 6;
-    const cp1y = p1.y + (p2.y - p0.y) / 6;
-    const cp2x = p2.x - (p3.x - p1.x) / 6;
-    const cp2y = p2.y - (p3.y - p1.y) / 6;
-
-    d += ` C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)}, ${cp2x.toFixed(2)} ${cp2y.toFixed(2)}, ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
-  }
-  return d;
-};
-
-const getPipeFilletPath = (pts: Array<{ x: number; y: number }>, cornerRadius: number = 16): string => {
-  if (!pts || pts.length === 0) return '';
-  if (pts.length === 1) return `M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`;
-  if (pts.length === 2) return `M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)} L ${pts[1].x.toFixed(2)} ${pts[1].y.toFixed(2)}`;
-
-  let d = `M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`;
-
-  for (let i = 1; i < pts.length - 1; i++) {
-    const prev = pts[i - 1];
-    const curr = pts[i];
-    const next = pts[i + 1];
-
-    const dx1 = curr.x - prev.x;
-    const dy1 = curr.y - prev.y;
-    const len1 = Math.hypot(dx1, dy1);
-
-    const dx2 = next.x - curr.x;
-    const dy2 = next.y - curr.y;
-    const len2 = Math.hypot(dx2, dy2);
-
-    if (len1 < 0.5 || len2 < 0.5) {
-      d += ` L ${curr.x.toFixed(2)} ${curr.y.toFixed(2)}`;
-      continue;
-    }
-
-    const r = Math.min(cornerRadius, len1 / 2.05, len2 / 2.05);
-
-    const startX = curr.x - (dx1 / len1) * r;
-    const startY = curr.y - (dy1 / len1) * r;
-    const endX = curr.x + (dx2 / len2) * r;
-    const endY = curr.y + (dy2 / len2) * r;
-
-    d += ` L ${startX.toFixed(2)} ${startY.toFixed(2)}`;
-    d += ` Q ${curr.x.toFixed(2)} ${curr.y.toFixed(2)}, ${endX.toFixed(2)} ${endY.toFixed(2)}`;
-  }
-
-  const lastPt = pts[pts.length - 1];
-  d += ` L ${lastPt.x.toFixed(2)} ${lastPt.y.toFixed(2)}`;
-
-  return d;
-};
-
-const ELEMENT_PRESET_COLORS = [
-  { name: 'Dark Slate', color: '#0f172a' },
-  { name: 'Industrial Black', color: '#020617' },
-  { name: 'Emerald Green', color: '#064e3b' },
-  { name: 'Navy Blue', color: '#1e3a8a' },
-  { name: 'Amber Industrial', color: '#78350f' },
-  { name: 'Crimson Red', color: '#881337' },
-  { name: 'Charcoal Gray', color: '#27272a' },
-  { name: 'Light Slate', color: '#f1f5f9' }
-];
-
-const LiveClockWidget: React.FC<{ panel: Panel }> = ({ panel }) => {
-  const [timeStr, setTimeStr] = useState('');
-  const [dateStr, setDateStr] = useState('');
-
-  useEffect(() => {
-    const update = () => {
-      const now = new Date();
-      if (panel.clockFormat === '12h') {
-        setTimeStr(now.toLocaleTimeString('en-US', { hour12: true }));
-        setDateStr(now.toLocaleDateString());
-      } else if (panel.clockFormat === '24h') {
-        setTimeStr(now.toLocaleTimeString('en-US', { hour12: false }));
-        setDateStr('');
-      } else if (panel.clockFormat === 'time_only') {
-        setTimeStr(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-        setDateStr('');
-      } else {
-        setTimeStr(now.toLocaleTimeString('en-US', { hour12: false }));
-        setDateStr(now.toLocaleDateString('en-GB'));
-      }
-    };
-    update();
-    const timer = setInterval(update, 1000);
-    return () => clearInterval(timer);
-  }, [panel.clockFormat]);
-
-  return (
-    <div className="w-full h-full p-2 flex flex-col items-center justify-center text-center overflow-hidden select-none">
-      <div className="flex items-center space-x-1 mb-0.5 text-amber-400">
-        <i className="fas fa-clock text-xs"></i>
-        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300">
-          {panel.panelName || 'SYSTEM CLOCK'}
-        </span>
-      </div>
-      <div 
-        className="font-extrabold font-mono tracking-widest text-amber-300 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]"
-        style={{ fontSize: `${panel.fontSize || 18}px` }}
-      >
-        {timeStr}
-      </div>
-      {dateStr && (
-        <div className="text-[10px] font-mono font-semibold text-sky-400 mt-0.5">
-          {dateStr}
-        </div>
-      )}
-    </div>
-  );
-};
-
-const DEMO_PRESETS: DemoPreset[] = [
-  {
-    id: 'water_air_sample',
-    title: 'Water & Air Monitoring (Sample Project)',
-    desc: 'Clean 2-screen HMI with Water Management & Air Quality (4 widgets each)',
-    icon: 'fa-droplet',
-    bgClass: 'bg-sky-500/10 border border-sky-500/30',
-    textClass: 'text-sky-400 font-black',
-    elementCount: 8
-  },
-  {
-    id: 'smarthome',
-    title: 'Smart Home Controls',
-    desc: 'AC Setpoint, Fan LED, Ambient Switch, Humidity & Light Scenes',
-    icon: 'fa-house-signal',
-    bgClass: 'bg-amber-500/10 border border-amber-500/30',
-    textClass: 'text-amber-400',
-    elementCount: 7
-  },
-  {
-    id: 'hvac',
-    title: 'Commercial HVAC System',
-    desc: 'Supply Fan, Duct Pressure Gauge, Damper Position & Modes',
-    icon: 'fa-fan',
-    bgClass: 'bg-sky-500/10 border border-sky-500/30',
-    textClass: 'text-sky-400',
-    elementCount: 7
-  },
-  {
-    id: 'boiler',
-    title: 'Thermal Boiler Plant',
-    desc: 'Water Temp Gauge, Gas Feed Valve, Heater Switch & E-Stop',
-    icon: 'fa-fire-flame-curved',
-    bgClass: 'bg-rose-500/10 border border-rose-500/30',
-    textClass: 'text-rose-400',
-    elementCount: 7
-  },
-  {
-    id: 'motor',
-    title: 'Motor & Pump Drive (VFD)',
-    desc: 'Motor Run Switch, Speed Slider, RPM Gauge & Vibration Trend',
-    icon: 'fa-gears',
-    bgClass: 'bg-emerald-500/10 border border-emerald-500/30',
-    textClass: 'text-emerald-400',
-    elementCount: 7
-  },
-  {
-    id: 'power',
-    title: '3-Phase Power & Energy',
-    desc: 'Voltage Gauge, Load Current, Demand Limit & Power Load Graph',
-    icon: 'fa-bolt',
-    bgClass: 'bg-purple-500/10 border border-purple-500/30',
-    textClass: 'text-purple-400',
-    elementCount: 7
-  },
-  {
-    id: 'water',
-    title: 'Water Treatment & Tank',
-    desc: 'Tank Storage Gauge, Solenoid Valve, Dosing Pump & pH Setpoint',
-    icon: 'fa-faucet-drip',
-    bgClass: 'bg-cyan-500/10 border border-cyan-500/30',
-    textClass: 'text-cyan-400',
-    elementCount: 7
-  },
-  {
-    id: 'assembly',
-    title: 'Factory Assembly Line',
-    desc: 'Conveyor Run Switch, Belt Speed Slider, Production Rate Gauge',
-    icon: 'fa-industry',
-    bgClass: 'bg-indigo-500/10 border border-indigo-500/30',
-    textClass: 'text-indigo-400',
-    elementCount: 7
-  },
-  {
-    id: 'weather',
-    title: 'Weather & Environment',
-    desc: 'Outdoor Temp, Humidity Gauge, Wind Speed Trend & Telemetry Rate',
-    icon: 'fa-cloud-sun',
-    bgClass: 'bg-teal-500/10 border border-teal-500/30',
-    textClass: 'text-teal-400',
-    elementCount: 7
-  }
+const DEMO_PRESETS = [
+  { id: 'water_air_sample', title: 'Water & Air Sample System', icon: 'fa-droplet', bgClass: 'bg-sky-500/20', textClass: 'text-sky-400', elementCount: 9, desc: 'Pumps, water tank levels, flow rate indicators, ambient temperature, humidity, and exhaust fans' },
+  { id: 'smarthome', title: 'Smart Home & HVAC', icon: 'fa-house-signal', bgClass: 'bg-amber-500/20', textClass: 'text-amber-400', elementCount: 7, desc: 'AC temperature setpoint, ceiling fans, ambient lighting, scene selectors, and HVAC mode buttons' },
+  { id: 'hvac', title: 'Commercial AHU Unit', icon: 'fa-wind', bgClass: 'bg-cyan-500/20', textClass: 'text-cyan-400', elementCount: 6, desc: 'Supply blower fan, duct static pressure gauge, air damper position, and operational multi-state mode' }
 ];
 
 export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
@@ -293,7 +79,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   const { isDesktop, isMobile } = useDeviceCapability();
   const isClientMode = appState.userRole === 'client' || appState.productEdition === 'client' || !!appState.isLockedPackage;
 
-  const [isEditMode, setIsEditMode] = useState(!isClientMode);
+  const [localEditMode, setLocalEditMode] = useState(!isClientMode);
+  const isEditMode = store?.isHmiEditMode !== undefined ? store.isHmiEditMode : localEditMode;
+  const setIsEditMode = store?.setIsHmiEditMode || setLocalEditMode;
   const [gridSnap, setGridSnap] = useState(true);
   const [isMobileToolsCollapsed, setIsMobileToolsCollapsed] = useState<boolean>(false);
 
@@ -533,6 +321,15 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   const [selectedPanelIds, setSelectedPanelIds] = useState<string[]>([]);
   const [masterPanelId, setMasterPanelId] = useState<string | null>(null);
   const [selectedNodeInfo, setSelectedNodeInfo] = useState<{ panelId: string; nodeIndex: number } | null>(null);
+  const [deleteModalConfig, setDeleteModalConfig] = useState<{
+    isOpen: boolean;
+    panelIds: string[];
+    panelNames: string[];
+  }>({
+    isOpen: false,
+    panelIds: [],
+    panelNames: []
+  });
 
   // Left Studio Dock (Explorer & Config Tabs) State
   const [isLeftDockOpen, setIsLeftDockOpen] = useState<boolean>(false);
@@ -549,6 +346,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     canvasY?: number;
     panelId?: string;
   }>({ isOpen: false, x: 0, y: 0 });
+
+  // Project Library Browser (import 3D assembly into a CANVAS_3D widget)
+  const [libraryBrowserTarget, setLibraryBrowserTarget] = useState<string | null>(null); // panelId of the target CANVAS_3D widget
 
   const [clipboardPanels, setClipboardPanels] = useState<Panel[]>([]);
 
@@ -782,7 +582,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   setTimeout(() => setPropertyCopiedToast(null), 2200);
                   return;
                 }
-              } catch {}
+              } catch { }
 
               const newId = `p_txt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
               const newTextPanel: Panel = {
@@ -857,7 +657,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
               setTimeout(() => setPropertyCopiedToast(null), 2200);
               return;
             }
-          } catch {}
+          } catch { }
 
           const newId = `p_txt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
           const newTextPanel: Panel = {
@@ -895,7 +695,22 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     }
   }, [clipboardPanels, activeDashboardId, appState, updateAppStateWithHistory]);
 
-  // Global Keyboard Shortcut Listener for Undo, Redo, Cut, Copy, Paste, Duplicate
+  // Delete Confirmation Handler
+  const handleConfirmDelete = useCallback(() => {
+    if (deleteModalConfig.panelIds.length === 0) return;
+    const targetIds = deleteModalConfig.panelIds;
+    const nextPanels = appState.panels.filter(p => !targetIds.includes(p.panelId));
+    updateAppStateWithHistory({ ...appState, panels: nextPanels });
+    targetIds.forEach(id => onDeletePanel?.(id));
+    setSelectedPanelIds([]);
+    setMasterPanelId(null);
+    setSelectedNodeInfo(null);
+    setDeleteModalConfig({ isOpen: false, panelIds: [], panelNames: [] });
+    setPropertyCopiedToast(`Deleted ${targetIds.length} element(s)`);
+    setTimeout(() => setPropertyCopiedToast(null), 2000);
+  }, [deleteModalConfig, appState, updateAppStateWithHistory, onDeletePanel]);
+
+  // Global Keyboard Shortcut Listener for Undo, Redo, Cut, Copy, Paste, Duplicate, Delete
   useEffect(() => {
     const handleShortcut = (e: KeyboardEvent) => {
       if (!effectiveEditMode) return;
@@ -924,11 +739,23 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
           e.preventDefault();
           handlePasteFromClipboard();
         }
+      } else if (e.key === 'Delete' || e.key === 'Backspace' || e.code === 'Delete' || e.code === 'Backspace') {
+        if (selectedPanelIds.length > 0) {
+          e.preventDefault();
+          const names = appState.panels
+            .filter(p => selectedPanelIds.includes(p.panelId))
+            .map(p => p.panelName || p.type || 'Element');
+          setDeleteModalConfig({
+            isOpen: true,
+            panelIds: [...selectedPanelIds],
+            panelNames: names
+          });
+        }
       }
     };
     window.addEventListener('keydown', handleShortcut);
     return () => window.removeEventListener('keydown', handleShortcut);
-  }, [effectiveEditMode, handleUndo, handleRedo, handleCopySelected, handleCutSelected, handlePasteFromClipboard]);
+  }, [effectiveEditMode, handleUndo, handleRedo, handleCopySelected, handleCutSelected, handlePasteFromClipboard, selectedPanelIds, appState.panels]);
 
   // Global Window Paste Event Listener for External Images & Text
   useEffect(() => {
@@ -1013,8 +840,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
           const currentPts = targetPanel.shapePoints
             ? [...targetPanel.shapePoints]
             : (targetPanel.shapeType === 'polyline' || targetPanel.shapeType === 'line' || targetPanel.shapeType === 'pipe' || targetPanel.type === PanelType.PIPE || (targetPanel.type as string) === 'pipe'
-                ? [{ x: 0, y: 50 }, { x: 50, y: 50 }, { x: 100, y: 50 }]
-                : [{ x: 50, y: 5 }, { x: 95, y: 35 }, { x: 80, y: 95 }, { x: 20, y: 95 }, { x: 5, y: 35 }]);
+              ? [{ x: 0, y: 50 }, { x: 50, y: 50 }, { x: 100, y: 50 }]
+              : [{ x: 50, y: 5 }, { x: 95, y: 35 }, { x: 80, y: 95 }, { x: 20, y: 95 }, { x: 5, y: 35 }]);
 
           if (nodeIndex >= 0 && nodeIndex < currentPts.length) {
             const step = e.shiftKey ? 5 : 1;
@@ -1348,8 +1175,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
   // Ensure panels have default x, y, w, h if missing
   const getPanelPos = (p: Panel, index: number) => {
-    const defaultWidth = p.type === PanelType.STATIC_TEXT ? 220 : p.type === PanelType.LED ? 140 : p.type === PanelType.SLIDER ? 200 : 180;
-    const defaultHeight = p.type === PanelType.STATIC_TEXT ? 45 : p.type === PanelType.LED ? 60 : p.type === PanelType.SLIDER ? 75 : 70;
+    const isGridTable = p.type === PanelType.TASC_GRID || (p.type as string) === 'tasc_grid';
+    const defaultWidth = p.type === PanelType.STATIC_TEXT ? 220 : p.type === PanelType.LED ? 140 : p.type === PanelType.SLIDER ? 200 : p.type === PanelType.CANVAS_3D ? 400 : isGridTable ? 560 : 180;
+    const defaultHeight = p.type === PanelType.STATIC_TEXT ? 45 : p.type === PanelType.LED ? 60 : p.type === PanelType.SLIDER ? 75 : p.type === PanelType.CANVAS_3D ? 320 : isGridTable ? 320 : 70;
     const cols = 4;
     const defaultX = (index % cols) * 200 + 20;
     const defaultY = Math.floor(index / cols) * 90 + 80;
@@ -1694,8 +1522,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       const currentPoints = targetPanel.shapePoints
         ? [...targetPanel.shapePoints]
         : targetPanel.shapeType === 'polyline' || targetPanel.shapeType === 'line'
-        ? [{ x: 0, y: 50 }, { x: 50, y: 20 }, { x: 100, y: 50 }]
-        : [{ x: 50, y: 5 }, { x: 95, y: 35 }, { x: 80, y: 95 }, { x: 20, y: 95 }, { x: 5, y: 35 }];
+          ? [{ x: 0, y: 50 }, { x: 50, y: 20 }, { x: 100, y: 50 }]
+          : [{ x: 50, y: 5 }, { x: 95, y: 35 }, { x: 80, y: 95 }, { x: 20, y: 95 }, { x: 5, y: 35 }];
 
       currentPoints[nodeIndex] = { x: pctX, y: pctY };
 
@@ -2524,7 +2352,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
   // Insert Symbol Factory 3.0 Industrial Equipment (SVG or PNG)
   const handleSelectIndustrialSymbol = async (
-    symbol: IndustrialSymbolItem, 
+    symbol: IndustrialSymbolItem,
     format: 'svg' | 'png',
     bindingConfig?: { dataSourceMode?: 'driver' | 'mqtt'; driverTagId?: string; topic?: string }
   ) => {
@@ -3000,21 +2828,20 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-[#030712] text-slate-100 select-none overflow-hidden relative">
-      
+
       {/* Web HMI Canvas Top Navigation Bar (Hidden in Fullscreen mode to allow full canvas auto-fit) */}
       {/* Web HMI Canvas Main Studio Toolbar */}
       {!isFullscreen && (
-        <div 
+        <div
           onWheel={(e) => {
             if (isMobile && e.deltaY !== 0) {
               e.currentTarget.scrollLeft += e.deltaY;
             }
           }}
-          className={`bg-slate-900/95 border-b border-slate-800 px-2 sm:px-3 py-1.5 flex items-center justify-between gap-1.5 shrink-0 z-20 backdrop-blur-md min-h-[38px] w-full max-w-full ${
-            isDesktop
-              ? 'flex-wrap overflow-visible'
-              : 'overflow-x-auto custom-horizontal-scrollbar touch-scroll overscroll-x-contain'
-          }`}
+          className={`bg-slate-900/95 border-b border-slate-800 px-2 sm:px-3 py-1.5 flex items-center justify-between gap-1.5 shrink-0 z-20 backdrop-blur-md min-h-[38px] w-full max-w-full ${isDesktop
+            ? 'flex-wrap overflow-visible'
+            : 'overflow-x-auto custom-horizontal-scrollbar touch-scroll overscroll-x-contain'
+            }`}
         >
           {/* HMI Canvas Element Controls */}
           <div className={`flex items-center gap-1 sm:gap-1.5 ${isDesktop ? 'flex-wrap' : 'shrink-0 whitespace-nowrap'}`}>
@@ -3024,11 +2851,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsMobileToolsCollapsed(prev => !prev)}
-                  className={`p-1.5 rounded-lg border text-xs font-bold transition-all sm:hidden cursor-pointer shrink-0 ${
-                    isMobileToolsCollapsed 
-                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' 
-                      : 'bg-slate-800 text-slate-400 border-slate-700'
-                  }`}
+                  className={`p-1.5 rounded-lg border text-xs font-bold transition-all sm:hidden cursor-pointer shrink-0 ${isMobileToolsCollapsed
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                    }`}
                   title={isMobileToolsCollapsed ? "Show All Editing Tools" : "Hide Editing Tools (Max Canvas Area)"}
                 >
                   <i className={`fas ${isMobileToolsCollapsed ? 'fa-screwdriver-wrench' : 'fa-chevron-up'}`}></i>
@@ -3051,11 +2877,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         type="button"
                         onClick={handleUndo}
                         disabled={!canUndo}
-                        className={`px-1.5 sm:px-2 py-1 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer ${
-                          canUndo
-                            ? 'bg-slate-800 hover:bg-slate-700 text-sky-300 hover:text-sky-200 border border-slate-700 shadow-sm'
-                            : 'opacity-40 cursor-not-allowed text-slate-500'
-                        }`}
+                        className={`px-1.5 sm:px-2 py-1 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer ${canUndo
+                          ? 'bg-slate-800 hover:bg-slate-700 text-sky-300 hover:text-sky-200 border border-slate-700 shadow-sm'
+                          : 'opacity-40 cursor-not-allowed text-slate-500'
+                          }`}
                         title="Undo Canvas Action (Ctrl+Z)"
                       >
                         <i className="fas fa-undo text-xs"></i>
@@ -3066,11 +2891,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         type="button"
                         onClick={handleRedo}
                         disabled={!canRedo}
-                        className={`px-1.5 sm:px-2 py-1 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer ${
-                          canRedo
-                            ? 'bg-slate-800 hover:bg-slate-700 text-sky-300 hover:text-sky-200 border border-slate-700 shadow-sm'
-                            : 'opacity-40 cursor-not-allowed text-slate-500'
-                        }`}
+                        className={`px-1.5 sm:px-2 py-1 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer ${canRedo
+                          ? 'bg-slate-800 hover:bg-slate-700 text-sky-300 hover:text-sky-200 border border-slate-700 shadow-sm'
+                          : 'opacity-40 cursor-not-allowed text-slate-500'
+                          }`}
                         title="Redo Canvas Action (Ctrl+Y)"
                       >
                         <i className="fas fa-redo text-xs"></i>
@@ -3120,11 +2944,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsLeftDockOpen(prev => !prev)}
-                      className={`px-2 sm:px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer shrink-0 border shadow-md active:scale-95 ${
-                        isLeftDockOpen
-                          ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
-                          : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700'
-                      }`}
+                      className={`px-2 sm:px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer shrink-0 border shadow-md active:scale-95 ${isLeftDockOpen
+                        ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
+                        : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700'
+                        }`}
                       title="Toggle Left Studio Dock (Scene Explorer & Config Inspector - Alt+E)"
                     >
                       <i className={`fas ${isLeftDockOpen ? 'fa-table-columns' : 'fa-folder-tree'} text-xs ${isLeftDockOpen ? 'text-sky-400' : 'text-slate-400'}`}></i>
@@ -3195,11 +3018,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setGridSnap(!gridSnap)}
-                  className={`px-1.5 sm:px-2 py-1 rounded-xl border text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shrink-0 ${
-                    gridSnap 
-                      ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400' 
-                      : 'bg-slate-800 border-slate-700 text-slate-400'
-                  }`}
+                  className={`px-1.5 sm:px-2 py-1 rounded-xl border text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shrink-0 ${gridSnap
+                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+                    : 'bg-slate-800 border-slate-700 text-slate-400'
+                    }`}
                   title="Snap to 10px Grid"
                 >
                   <i className="fas fa-border-top-left text-xs"></i>
@@ -3210,11 +3032,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsPanMode(!isPanMode)}
-                  className={`px-1.5 sm:px-2 py-1 rounded-xl border text-xs font-bold flex items-center space-x-1 transition-all cursor-pointer shrink-0 ${
-                    isPanMode || isSpacePressed
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
-                      : 'bg-slate-900 text-slate-300 hover:text-white border border-slate-800'
-                  }`}
+                  className={`px-1.5 sm:px-2 py-1 rounded-xl border text-xs font-bold flex items-center space-x-1 transition-all cursor-pointer shrink-0 ${isPanMode || isSpacePressed
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                    : 'bg-slate-900 text-slate-300 hover:text-white border border-slate-800'
+                    }`}
                   title="Pan / Move Canvas (Click Hand tool, Hold Spacebar, or Middle-click / Drag)"
                 >
                   <i className={`fas fa-hand text-xs ${isPanMode || isSpacePressed ? 'text-amber-400' : 'text-slate-400'}`}></i>
@@ -3232,8 +3053,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   >
                     <i className="fas fa-minus"></i>
                   </button>
-                  <span 
-                    onClick={() => setZoomLevel(1.0)} 
+                  <span
+                    onClick={() => setZoomLevel(1.0)}
                     className="text-[11px] font-mono font-bold text-sky-300 hover:text-white cursor-pointer px-0.5 min-w-[32px] text-center"
                     title="Click to Reset Zoom to 100%"
                   >
@@ -3254,11 +3075,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsAutoFit(prev => !prev)}
-                  className={`px-2 py-1 rounded-xl text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shadow-sm shrink-0 ${
-                    isAutoFit
-                      ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 hover:bg-sky-500/30'
-                      : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
-                  }`}
+                  className={`px-2 py-1 rounded-xl text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shadow-sm shrink-0 ${isAutoFit
+                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 hover:bg-sky-500/30'
+                    : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
+                    }`}
                   title="Auto Fit Screen (Dynamically scales all canvas elements to fit mobile/desktop screen without scrolling)"
                 >
                   <i className="fas fa-expand text-xs text-sky-400"></i>
@@ -3269,7 +3089,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
             {/* Edit Mode vs Live Run Mode */}
             {isClientMode ? (
-              <div 
+              <div
                 className="px-2.5 py-1 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-extrabold tracking-wider uppercase flex items-center space-x-1 shadow-sm shrink-0"
                 title="Client Edition (Operator Mode) — Live Execution Active"
               >
@@ -3287,11 +3107,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     setMasterPanelId(null);
                   }
                 }}
-                className={`px-2.5 py-1 rounded-xl border text-xs font-extrabold tracking-wider uppercase transition-all flex items-center space-x-1 cursor-pointer shrink-0 active:scale-95 ${
-                  isEditMode 
-                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md shadow-amber-500/20' 
-                    : 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shadow-emerald-500/20'
-                }`}
+                className={`px-2.5 py-1 rounded-xl border text-xs font-extrabold tracking-wider uppercase transition-all flex items-center space-x-1 cursor-pointer shrink-0 active:scale-95 ${isEditMode
+                  ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md shadow-amber-500/20'
+                  : 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shadow-emerald-500/20'
+                  }`}
               >
                 <i className={`fas ${isEditMode ? 'fa-pen-to-square' : 'fa-play'} text-xs`}></i>
                 <span className="hidden sm:inline">{isEditMode ? 'Design' : 'Run'}</span>
@@ -3304,21 +3123,20 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
       {/* Selected Element(s) & Alignment Floating Toolbar */}
       {effectiveEditMode && selectedPanelIds.length > 0 && (
-        <div 
+        <div
           onWheel={(e) => {
             if (isMobile && e.deltaY !== 0) {
               e.currentTarget.scrollLeft += e.deltaY;
             }
           }}
-          className={`bg-slate-950 border-b border-slate-800 px-2 sm:px-3 py-1.5 flex items-center justify-between gap-1.5 text-xs z-20 animate-in fade-in shadow-xl w-full max-w-full shrink-0 min-h-[36px] ${
-            isDesktop
-              ? 'flex-wrap overflow-visible'
-              : 'overflow-x-auto custom-horizontal-scrollbar touch-scroll overscroll-x-contain'
-          }`}
+          className={`bg-slate-950 border-b border-slate-800 px-2 sm:px-3 py-1.5 flex items-center justify-between gap-1.5 text-xs z-20 animate-in fade-in shadow-xl w-full max-w-full shrink-0 min-h-[36px] ${isDesktop
+            ? 'flex-wrap overflow-visible'
+            : 'overflow-x-auto custom-horizontal-scrollbar touch-scroll overscroll-x-contain'
+            }`}
         >
           <div className={`flex items-center gap-1 sm:gap-1.5 ${isDesktop ? 'flex-wrap' : 'shrink-0 whitespace-nowrap'}`}>
 
-            
+
             {/* Selection Info Badge */}
             <div className="flex items-center space-x-1 font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/30 shrink-0">
               <i className="fas fa-object-group text-xs"></i>
@@ -3399,9 +3217,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
             </div>
 
             {/* Corner Radius Slider (0-100px) */}
-            <div 
+            <div
               id="hmi-canvas-element"
-              className="flex items-center space-x-1 bg-slate-900 px-1.5 py-0.5 rounded-lg border border-slate-800 shrink-0" 
+              className="flex items-center space-x-1 bg-slate-900 px-1.5 py-0.5 rounded-lg border border-slate-800 shrink-0"
               title="Corner Radius (0-100px)"
             >
               <i className="fas fa-vector-square text-[10px] text-teal-400"></i>
@@ -3421,18 +3239,17 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
             </div>
 
             {/* Shadow / Glow Effect Controls */}
-            <div 
+            <div
               className="flex items-center space-x-1 bg-slate-900 px-1.5 py-0.5 rounded-lg border border-slate-800 shrink-0"
               title={selectedPanel?.type === PanelType.STATIC_TEXT ? "Font Glow / Shadow Effect" : "Element Shadow / Glow Effect"}
             >
               <button
                 type="button"
                 onClick={() => updateSelectedPanelProp('shadowEnabled', !selectedPanel?.shadowEnabled)}
-                className={`flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                  selectedPanel?.shadowEnabled
-                    ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-[0_0_8px_rgba(6,182,212,0.4)]'
-                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
-                }`}
+                className={`flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${selectedPanel?.shadowEnabled
+                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-[0_0_8px_rgba(6,182,212,0.4)]'
+                  : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
+                  }`}
               >
                 <i className={`fas fa-wand-magic-sparkles text-[10px] ${selectedPanel?.shadowEnabled ? 'text-cyan-400 animate-pulse' : ''}`}></i>
                 <span className="hidden sm:inline">{selectedPanel?.type === PanelType.STATIC_TEXT ? 'Font Glow:' : 'Glow:'}</span>
@@ -3512,8 +3329,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   <i className="fas fa-shapes text-[10px] text-amber-400"></i>
                   <select
                     value={
-                      selectedPanel.type === PanelType.PIPE 
-                        ? 'pipe' 
+                      selectedPanel.type === PanelType.PIPE
+                        ? 'pipe'
                         : (selectedPanel.type === PanelType.SHAPE ? (selectedPanel.shapeType || 'rectangle') : 'none')
                     }
                     onChange={(e) => {
@@ -3554,11 +3371,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   <button
                     type="button"
                     onClick={() => onEditPanel(selectedPanel)}
-                    className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold font-mono transition-all flex items-center space-x-1 border cursor-pointer ${
-                      selectedPanel.enableMotionDynamics
-                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
-                        : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800'
-                    }`}
+                    className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold font-mono transition-all flex items-center space-x-1 border cursor-pointer ${selectedPanel.enableMotionDynamics
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
+                      : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800'
+                      }`}
                     title={selectedPanel.enableMotionDynamics ? 'Motion Path Active - Click to Edit Dynamics' : 'Add Tag-Based Motion Path'}
                   >
                     <i className="fas fa-route text-[10px] text-amber-400"></i>
@@ -3568,11 +3384,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   <button
                     type="button"
                     onClick={() => onEditPanel(selectedPanel)}
-                    className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold font-mono transition-all flex items-center space-x-1 border cursor-pointer ${
-                      selectedPanel.enableRotationDynamics
-                        ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
-                        : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800'
-                    }`}
+                    className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold font-mono transition-all flex items-center space-x-1 border cursor-pointer ${selectedPanel.enableRotationDynamics
+                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
+                      : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800'
+                      }`}
                     title={selectedPanel.enableRotationDynamics ? 'Rotation Dynamics Active - Click to Edit Dynamics' : 'Add Tag-Based Rotation'}
                   >
                     <i className="fas fa-rotate text-[10px] text-cyan-400"></i>
@@ -3609,7 +3424,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 >
                   <i className="fas fa-align-right text-xs w-3.5 text-center"></i>
                 </button>
-                
+
                 <div className="w-px h-3 bg-slate-800 mx-0.5"></div>
 
                 <button
@@ -3703,11 +3518,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 type="button"
                 onClick={handlePasteProperties}
                 disabled={!copiedProperties}
-                className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold transition-all flex items-center space-x-1 cursor-pointer ${
-                  copiedProperties
-                    ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 shadow-sm'
-                    : 'bg-slate-950 text-slate-600 cursor-not-allowed border border-slate-800/50'
-                }`}
+                className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold transition-all flex items-center space-x-1 cursor-pointer ${copiedProperties
+                  ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 shadow-sm'
+                  : 'bg-slate-950 text-slate-600 cursor-not-allowed border border-slate-800/50'
+                  }`}
                 title={copiedProperties ? "Paste Visual Properties" : "No Properties Copied"}
               >
                 <i className={`fas fa-paint-roller text-[9px] ${copiedProperties ? 'text-amber-400' : 'text-slate-600'}`}></i>
@@ -3838,966 +3652,1062 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
         )}
 
         {/* Main Freeform Absolute Canvas Area */}
-        <div 
+        <div
           ref={canvasRef}
           id="hmi-canvas-background"
           data-canvas-bg="true"
           onMouseDown={(e) => handleCanvasMouseDown(e)}
-        onClick={() => {
-          if (justFinishedMarqueeRef.current) {
-            justFinishedMarqueeRef.current = false;
-            return;
-          }
-          setSelectedPanelIds([]);
-          setMasterPanelId(null);
-          setContextMenu({ isOpen: false, x: 0, y: 0 });
-        }}
-        onContextMenu={(e) => handleContextMenu(e)}
-        className={`flex-1 relative p-0.5 transition-colors ${
-          !isEditMode || isAutoFit ? 'overflow-hidden' : 'overflow-auto min-h-[600px] min-w-[1220px]'
-        } ${
-          isPanning
-            ? 'cursor-grabbing select-none'
-            : isPanMode || isSpacePressed || zoomLevel > 1.0
-            ? 'cursor-grab'
-            : 'cursor-default'
-        }`}
-        style={{
-          backgroundColor: screenBgColor,
-          backgroundImage: effectiveEditMode && gridSnap 
-            ? 'radial-gradient(circle, rgba(255,255,255,0.08) 1px, transparent 1px)' 
-            : 'none',
-          backgroundSize: '15px 15px'
-        }}
-      >
-        {/* Scaled Canvas Inner Container */}
-        <div
-          style={{
-            position: isAutoFit ? 'absolute' : 'relative',
-            left: isAutoFit ? `${autoFitOffset.left}px` : '0px',
-            top: isAutoFit ? `${autoFitOffset.top}px` : '0px',
-            transform: `scale(${effectiveScale})`,
-            transformOrigin: 'top left',
-            width: `${contentBounds.totalW}px`,
-            height: `${contentBounds.totalH}px`,
-            minWidth: isEditMode && !isAutoFit ? '1220px' : '0px',
-            minHeight: isEditMode && !isAutoFit ? '600px' : '0px'
+          onClick={() => {
+            if (justFinishedMarqueeRef.current) {
+              justFinishedMarqueeRef.current = false;
+              return;
+            }
+            setSelectedPanelIds([]);
+            setMasterPanelId(null);
+            setContextMenu({ isOpen: false, x: 0, y: 0 });
           }}
-          className="transition-all duration-100 ease-out shrink-0"
+          onContextMenu={(e) => handleContextMenu(e)}
+          className={`flex-1 relative p-0.5 transition-colors ${!isEditMode || isAutoFit ? 'overflow-hidden' : 'overflow-auto min-h-[600px] min-w-[1220px]'
+            } ${isPanning
+              ? 'cursor-grabbing select-none'
+              : isPanMode || isSpacePressed || zoomLevel > 1.0
+                ? 'cursor-grab'
+                : 'cursor-default'
+            }`}
+          style={{
+            backgroundColor: screenBgColor,
+            backgroundImage: effectiveEditMode && gridSnap
+              ? 'radial-gradient(circle, rgba(255,255,255,0.08) 1px, transparent 1px)'
+              : 'none',
+            backgroundSize: '15px 15px'
+          }}
         >
-
-          {/* Marquee Drag Box Selection Overlay */}
-        {isMarqueeSelecting && marqueeRect && (
+          {/* Scaled Canvas Inner Container */}
           <div
-            className="absolute border-2 border-sky-400 bg-sky-500/20 pointer-events-none z-50 rounded shadow-md"
             style={{
-              left: `${Math.min(marqueeRect.startX, marqueeRect.currentX)}px`,
-              top: `${Math.min(marqueeRect.startY, marqueeRect.currentY)}px`,
-              width: `${Math.abs(marqueeRect.currentX - marqueeRect.startX)}px`,
-              height: `${Math.abs(marqueeRect.currentY - marqueeRect.startY)}px`,
+              position: isAutoFit ? 'absolute' : 'relative',
+              left: isAutoFit ? `${autoFitOffset.left}px` : '0px',
+              top: isAutoFit ? `${autoFitOffset.top}px` : '0px',
+              transform: `scale(${effectiveScale})`,
+              transformOrigin: 'top left',
+              width: `${contentBounds.totalW}px`,
+              height: `${contentBounds.totalH}px`,
+              minWidth: isEditMode && !isAutoFit ? '1220px' : '0px',
+              minHeight: isEditMode && !isAutoFit ? '600px' : '0px'
             }}
-          />
-        )}
-        {panels.length === 0 ? (
-          !isClientMode ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-slate-300 overflow-y-auto">
-              <div className="max-w-4xl w-full space-y-6 text-center my-auto py-6">
-                <div className="space-y-1.5">
-                  <div className="inline-flex items-center space-x-2 px-3 py-1 bg-sky-500/10 border border-sky-500/30 rounded-full text-sky-400 text-xs font-bold uppercase tracking-widest">
-                    <i className="fas fa-cubes"></i>
-                    <span>HMI Screen Templates</span>
-                  </div>
-                  <h3 className="text-xl font-black text-white tracking-tight">Select a Demo Dashboard Template</h3>
-                  <p className="text-xs text-slate-400 max-w-xl mx-auto">
-                    Choose from any of these pre-configured demo templates to instantly populate this screen canvas, or click <span className="text-sky-400 font-bold">+ Add Element</span> above to build from scratch.
-                  </p>
-                </div>
+            className="transition-all duration-100 ease-out shrink-0"
+          >
 
-                {/* Grid of 8 Small Buttons / Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-left">
-                  {DEMO_PRESETS.map((preset) => (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => handleLoadPresetTemplate(preset.id)}
-                      className="group relative p-3.5 bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 hover:border-sky-500/60 rounded-2xl transition-all cursor-pointer flex flex-col justify-between space-y-2.5 shadow-xl hover:shadow-sky-500/10 active:scale-95"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-base ${preset.bgClass} ${preset.textClass}`}>
-                          <i className={`fas ${preset.icon}`}></i>
-                        </div>
-                        <span className="text-[10px] font-mono font-bold text-slate-500 group-hover:text-sky-400 transition-colors">
-                          {preset.elementCount} Elements
-                        </span>
-                      </div>
-
-                      <div className="flex-1 space-y-0.5">
-                        <h4 className="text-xs font-bold text-slate-100 group-hover:text-white transition-colors">
-                          {preset.title}
-                        </h4>
-                        <p className="text-[10px] text-slate-400 leading-relaxed line-clamp-2">
-                          {preset.desc}
-                        </p>
-                      </div>
-
-                      <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-bold text-sky-400 opacity-80 group-hover:opacity-100">
-                        <span>Load Template</span>
-                        <i className="fas fa-arrow-right text-[9px] group-hover:translate-x-1 transition-transform"></i>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-slate-400 pointer-events-none select-none">
-              <div className="text-center space-y-3 max-w-md">
-                <div className="w-14 h-14 mx-auto rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-center text-slate-500 text-2xl shadow-inner">
-                  <i className="fas fa-display"></i>
-                </div>
-                <div className="space-y-1">
-                  <h3 className="text-base font-bold text-slate-300">No HMI Elements Deployed</h3>
-                  <p className="text-xs text-slate-500">
-                    This screen is currently empty. Deploy project elements or load a backup package from Studio.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )
-        ) : (
-          panels.map((panel, idx) => {
-            const dynEval = evaluatePanelDynamics(panel, latestValues);
-            if (panel.isHidden || dynEval.visibility?.isHidden) return null;
-
-            const pos = getPanelPos(panel, idx);
-            const isSelected = selectedPanelIds.includes(panel.panelId);
-            const isMaster = masterPanelId === panel.panelId;
-            // Find any active dynamic rule tag/topic binding on this panel
-            const dynamicTag = panel.dynamics?.find(d => d.enabled && (d.driverTagId || d.topic))?.driverTagId 
-              || panel.dynamics?.find(d => d.enabled && (d.driverTagId || d.topic))?.topic;
-
-            const liveData = latestValues[panel.panelId] 
-              || (panel.driverTagId ? latestValues[panel.driverTagId] : undefined) 
-              || (panel.topic ? latestValues[panel.topic] : undefined)
-              || (dynamicTag ? latestValues[dynamicTag] : undefined);
-
-            const liveValue = liveData?.val;
-            const rawStringValue = liveValue !== undefined && liveValue !== null ? String(liveValue) : '';
-
-            // Dynamic color shift, opacity, and blinking
-            const effectiveBg = dynEval.colorShift?.fill || panel.bgColor;
-            const effectiveBorder = dynEval.colorShift?.stroke || panel.borderColor;
-            const effectiveOpacity = dynEval.opacity !== null ? dynEval.opacity : (panel.opacity !== undefined ? panel.opacity : 1);
-            const isDynBlinking = dynEval.visibility?.isBlinking;
-            const dynBlinkClass = isDynBlinking ? (dynEval.visibility?.blinkSpeed === 'fast' ? 'animate-ping' : 'animate-pulse') : '';
-
-            // Equipment Trip / Fault Evaluation
-            const tripStatus = isPanelTripped(panel, latestValues);
-            const isTripActive = tripStatus.isTripped;
-            const tripAnimClass = isTripActive ? `trip-anim-${panel.tripAnimStyle || 'flash_strobe'}` : dynBlinkClass;
-            const isPipePanel = panel.type === PanelType.PIPE || (panel.type as string) === 'pipe' || panel.shapeType === 'pipe';
-            const isVectorShape = panel.type === PanelType.SHAPE || (panel.type as string) === 'shape' || isPipePanel;
-            const isSymbolOrImagePanel = !!panel.symbolId || !!panel.symbolAnimType || panel.type === PanelType.IMAGE || (panel.type as string) === 'image';
-            const hasCustomExplicitBg = !!panel.bgColor && panel.bgColor !== 'transparent' && !panel.bgColor.includes('15, 23, 42') && panel.bgColor !== '#0f172a' && panel.bgColor !== '#1e293b';
-            const isPureShapeWithoutBox = isPipePanel || (isSymbolOrImagePanel && !hasCustomExplicitBg) || (isVectorShape && panel.shapeType !== 'rectangle');
-
-            const hasAnyBinding = Boolean(panel.topic?.trim() || panel.driverTagId || dynamicTag);
-
-            // Check if element is purely static/decorative/non-telemetry
-            const isStaticOrDecorative =
-              panel.type === PanelType.STATIC_TEXT ||
-              (panel.type as string) === 'static_text' ||
-              (panel.type as string) === 'label' ||
-              panel.type === PanelType.CLOCK ||
-              panel.type === PanelType.SCREEN_JUMP ||
-              (!hasAnyBinding);
-
-            // Telemetry Timeout / Disconnection Watchdog Evaluation
-            const telemetryStatus = getPanelTelemetryStatus(panel, latestValues);
-            const isOffline = !isStaticOrDecorative && telemetryStatus.isOffline;
-
-            // Rx & Tx Telemetry Timestamp Visual Display
-            const lastRxTime = liveData?.time;
-            const lastTxTime = liveData?.sentTime;
-            const showRx = !isStaticOrDecorative && panel.showReceivedTimeStamp !== false && !!lastRxTime && (!!panel.topic || !!panel.driverTagId || !!dynamicTag);
-            const showTx = !isStaticOrDecorative && !!panel.showSentTimeStamp && !!lastTxTime && (!!panel.publishTopic || !!panel.topic);
-
-            // Dynamic Tag-Based Motion Translation and Rotation Evaluation
-            const dynTransform = getDynamicElementTransform(panel, latestValues, effectiveEditMode);
-
-            let combinedTransform = dynTransform.transform || (panel.rotation ? `rotate(${panel.rotation}deg)` : undefined);
-            if (dynEval.rotation?.angle && !effectiveEditMode) {
-              combinedTransform = combinedTransform ? `${combinedTransform} rotate(${dynEval.rotation.angle}deg)` : `rotate(${dynEval.rotation.angle}deg)`;
-            }
-
-            let combinedAnimation = dynTransform.animation;
-            if (dynEval.rotation?.isSpinning && !effectiveEditMode && !combinedAnimation) {
-              const animName = dynEval.rotation.spinDirection === 'ccw' ? 'hmi-spin-ccw' : 'hmi-spin-cw';
-              combinedAnimation = `${animName} ${dynEval.rotation.spinDuration}s linear infinite`;
-            }
-
-            return (
+            {/* Marquee Drag Box Selection Overlay */}
+            {isMarqueeSelecting && marqueeRect && (
               <div
-                key={panel.panelId}
-                id={`hmi-panel-${panel.panelId}`}
-                onMouseDown={(e) => {
-                  if (panel.isLocked) {
-                    handlePanelSelect(panel.panelId, e.shiftKey || e.ctrlKey || e.metaKey);
-                    return;
-                  }
-                  handleMouseDown(e, panel.panelId);
-                }}
-                onContextMenu={(e) => handleContextMenu(e, panel.panelId)}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handlePanelInteract(panel);
-                }}
-                className={`absolute transition-all group select-none ${
-                  effectiveEditMode ? (panel.isLocked ? 'cursor-not-allowed' : 'cursor-move') : 'cursor-pointer'
-                } ${
-                  isSelected && effectiveEditMode
-                    ? isMaster
-                      ? 'ring-2 ring-amber-400 shadow-2xl z-30'
-                      : 'ring-2 ring-sky-400/90 shadow-xl z-20'
-                    : effectiveEditMode 
-                    ? 'hover:ring-1 hover:ring-sky-400/80 z-10' 
-                    : 'z-10'
-                } ${tripAnimClass}`}
+                className="absolute border-2 border-sky-400 bg-sky-500/20 pointer-events-none z-50 rounded shadow-md"
                 style={{
-                  left: `${pos.x}px`,
-                  top: `${pos.y}px`,
-                  width: `${pos.w}px`,
-                  height: `${pos.h}px`,
-                  backgroundColor: isPureShapeWithoutBox ? 'transparent' : (effectiveBg || (panel.type === PanelType.STATIC_TEXT ? '#0f172a' : 'rgba(15, 23, 42, 0.9)')),
-                  borderColor: isPureShapeWithoutBox ? 'transparent' : (effectiveBorder || '#1e293b'),
-                  borderWidth: isPureShapeWithoutBox ? '0px' : `${panel.borderWidth ?? 1}px`,
-                  borderRadius: isPureShapeWithoutBox ? '0px' : `${panel.borderRadius ?? 8}px`,
-                  color: panel.textColor || '#f8fafc',
-                  opacity: effectiveOpacity,
-                  transform: combinedTransform,
-                  animation: combinedAnimation,
-                  boxShadow: !isPureShapeWithoutBox && panel.shadowEnabled
-                    ? `0 0 ${panel.shadowIntensity ?? 15}px ${panel.shadowColor || '#38bdf8'}, 0 4px 12px rgba(0, 0, 0, 0.5)`
-                    : undefined
+                  left: `${Math.min(marqueeRect.startX, marqueeRect.currentX)}px`,
+                  top: `${Math.min(marqueeRect.startY, marqueeRect.currentY)}px`,
+                  width: `${Math.abs(marqueeRect.currentX - marqueeRect.startX)}px`,
+                  height: `${Math.abs(marqueeRect.currentY - marqueeRect.startY)}px`,
                 }}
-              >
-                {/* Telemetry Disconnection / Timeout Badge Overlay (HMI Canvas View) */}
-                {isOffline && panel.showOfflineBadge !== false && (
+              />
+            )}
+            {panels.length === 0 ? (
+              !isClientMode ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-slate-300 overflow-y-auto">
+                  <div className="max-w-4xl w-full space-y-6 text-center my-auto py-6">
+                    <div className="space-y-1.5">
+                      <div className="inline-flex items-center space-x-2 px-3 py-1 bg-sky-500/10 border border-sky-500/30 rounded-full text-sky-400 text-xs font-bold uppercase tracking-widest">
+                        <i className="fas fa-cubes"></i>
+                        <span>HMI Screen Templates</span>
+                      </div>
+                      <h3 className="text-xl font-black text-white tracking-tight">Select a Demo Dashboard Template</h3>
+                      <p className="text-xs text-slate-400 max-w-xl mx-auto">
+                        Choose from any of these pre-configured demo templates to instantly populate this screen canvas, or click <span className="text-sky-400 font-bold">+ Add Element</span> above to build from scratch.
+                      </p>
+                    </div>
+
+                    {/* Grid of 8 Small Buttons / Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-left">
+                      {DEMO_PRESETS.map((preset) => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => handleLoadPresetTemplate(preset.id)}
+                          className="group relative p-3.5 bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 hover:border-sky-500/60 rounded-2xl transition-all cursor-pointer flex flex-col justify-between space-y-2.5 shadow-xl hover:shadow-sky-500/10 active:scale-95"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-base ${preset.bgClass} ${preset.textClass}`}>
+                              <i className={`fas ${preset.icon}`}></i>
+                            </div>
+                            <span className="text-[10px] font-mono font-bold text-slate-500 group-hover:text-sky-400 transition-colors">
+                              {preset.elementCount} Elements
+                            </span>
+                          </div>
+
+                          <div className="flex-1 space-y-0.5">
+                            <h4 className="text-xs font-bold text-slate-100 group-hover:text-white transition-colors">
+                              {preset.title}
+                            </h4>
+                            <p className="text-[10px] text-slate-400 leading-relaxed line-clamp-2">
+                              {preset.desc}
+                            </p>
+                          </div>
+
+                          <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-bold text-sky-400 opacity-80 group-hover:opacity-100">
+                            <span>Load Template</span>
+                            <i className="fas fa-arrow-right text-[9px] group-hover:translate-x-1 transition-transform"></i>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-slate-400 pointer-events-none select-none">
+                  <div className="text-center space-y-3 max-w-md">
+                    <div className="w-14 h-14 mx-auto rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-center text-slate-500 text-2xl shadow-inner">
+                      <i className="fas fa-display"></i>
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-base font-bold text-slate-300">No HMI Elements Deployed</h3>
+                      <p className="text-xs text-slate-500">
+                        This screen is currently empty. Deploy project elements or load a backup package from Studio.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )
+            ) : (
+              panels.map((panel, idx) => {
+                const dynEval = evaluatePanelDynamics(panel, latestValues);
+                if (panel.isHidden || dynEval.visibility?.isHidden) return null;
+
+                const pos = getPanelPos(panel, idx);
+                const isSelected = selectedPanelIds.includes(panel.panelId);
+                const isMaster = masterPanelId === panel.panelId;
+                // Find any active dynamic rule tag/topic binding on this panel
+                const dynamicTag = panel.dynamics?.find(d => d.enabled && (d.driverTagId || d.topic))?.driverTagId
+                  || panel.dynamics?.find(d => d.enabled && (d.driverTagId || d.topic))?.topic;
+
+                const liveData = latestValues[panel.panelId]
+                  || (panel.driverTagId ? latestValues[panel.driverTagId] : undefined)
+                  || (panel.topic ? latestValues[panel.topic] : undefined)
+                  || (dynamicTag ? latestValues[dynamicTag] : undefined);
+
+                const liveValue = liveData?.val;
+                const rawStringValue = liveValue !== undefined && liveValue !== null ? String(liveValue) : '';
+
+                // Dynamic color shift, opacity, and blinking
+                const effectiveBg = dynEval.colorShift?.fill || panel.bgColor;
+                const effectiveBorder = dynEval.colorShift?.stroke || panel.borderColor;
+                const effectiveOpacity = dynEval.opacity !== null ? dynEval.opacity : (panel.opacity !== undefined ? panel.opacity : 1);
+                const isDynBlinking = dynEval.visibility?.isBlinking;
+                const dynBlinkClass = isDynBlinking ? (dynEval.visibility?.blinkSpeed === 'fast' ? 'animate-ping' : 'animate-pulse') : '';
+
+                // Equipment Trip / Fault Evaluation
+                const tripStatus = isPanelTripped(panel, latestValues);
+                const isTripActive = tripStatus.isTripped;
+                const tripAnimClass = isTripActive ? `trip-anim-${panel.tripAnimStyle || 'flash_strobe'}` : dynBlinkClass;
+                const isPipePanel = panel.type === PanelType.PIPE || (panel.type as string) === 'pipe' || panel.shapeType === 'pipe';
+                const isVectorShape = panel.type === PanelType.SHAPE || (panel.type as string) === 'shape' || isPipePanel;
+                const isSymbolOrImagePanel = !!panel.symbolId || !!panel.symbolAnimType || panel.type === PanelType.IMAGE || (panel.type as string) === 'image';
+                const hasCustomExplicitBg = !!panel.bgColor && panel.bgColor !== 'transparent' && !panel.bgColor.includes('15, 23, 42') && panel.bgColor !== '#0f172a' && panel.bgColor !== '#1e293b';
+                const is3dCanvas = panel.type === PanelType.CANVAS_3D || (panel.type as string) === 'canvas_3d';
+                const isTascGrid = panel.type === PanelType.TASC_GRID || (panel.type as string) === 'tasc_grid';
+                const isPureShapeWithoutBox = isPipePanel || is3dCanvas || isTascGrid || (isSymbolOrImagePanel && !hasCustomExplicitBg) || (isVectorShape && panel.shapeType !== 'rectangle');
+
+                const hasAnyBinding = Boolean(panel.topic?.trim() || panel.driverTagId || dynamicTag);
+
+                // Check if element is purely static/decorative/non-telemetry or handles its own SQL transport
+                const isStaticOrDecorative =
+                  panel.type === PanelType.STATIC_TEXT ||
+                  (panel.type as string) === 'static_text' ||
+                  (panel.type as string) === 'label' ||
+                  panel.type === PanelType.CLOCK ||
+                  panel.type === PanelType.SCREEN_JUMP ||
+                  is3dCanvas ||
+                  isTascGrid ||
+                  (!hasAnyBinding);
+
+                // Telemetry Timeout / Disconnection Watchdog Evaluation
+                const telemetryStatus = getPanelTelemetryStatus(panel, latestValues);
+                const isOffline = !isStaticOrDecorative && telemetryStatus.isOffline && panel.enableStaleTimeout !== false && panel.showOfflineBadge !== false;
+
+                // Rx & Tx Telemetry Timestamp Visual Display
+                const lastRxTime = liveData?.time;
+                const lastTxTime = liveData?.sentTime;
+                const showRx = !isStaticOrDecorative && panel.showReceivedTimeStamp !== false && !!lastRxTime && (!!panel.topic || !!panel.driverTagId || !!dynamicTag);
+                const showTx = !isStaticOrDecorative && !!panel.showSentTimeStamp && !!lastTxTime && (!!panel.publishTopic || !!panel.topic);
+
+                // Dynamic Tag-Based Motion Translation and Rotation Evaluation
+                const dynTransform = getDynamicElementTransform(panel, latestValues, effectiveEditMode);
+
+                let combinedTransform = dynTransform.transform || (panel.rotation ? `rotate(${panel.rotation}deg)` : undefined);
+                if (dynEval.rotation?.angle && !effectiveEditMode) {
+                  combinedTransform = combinedTransform ? `${combinedTransform} rotate(${dynEval.rotation.angle}deg)` : `rotate(${dynEval.rotation.angle}deg)`;
+                }
+
+                let combinedAnimation = dynTransform.animation;
+                if (dynEval.rotation?.isSpinning && !effectiveEditMode && !combinedAnimation) {
+                  const animName = dynEval.rotation.spinDirection === 'ccw' ? 'hmi-spin-ccw' : 'hmi-spin-cw';
+                  combinedAnimation = `${animName} ${dynEval.rotation.spinDuration}s linear infinite`;
+                }
+
+                return (
                   <div
-                    className="absolute top-1.5 right-1.5 z-40 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-300 border border-amber-500/80 animate-pulse flex items-center space-x-1 shadow-lg backdrop-blur-md pointer-events-none"
-                    title={telemetryStatus.isBad ? 'Driver bad quality / socket error' : `No telemetry payload received for ${telemetryStatus.secondsSinceUpdate || 10}s`}
-                  >
-                    <i className="fas fa-plug-circle-xmark text-[9px] text-amber-400"></i>
-                    <span>OFFLINE ({telemetryStatus.secondsSinceUpdate || 10}s)</span>
-                  </div>
-                )}
-
-                {/* Top-Left Rx Received Timestamp Badge (below header title) */}
-                {showRx && (
-                  <div className="absolute top-[26px] left-1.5 z-30 pointer-events-none">
-                    <span className="text-[9px] font-mono text-slate-300 flex items-center space-x-1 bg-slate-950/90 px-1.5 py-0.5 rounded-md border border-slate-800 shadow-md backdrop-blur-md">
-                      <i className="fas fa-arrow-down text-[8px] text-emerald-400"></i>
-                      <span>Rx: {lastRxTime}</span>
-                    </span>
-                  </div>
-                )}
-
-                {/* Top-Right Tx Sent Timestamp Badge (below header title) */}
-                {showTx && (
-                  <div className="absolute top-[26px] right-1.5 z-30 pointer-events-none">
-                    <span className="text-[9px] font-mono text-amber-300 flex items-center space-x-1 bg-amber-950/90 px-1.5 py-0.5 rounded-md border border-amber-800/80 shadow-md backdrop-blur-md">
-                      <i className="fas fa-arrow-up text-[8px] text-amber-400"></i>
-                      <span>Tx: {lastTxTime}</span>
-                    </span>
-                  </div>
-                )}
-                {/* Element Content Renderers */}
-                {panel.type === PanelType.STATIC_TEXT ? (
-                  <div 
-                    className="w-full h-full flex items-center justify-center p-2 font-bold truncate text-center"
+                    key={panel.panelId}
+                    id={`hmi-panel-${panel.panelId}`}
+                    onMouseDown={(e) => {
+                      if (panel.isLocked) {
+                        handlePanelSelect(panel.panelId, e.shiftKey || e.ctrlKey || e.metaKey);
+                        return;
+                      }
+                      handleMouseDown(e, panel.panelId);
+                    }}
+                    onContextMenu={(e) => handleContextMenu(e, panel.panelId)}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      onEditPanel(panel);
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePanelInteract(panel);
+                    }}
+                    className={`absolute transition-all group select-none ${effectiveEditMode ? (panel.isLocked ? 'cursor-not-allowed' : 'cursor-move') : 'cursor-pointer'
+                      } ${isSelected && effectiveEditMode
+                        ? isMaster
+                          ? 'ring-2 ring-amber-400 shadow-2xl z-30'
+                          : 'ring-2 ring-sky-400/90 shadow-xl z-20'
+                        : effectiveEditMode
+                          ? 'hover:ring-1 hover:ring-sky-400/80 z-10'
+                          : 'z-10'
+                      } ${tripAnimClass}`}
                     style={{
-                      fontSize: `${panel.fontSize || 16}px`,
-                      color: panel.textColor || '#38bdf8',
-                      textAlign: panel.textAlign || 'center',
-                      textShadow: panel.shadowEnabled
-                        ? `0 0 ${panel.shadowIntensity ?? 12}px ${panel.shadowColor || panel.textColor || '#38bdf8'}, 0 0 ${Math.round((panel.shadowIntensity ?? 12) / 2)}px ${panel.shadowColor || panel.textColor || '#38bdf8'}, 0 2px 4px rgba(0, 0, 0, 0.9)`
+                      left: `${pos.x}px`,
+                      top: `${pos.y}px`,
+                      width: `${pos.w}px`,
+                      height: `${pos.h}px`,
+                      backgroundColor: (isPureShapeWithoutBox || isTascGrid) ? 'transparent' : (effectiveBg || (panel.type === PanelType.STATIC_TEXT ? '#0f172a' : 'rgba(15, 23, 42, 0.9)')),
+                      borderColor: (isPureShapeWithoutBox || isTascGrid) ? 'transparent' : (effectiveBorder || '#1e293b'),
+                      borderWidth: (isPureShapeWithoutBox || isTascGrid) ? '0px' : `${panel.borderWidth ?? 1}px`,
+                      borderRadius: (isPureShapeWithoutBox || isTascGrid) ? '0px' : `${panel.borderRadius ?? 8}px`,
+                      color: panel.textColor || '#f8fafc',
+                      opacity: effectiveOpacity,
+                      transform: combinedTransform,
+                      animation: combinedAnimation,
+                      boxShadow: !isPureShapeWithoutBox && !isTascGrid && panel.shadowEnabled
+                        ? `0 0 ${panel.shadowIntensity ?? 15}px ${panel.shadowColor || '#38bdf8'}, 0 4px 12px rgba(0, 0, 0, 0.5)`
                         : undefined
                     }}
                   >
-                    {panel.staticText || panel.panelName || 'STATIC LABEL'}
-                  </div>
-                ) : panel.type === PanelType.BUTTON ? (
-                  /* Tactile 3D Push-Button Widget with state 0 / state 1 custom text & styles */
-                  <div className="w-full h-full p-1.5 flex items-center justify-center">
-                    <button
-                      type="button"
-                      disabled={isEditMode}
-                      onClick={(e) => {
-                        if (!isEditMode && onPublish) {
-                          const pubTopic = panel.publishTopic || panel.topic;
-                          const payload = panel.buttonPayload || panel.payloadOn || '1';
-                          onPublish(pubTopic, formatPublishPayload(payload, panel));
-                        }
-                      }}
-                      className={`w-full h-full border-2 transition-all flex items-center justify-center space-x-2 px-3 py-1 cursor-pointer group/btn active:scale-95 shadow-md ${
-                        panel.buttonStyle === 'square'
-                          ? 'rounded-none'
-                          : panel.buttonStyle === 'pill'
-                          ? 'rounded-full'
-                          : panel.buttonStyle === 'circular'
-                          ? 'rounded-full aspect-square'
-                          : panel.buttonStyle === 'bevel'
-                          ? 'rounded-lg border-b-4 border-r-4'
-                          : panel.buttonStyle === 'glossy'
-                          ? 'rounded-xl bg-gradient-to-b from-sky-400/20 via-sky-900/40 to-slate-950 border-sky-400/50'
-                          : 'rounded-xl'
-                      }`}
-                      style={{
-                        backgroundColor: String(liveValue) === String(panel.payloadOn ?? '1') 
-                          ? (panel.firstColor || '#10b981')
-                          : (panel.bgColor || '#1e293b'),
-                        borderColor: panel.borderColor || '#334155',
-                        borderRadius: panel.borderRadius !== undefined ? `${panel.borderRadius}px` : undefined
-                      }}
-                    >
-                      <div className={`w-2.5 h-2.5 rounded-full transition-transform shrink-0 ${
-                        String(liveValue) === String(panel.payloadOn ?? '1')
-                          ? 'bg-emerald-400 shadow-[0_0_10px_#10b981] scale-125'
-                          : 'bg-amber-500 shadow-[0_0_6px_#f59e0b]'
-                      }`}></div>
-                      <span className="font-extrabold text-xs uppercase tracking-wider truncate drop-shadow" style={{ color: panel.textColor || '#ffffff' }}>
-                        {String(liveValue) === String(panel.payloadOn ?? '1')
-                          ? (panel.payloadOnText || panel.panelName || 'PUSH BUTTON')
-                          : (panel.payloadOffText || panel.panelName || 'PUSH BUTTON')}
-                      </span>
-                      <i className="fas fa-hand-pointer text-amber-400 text-xs opacity-75 group-hover/btn:opacity-100 shrink-0"></i>
-                    </button>
-                  </div>
-                ) : panel.type === PanelType.SWITCH ? (
-                  /* Industrial Toggle Switch / Rocker Button */
-                  <div className="w-full h-full p-1.5 flex items-center justify-between px-3">
-                    <div className="flex flex-col truncate">
-                      <span className="text-[10px] font-extrabold truncate uppercase tracking-wider" style={{ color: panel.textColor || '#cbd5e1' }}>
-                        {panel.panelName}
-                      </span>
-                      <span className={`text-[9px] font-mono font-bold ${
-                        String(liveValue) === String(panel.payloadOn ?? '1') ? 'text-emerald-400' : 'text-slate-400'
-                      }`}>
-                        {String(liveValue) === String(panel.payloadOn ?? '1') ? (panel.payloadOnText || 'STATE: ON') : (panel.payloadOffText || 'STATE: OFF')}
-                      </span>
-                    </div>
+                    {/* Telemetry Disconnection / Timeout Badge Overlay (HMI Canvas View - Dynamically Scaled) */}
+                    {isOffline && panel.enableStaleTimeout !== false && panel.showOfflineBadge !== false && (() => {
+                      const isMicro = pos.w < 65 || pos.h < 30;
+                      const isMini = pos.w < 110 || pos.h < 50;
+                      const isCompact = pos.w < 160 || pos.h < 70;
 
-                    <div className={`w-12 h-6 rounded-full p-0.5 border-2 transition-colors cursor-pointer flex items-center ${
-                      String(liveValue) === String(panel.payloadOn ?? '1')
-                        ? 'bg-emerald-500/20 border-emerald-500 justify-end'
-                        : 'bg-slate-900 border-slate-700 justify-start'
-                    }`}>
-                      <div className={`w-4 h-4 rounded-full shadow-md transition-all ${
-                        String(liveValue) === String(panel.payloadOn ?? '1')
-                          ? 'bg-emerald-400 shadow-[0_0_10px_#10b981]'
-                          : 'bg-slate-500'
-                      }`}></div>
-                    </div>
-                  </div>
-                ) : panel.type === PanelType.SCREEN_JUMP ? (
-                  /* Screen Navigation Button */
-                  <div className="w-full h-full p-1.5 flex items-center justify-center">
-                    <button
-                      type="button"
-                      disabled={effectiveEditMode}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handlePanelInteract(panel);
-                      }}
-                      className="w-full h-full rounded-xl bg-gradient-to-r from-sky-900/80 to-indigo-900/80 hover:from-sky-700 hover:to-indigo-700 border-2 border-sky-400 text-sky-100 font-extrabold text-xs uppercase tracking-wider px-3 py-1 flex items-center justify-between shadow-lg active:scale-95 transition-all cursor-pointer"
-                    >
-                      <div className="flex items-center space-x-2 truncate">
-                        <i className="fas fa-desktop text-sky-400 text-xs"></i>
-                        <span className="truncate" style={{ color: panel.textColor || '#e0f2fe' }}>{panel.panelName || 'JUMP SCREEN'}</span>
+                      // Compute smooth scale factor when resized between 40px and 160px
+                      const scale = Math.min(1, Math.max(0.6, Math.min(pos.w / 160, pos.h / 70)));
+                      const titleText = telemetryStatus.isBad
+                        ? 'Driver bad quality / socket error'
+                        : `Offline: No telemetry payload received for ${telemetryStatus.secondsSinceUpdate || 10}s`;
+
+                      if (isMicro) {
+                        // Ultra-compact beacon icon for small pipes/sensors (< 65x30)
+                        return (
+                          <div
+                            className="absolute top-0.5 right-0.5 z-40 w-3.5 h-3.5 rounded-full bg-amber-500 text-slate-950 border border-amber-300 shadow-md flex items-center justify-center pointer-events-none animate-pulse"
+                            title={titleText}
+                          >
+                            <i className="fas fa-plug-circle-xmark text-[7px]"></i>
+                          </div>
+                        );
+                      }
+
+                      if (isMini) {
+                        // Mini icon-only badge (< 110x50)
+                        return (
+                          <div
+                            className="absolute top-0.5 right-0.5 z-40 text-[7.5px] font-black uppercase px-1 py-0.2 rounded-full bg-amber-500/40 text-amber-300 border border-amber-500/80 animate-pulse flex items-center space-x-0.5 shadow-md backdrop-blur-md pointer-events-none origin-top-right"
+                            style={{ transform: `scale(${scale})` }}
+                            title={titleText}
+                          >
+                            <i className="fas fa-plug-circle-xmark text-[7px] text-amber-400"></i>
+                            <span>OFF</span>
+                          </div>
+                        );
+                      }
+
+                      if (isCompact) {
+                        // Compact pill (< 160x70)
+                        return (
+                          <div
+                            className="absolute top-1 right-1 z-40 text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full bg-amber-500/35 text-amber-300 border border-amber-500/80 animate-pulse flex items-center space-x-1 shadow-md backdrop-blur-md pointer-events-none origin-top-right"
+                            style={{ transform: `scale(${scale})` }}
+                            title={titleText}
+                          >
+                            <i className="fas fa-plug-circle-xmark text-[7.5px] text-amber-400"></i>
+                            <span>OFFLINE</span>
+                          </div>
+                        );
+                      }
+
+                      // Standard full pill
+                      return (
+                        <div
+                          className="absolute top-1.5 right-1.5 z-40 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-300 border border-amber-500/80 animate-pulse flex items-center space-x-1 shadow-lg backdrop-blur-md pointer-events-none origin-top-right"
+                          style={{ transform: scale < 1 ? `scale(${scale})` : undefined }}
+                          title={titleText}
+                        >
+                          <i className="fas fa-plug-circle-xmark text-[9px] text-amber-400"></i>
+                          <span>OFFLINE ({telemetryStatus.secondsSinceUpdate || 10}s)</span>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Top-Left Rx Received Timestamp Badge (below header title) */}
+                    {showRx && pos.w >= 90 && pos.h >= 50 && (
+                      <div className="absolute top-[26px] left-1.5 z-30 pointer-events-none">
+                        <span className="text-[9px] font-mono text-slate-300 flex items-center space-x-1 bg-slate-950/90 px-1.5 py-0.5 rounded-md border border-slate-800 shadow-md backdrop-blur-md">
+                          <i className="fas fa-arrow-down text-[8px] text-emerald-400"></i>
+                          <span>Rx: {lastRxTime}</span>
+                        </span>
                       </div>
-                      <i className="fas fa-arrow-right text-sky-400 text-xs shrink-0 ml-1"></i>
-                    </button>
-                  </div>
-                ) : panel.type === PanelType.SLIDER ? (
-                  /* Interactive Range Slider Element */
-                  <div className="w-full h-full p-2 flex flex-col justify-between overflow-hidden">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-[10px] font-bold truncate uppercase tracking-wider" style={{ color: panel.textColor || '#cbd5e1' }}>
-                        {panel.panelName || 'SLIDER'}
-                      </span>
-                      <span className="text-[11px] font-extrabold font-mono text-sky-400 bg-sky-500/10 border border-sky-500/20 px-1.5 py-0.5 rounded-md shrink-0">
-                        {sliderValues[panel.panelId] !== undefined 
-                          ? sliderValues[panel.panelId] 
-                          : (liveValue !== undefined ? Number(liveValue) : (panel.payloadMin ?? 0))}
-                        {panel.unit ? ` ${panel.unit}` : ''}
-                      </span>
-                    </div>
+                    )}
 
-                    <div className="relative w-full my-1 flex flex-col justify-center">
-                      <input
-                        type="range"
-                        min={panel.payloadMin ?? 0}
-                        max={panel.payloadMax ?? 100}
-                        step={panel.sliderStep || 1}
-                        value={
-                          sliderValues[panel.panelId] !== undefined 
-                            ? sliderValues[panel.panelId] 
-                            : (liveValue !== undefined ? Number(liveValue) : (panel.payloadMin ?? 0))
-                        }
-                        onChange={(e) => {
-                          const val = Number(e.target.value);
-                          setSliderValues(prev => ({ ...prev, [panel.panelId]: val }));
-                          const targetTopic = panel.publishTopic?.trim() || panel.topic?.trim();
-                          if (onPublish && targetTopic) {
-                            onPublish(targetTopic, formatPublishPayload(val, panel));
-                          }
+                    {/* Top-Right Tx Sent Timestamp Badge (below header title) */}
+                    {showTx && pos.w >= 90 && pos.h >= 50 && (
+                      <div className="absolute top-[26px] right-1.5 z-30 pointer-events-none">
+                        <span className="text-[9px] font-mono text-amber-300 flex items-center space-x-1 bg-amber-950/90 px-1.5 py-0.5 rounded-md border border-amber-800/80 shadow-md backdrop-blur-md">
+                          <i className="fas fa-arrow-up text-[8px] text-amber-400"></i>
+                          <span>Tx: {lastTxTime}</span>
+                        </span>
+                      </div>
+                    )}
+                    {/* Element Content Renderers */}
+                    {panel.type === PanelType.STATIC_TEXT ? (
+                      <div
+                        className="w-full h-full flex items-center justify-center p-2 font-bold truncate text-center"
+                        style={{
+                          fontSize: `${panel.fontSize || 16}px`,
+                          color: panel.textColor || '#38bdf8',
+                          textAlign: panel.textAlign || 'center',
+                          textShadow: panel.shadowEnabled
+                            ? `0 0 ${panel.shadowIntensity ?? 12}px ${panel.shadowColor || panel.textColor || '#38bdf8'}, 0 0 ${Math.round((panel.shadowIntensity ?? 12) / 2)}px ${panel.shadowColor || panel.textColor || '#38bdf8'}, 0 2px 4px rgba(0, 0, 0, 0.9)`
+                            : undefined
                         }}
-                        onMouseDown={(e) => {
-                          if (effectiveEditMode) {
-                            handlePanelSelect(panel.panelId, e.shiftKey || e.ctrlKey || e.metaKey);
-                          } else {
+                      >
+                        {panel.staticText || panel.panelName || 'STATIC LABEL'}
+                      </div>
+                    ) : panel.type === PanelType.BUTTON ? (
+                      /* Tactile 3D Push-Button Widget with state 0 / state 1 custom text & styles */
+                      <div className="w-full h-full p-1.5 flex items-center justify-center">
+                        <button
+                          type="button"
+                          disabled={isEditMode}
+                          onClick={(e) => {
+                            if (!isEditMode && onPublish) {
+                              const pubTopic = panel.publishTopic || panel.topic;
+                              const payload = panel.buttonPayload || panel.payloadOn || '1';
+                              onPublish(pubTopic, formatPublishPayload(payload, panel));
+                            }
+                          }}
+                          className={`w-full h-full border-2 transition-all flex items-center justify-center space-x-2 px-3 py-1 cursor-pointer group/btn active:scale-95 shadow-md ${panel.buttonStyle === 'square'
+                            ? 'rounded-none'
+                            : panel.buttonStyle === 'pill'
+                              ? 'rounded-full'
+                              : panel.buttonStyle === 'circular'
+                                ? 'rounded-full aspect-square'
+                                : panel.buttonStyle === 'bevel'
+                                  ? 'rounded-lg border-b-4 border-r-4'
+                                  : panel.buttonStyle === 'glossy'
+                                    ? 'rounded-xl bg-gradient-to-b from-sky-400/20 via-sky-900/40 to-slate-950 border-sky-400/50'
+                                    : 'rounded-xl'
+                            }`}
+                          style={{
+                            backgroundColor: String(liveValue) === String(panel.payloadOn ?? '1')
+                              ? (panel.firstColor || '#10b981')
+                              : (panel.bgColor || '#1e293b'),
+                            borderColor: panel.borderColor || '#334155',
+                            borderRadius: panel.borderRadius !== undefined ? `${panel.borderRadius}px` : undefined
+                          }}
+                        >
+                          <div className={`w-2.5 h-2.5 rounded-full transition-transform shrink-0 ${String(liveValue) === String(panel.payloadOn ?? '1')
+                            ? 'bg-emerald-400 shadow-[0_0_10px_#10b981] scale-125'
+                            : 'bg-amber-500 shadow-[0_0_6px_#f59e0b]'
+                            }`}></div>
+                          <span className="font-extrabold text-xs uppercase tracking-wider truncate drop-shadow" style={{ color: panel.textColor || '#ffffff' }}>
+                            {String(liveValue) === String(panel.payloadOn ?? '1')
+                              ? (panel.payloadOnText || panel.panelName || 'PUSH BUTTON')
+                              : (panel.payloadOffText || panel.panelName || 'PUSH BUTTON')}
+                          </span>
+                          <i className="fas fa-hand-pointer text-amber-400 text-xs opacity-75 group-hover/btn:opacity-100 shrink-0"></i>
+                        </button>
+                      </div>
+                    ) : panel.type === PanelType.SWITCH ? (
+                      /* Industrial Toggle Switch / Rocker Button */
+                      <div className="w-full h-full p-1.5 flex items-center justify-between px-3">
+                        <div className="flex flex-col truncate">
+                          <span className="text-[10px] font-extrabold truncate uppercase tracking-wider" style={{ color: panel.textColor || '#cbd5e1' }}>
+                            {panel.panelName}
+                          </span>
+                          <span className={`text-[9px] font-mono font-bold ${String(liveValue) === String(panel.payloadOn ?? '1') ? 'text-emerald-400' : 'text-slate-400'
+                            }`}>
+                            {String(liveValue) === String(panel.payloadOn ?? '1') ? (panel.payloadOnText || 'STATE: ON') : (panel.payloadOffText || 'STATE: OFF')}
+                          </span>
+                        </div>
+
+                        <div className={`w-12 h-6 rounded-full p-0.5 border-2 transition-colors cursor-pointer flex items-center ${String(liveValue) === String(panel.payloadOn ?? '1')
+                          ? 'bg-emerald-500/20 border-emerald-500 justify-end'
+                          : 'bg-slate-900 border-slate-700 justify-start'
+                          }`}>
+                          <div className={`w-4 h-4 rounded-full shadow-md transition-all ${String(liveValue) === String(panel.payloadOn ?? '1')
+                            ? 'bg-emerald-400 shadow-[0_0_10px_#10b981]'
+                            : 'bg-slate-500'
+                            }`}></div>
+                        </div>
+                      </div>
+                    ) : panel.type === PanelType.SCREEN_JUMP ? (
+                      /* Screen Navigation Button */
+                      <div className="w-full h-full p-1.5 flex items-center justify-center">
+                        <button
+                          type="button"
+                          disabled={effectiveEditMode}
+                          onClick={(e) => {
                             e.stopPropagation();
-                          }
-                        }}
-                        onTouchStart={(e) => {
-                          if (effectiveEditMode) {
-                            handlePanelSelect(panel.panelId, false);
-                          } else {
-                            e.stopPropagation();
-                          }
-                        }}
-                        className="w-full h-2 bg-slate-900 rounded-lg appearance-none cursor-pointer accent-sky-400 hover:accent-sky-300 transition-all border border-slate-700/80"
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between text-[9px] font-mono text-slate-500 px-0.5">
-                      <span>{panel.payloadMin ?? 0}</span>
-                      <span>{panel.payloadMax ?? 100}</span>
-                    </div>
-                  </div>
-                ) : panel.type === PanelType.PROGRESS || (panel.type as string) === 'progress_bar' ? (
-                  /* Visual Progress Bar Element */
-                  ((min: number, max: number) => {
-                    const numVal = Number(liveValue !== undefined ? liveValue : min);
-                    const range = (max - min) || 1;
-                    const pct = Math.max(0, Math.min(100, ((numVal - min) / range) * 100));
-                    const barColor = pct > 75 
-                      ? (panel.firstColor || '#0ea5e9') 
-                      : pct > 35 
-                      ? (panel.secondColor || '#10b981') 
-                      : (panel.thirdColor || '#f43f5e');
-
-                    return (
+                            handlePanelInteract(panel);
+                          }}
+                          className="w-full h-full rounded-xl bg-gradient-to-r from-sky-900/80 to-indigo-900/80 hover:from-sky-700 hover:to-indigo-700 border-2 border-sky-400 text-sky-100 font-extrabold text-xs uppercase tracking-wider px-3 py-1 flex items-center justify-between shadow-lg active:scale-95 transition-all cursor-pointer"
+                        >
+                          <div className="flex items-center space-x-2 truncate">
+                            <i className="fas fa-desktop text-sky-400 text-xs"></i>
+                            <span className="truncate" style={{ color: panel.textColor || '#e0f2fe' }}>{panel.panelName || 'JUMP SCREEN'}</span>
+                          </div>
+                          <i className="fas fa-arrow-right text-sky-400 text-xs shrink-0 ml-1"></i>
+                        </button>
+                      </div>
+                    ) : panel.type === PanelType.SLIDER ? (
+                      /* Interactive Range Slider Element */
                       <div className="w-full h-full p-2 flex flex-col justify-between overflow-hidden">
                         <div className="flex items-center justify-between mb-0.5">
                           <span className="text-[10px] font-bold truncate uppercase tracking-wider" style={{ color: panel.textColor || '#cbd5e1' }}>
-                            {panel.panelName || 'PROGRESS'}
+                            {panel.panelName || 'SLIDER'}
                           </span>
                           <span className="text-[11px] font-extrabold font-mono text-sky-400 bg-sky-500/10 border border-sky-500/20 px-1.5 py-0.5 rounded-md shrink-0">
-                            {Math.round(pct)}%
+                            {sliderValues[panel.panelId] !== undefined
+                              ? sliderValues[panel.panelId]
+                              : (liveValue !== undefined ? Number(liveValue) : (panel.payloadMin ?? 0))}
+                            {panel.unit ? ` ${panel.unit}` : ''}
                           </span>
                         </div>
 
-                        <div className="w-full h-3 bg-slate-950 rounded-full overflow-hidden p-0.5 border border-slate-800 my-1 shadow-inner">
-                          <div 
-                            className="h-full rounded-full transition-all duration-300 ease-out shadow-sm"
-                            style={{ width: `${pct}%`, backgroundColor: barColor }}
+                        <div className="relative w-full my-1 flex flex-col justify-center">
+                          <input
+                            type="range"
+                            min={panel.payloadMin ?? 0}
+                            max={panel.payloadMax ?? 100}
+                            step={panel.sliderStep || 1}
+                            value={
+                              sliderValues[panel.panelId] !== undefined
+                                ? sliderValues[panel.panelId]
+                                : (liveValue !== undefined ? Number(liveValue) : (panel.payloadMin ?? 0))
+                            }
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setSliderValues(prev => ({ ...prev, [panel.panelId]: val }));
+                              const targetTopic = panel.publishTopic?.trim() || panel.topic?.trim();
+                              if (onPublish && targetTopic) {
+                                onPublish(targetTopic, formatPublishPayload(val, panel));
+                              }
+                            }}
+                            onMouseDown={(e) => {
+                              if (effectiveEditMode) {
+                                handlePanelSelect(panel.panelId, e.shiftKey || e.ctrlKey || e.metaKey);
+                              } else {
+                                e.stopPropagation();
+                              }
+                            }}
+                            onTouchStart={(e) => {
+                              if (effectiveEditMode) {
+                                handlePanelSelect(panel.panelId, false);
+                              } else {
+                                e.stopPropagation();
+                              }
+                            }}
+                            className="w-full h-2 bg-slate-900 rounded-lg appearance-none cursor-pointer accent-sky-400 hover:accent-sky-300 transition-all border border-slate-700/80"
                           />
                         </div>
 
-                        <div className="flex justify-between text-[9px] font-mono text-slate-500 px-0.5">
-                          <span>{numVal} {panel.unit || ''}</span>
-                          <span>Max: {max}</span>
+                        <div className="flex items-center justify-between text-[9px] font-mono text-slate-500 px-0.5">
+                          <span>{panel.payloadMin ?? 0}</span>
+                          <span>{panel.payloadMax ?? 100}</span>
                         </div>
                       </div>
-                    );
-                  })(panel.payloadMin ?? 0, panel.payloadMax ?? 100)
-                ) : panel.type === PanelType.TEXT_OUTPUT || (panel.type as string) === 'text_display' || panel.type === PanelType.LOG ? (
-                  /* Text Output / Sensor Readout Display Element */
-                  (() => {
-                    const min = panel.payloadMin ?? 0;
-                    const max = panel.payloadMax ?? 100;
-                    const range = max - min || 1;
-                    const lowVal = panel.lowThreshold !== undefined ? panel.lowThreshold : min + range * 0.333;
-                    const highVal = panel.highThreshold !== undefined ? panel.highThreshold : min + range * 0.666;
-                    const numVal = typeof liveValue === 'number' && !isNaN(liveValue) ? liveValue : parseFloat(rawStringValue);
+                    ) : panel.type === PanelType.PROGRESS || (panel.type as string) === 'progress_bar' ? (
+                      /* Visual Progress Bar Element */
+                      ((min: number, max: number) => {
+                        const numVal = Number(liveValue !== undefined ? liveValue : min);
+                        const range = (max - min) || 1;
+                        const pct = Math.max(0, Math.min(100, ((numVal - min) / range) * 100));
+                        const barColor = pct > 75
+                          ? (panel.firstColor || '#0ea5e9')
+                          : pct > 35
+                            ? (panel.secondColor || '#10b981')
+                            : (panel.thirdColor || '#f43f5e');
 
-                    let dynamicColor = panel.textColor || '#38bdf8';
-                    if (!isNaN(numVal)) {
-                      if (numVal <= lowVal) {
-                        dynamicColor = panel.firstColor || '#38bdf8';
-                      } else if (numVal <= highVal) {
-                        dynamicColor = panel.secondColor || '#10b981';
-                      } else {
-                        dynamicColor = panel.thirdColor || '#f43f5e';
-                      }
-                    }
-
-                    return (
-                      <div className="w-full h-full p-2 flex flex-col justify-between overflow-hidden">
-                        <span className="text-[10px] font-bold truncate uppercase tracking-wider mb-0.5" style={{ color: panel.textColor || '#94a3b8' }}>
-                          {panel.panelName || 'TEXT DISPLAY'}
-                        </span>
-                        <div 
-                          className="flex items-baseline justify-between px-2.5 py-1.5 rounded-lg my-auto transition-all duration-300"
-                          style={{
-                            backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                            borderColor: `${dynamicColor}50`,
-                            borderWidth: '1px'
-                          }}
-                        >
-                          <span 
-                            className={`font-bold tracking-wider truncate ${panel.digitalDisplay !== false ? 'digital-font' : ''}`}
-                            style={{ fontSize: `${panel.fontSize || 16}px`, color: dynamicColor }}
-                          >
-                            {rawStringValue !== '' ? rawStringValue : (liveValue !== undefined ? String(liveValue) : '0')}
-                          </span>
-                          {panel.unit && <span className="text-[10px] font-mono font-bold ml-1.5 shrink-0" style={{ color: dynamicColor }}>{panel.unit}</span>}
-                        </div>
-                      </div>
-                    );
-                  })()
-                ) : panel.type === PanelType.TEXT_INPUT ? (
-                  /* Interactive Text / Numeric Input Field */
-                  <div 
-                    className="w-full h-full p-2 flex flex-col justify-between overflow-hidden"
-                    onMouseDown={(e) => {
-                      if (effectiveEditMode) {
-                        handlePanelSelect(panel.panelId, e.shiftKey || e.ctrlKey || e.metaKey);
-                      }
-                    }}
-                  >
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-[10px] font-bold truncate uppercase tracking-wider" style={{ color: panel.textColor || '#94a3b8' }}>
-                        {panel.panelName || 'TEXT INPUT'}
-                      </span>
-                      {panel.dataType !== 'text' && (panel.payloadMin !== undefined || panel.payloadMax !== undefined) && (
-                        <span className="text-[9px] font-mono text-slate-400 bg-slate-900 border border-slate-800 px-1.5 py-0.2 rounded">
-                          {panel.payloadMin ?? 0}..{panel.payloadMax ?? 100}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center space-x-1.5 my-0.5">
-                      <input
-                        type={panel.dataType === 'text' ? 'text' : 'number'}
-                        value={
-                          textInputValues[panel.panelId] !== undefined
-                            ? textInputValues[panel.panelId]
-                            : (liveValue !== undefined ? String(liveValue) : '')
-                        }
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setTextInputValues(prev => ({ ...prev, [panel.panelId]: val }));
-                          if (textInputErrors[panel.panelId]) {
-                            setTextInputErrors(prev => ({ ...prev, [panel.panelId]: null }));
-                          }
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.stopPropagation();
-                            const val = textInputValues[panel.panelId] ?? String(liveValue ?? '');
-                            handleSendTextInput(panel, val);
-                          }
-                        }}
-                        onMouseDown={(e) => {
-                          if (!effectiveEditMode) e.stopPropagation();
-                        }}
-                        onTouchStart={(e) => {
-                          if (!effectiveEditMode) e.stopPropagation();
-                        }}
-                        onClick={(e) => {
-                          if (!effectiveEditMode) e.stopPropagation();
-                        }}
-                        placeholder={panel.dataType === 'text' ? 'Enter text...' : `Value (${panel.payloadMin ?? 0} - ${panel.payloadMax ?? 100})...`}
-                        className="flex-1 bg-black/80 border border-slate-700 focus:border-amber-500 text-amber-300 font-mono text-xs rounded-lg px-2 py-1 outline-none min-w-0"
-                      />
-                      <button
-                        type="button"
-                        onMouseDown={(e) => {
-                          if (!effectiveEditMode) e.stopPropagation();
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const val = textInputValues[panel.panelId] ?? String(liveValue ?? '');
-                          handleSendTextInput(panel, val);
-                        }}
-                        className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition-transform active:scale-95 shrink-0 cursor-pointer flex items-center space-x-1"
-                      >
-                        <span>Send</span>
-                        <i className="fas fa-paper-plane text-[9px]"></i>
-                      </button>
-                    </div>
-
-                    {textInputErrors[panel.panelId] ? (
-                      <span className="text-[9px] text-rose-400 font-semibold truncate block">
-                        {textInputErrors[panel.panelId]}
-                      </span>
-                    ) : (
-                      <div className="flex items-center justify-between text-[9px] font-mono text-slate-500">
-                        <span className="truncate">Val: {liveValue !== undefined ? String(liveValue) : '---'}</span>
-                        {panel.unit && <span className="text-sky-400 font-bold ml-1">{panel.unit}</span>}
-                      </div>
-                    )}
-                  </div>
-                ) : panel.type === PanelType.LED ? (
-                  /* Fan / Status Indicator Lamp */
-                  ((isOn: boolean) => {
-                    const activeIcon = isOn ? (panel.iconOn || 'fa-fan') : (panel.iconOff || 'fa-fan');
-                    const activeColor = isOn ? (panel.iconColorOn || '#10b981') : (panel.iconColorOff || '#64748b');
-                    const isAnimate = isOn ? !!panel.rotateOn : !!panel.rotateOff;
-                    const isFlash = isOn ? !!panel.flashOn : !!panel.flashOff;
-                    const animSpeed = isOn ? (panel.animSpeedOn || 'medium') : (panel.animSpeedOff || 'medium');
-
-                    return (
-                      <div className="w-full h-full p-2 flex items-center justify-between space-x-2">
-                        <div className="flex flex-col truncate">
-                          <span className="text-[10px] font-bold truncate" style={{ color: panel.textColor || '#cbd5e1' }}>{panel.panelName}</span>
-                          <span className="text-[9px] font-mono text-slate-400">
-                            {isOn ? (panel.payloadOnText || 'RUNNING') : (panel.payloadOffText || 'STOPPED')}
-                          </span>
-                        </div>
-                        <div 
-                          className="w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0 border"
-                          style={{
-                            backgroundColor: isOn 
-                              ? `${activeColor}25` 
-                              : '#1e293b',
-                            borderColor: isOn 
-                              ? activeColor 
-                              : '#334155',
-                            color: activeColor
-                          }}
-                        >
-                          <SmartIcon icon={activeIcon} isAnimate={isAnimate} isFlash={isFlash} speed={animSpeed} />
-                        </div>
-                      </div>
-                    );
-                  })(String(liveValue) === String(panel.payloadOn ?? '1'))
-                ) : panel.type === PanelType.COMBO_BOX ? (
-                  /* Combo Box Dropdown Element */
-                  <div className="w-full h-full p-2 flex flex-col justify-between overflow-hidden">
-                    <span className="text-[10px] font-bold truncate uppercase tracking-wider mb-1" style={{ color: panel.textColor || '#94a3b8' }}>
-                      {panel.panelName}
-                    </span>
-                    <select
-                      value={rawStringValue}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        const selectedVal = e.target.value;
-                        if (onPublish) onPublish(panel.publishTopic || panel.topic, formatPublishPayload(selectedVal, panel));
-                      }}
-                      style={{ color: panel.textColor || '#fcd34d' }}
-                      className="w-full bg-slate-950 border border-slate-700 font-bold text-xs rounded-lg px-2 py-1.5 outline-none cursor-pointer font-mono"
-                    >
-                      <option value="" disabled className="text-slate-500">Select option...</option>
-                      {getNormalizedOptions(panel).map((opt, i) => (
-                        <option key={i} value={opt.value} className="bg-slate-900 text-white">
-                          {opt.label} ({opt.value})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : panel.type === PanelType.RADIO_BUTTONS || panel.type === PanelType.MULTI_STATE ? (
-                  /* Radio Button Group Element */
-                  <div className="w-full h-full p-2 flex flex-col overflow-hidden">
-                    <span className="text-[10px] font-bold truncate uppercase tracking-wider mb-1" style={{ color: panel.textColor || '#94a3b8' }}>
-                      {panel.panelName}
-                    </span>
-                    <div className="flex flex-wrap gap-1.5 overflow-y-auto max-h-full">
-                      {getNormalizedOptions(panel).map((opt, i) => {
-                        const isActive = rawStringValue === opt.value || rawStringValue === opt.label || rawStringValue === String(i);
                         return (
+                          <div className="w-full h-full p-2 flex flex-col justify-between overflow-hidden">
+                            <div className="flex items-center justify-between mb-0.5">
+                              <span className="text-[10px] font-bold truncate uppercase tracking-wider" style={{ color: panel.textColor || '#cbd5e1' }}>
+                                {panel.panelName || 'PROGRESS'}
+                              </span>
+                              <span className="text-[11px] font-extrabold font-mono text-sky-400 bg-sky-500/10 border border-sky-500/20 px-1.5 py-0.5 rounded-md shrink-0">
+                                {Math.round(pct)}%
+                              </span>
+                            </div>
+
+                            <div className="w-full h-3 bg-slate-950 rounded-full overflow-hidden p-0.5 border border-slate-800 my-1 shadow-inner">
+                              <div
+                                className="h-full rounded-full transition-all duration-300 ease-out shadow-sm"
+                                style={{ width: `${pct}%`, backgroundColor: barColor }}
+                              />
+                            </div>
+
+                            <div className="flex justify-between text-[9px] font-mono text-slate-500 px-0.5">
+                              <span>{numVal} {panel.unit || ''}</span>
+                              <span>Max: {max}</span>
+                            </div>
+                          </div>
+                        );
+                      })(panel.payloadMin ?? 0, panel.payloadMax ?? 100)
+                    ) : panel.type === PanelType.TEXT_OUTPUT || (panel.type as string) === 'text_display' || panel.type === PanelType.LOG ? (
+                      /* Text Output / Sensor Readout Display Element */
+                      (() => {
+                        const min = panel.payloadMin ?? 0;
+                        const max = panel.payloadMax ?? 100;
+                        const range = max - min || 1;
+                        const lowVal = panel.lowThreshold !== undefined ? panel.lowThreshold : min + range * 0.333;
+                        const highVal = panel.highThreshold !== undefined ? panel.highThreshold : min + range * 0.666;
+                        const numVal = typeof liveValue === 'number' && !isNaN(liveValue) ? liveValue : parseFloat(rawStringValue);
+
+                        let dynamicColor = panel.textColor || '#38bdf8';
+                        if (!isNaN(numVal)) {
+                          if (numVal <= lowVal) {
+                            dynamicColor = panel.firstColor || '#38bdf8';
+                          } else if (numVal <= highVal) {
+                            dynamicColor = panel.secondColor || '#10b981';
+                          } else {
+                            dynamicColor = panel.thirdColor || '#f43f5e';
+                          }
+                        }
+
+                        return (
+                          <div className="w-full h-full p-2 flex flex-col justify-between overflow-hidden">
+                            <span className="text-[10px] font-bold truncate uppercase tracking-wider mb-0.5" style={{ color: panel.textColor || '#94a3b8' }}>
+                              {panel.panelName || 'TEXT DISPLAY'}
+                            </span>
+                            <div
+                              className="flex items-baseline justify-between px-2.5 py-1.5 rounded-lg my-auto transition-all duration-300"
+                              style={{
+                                backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                                borderColor: `${dynamicColor}50`,
+                                borderWidth: '1px'
+                              }}
+                            >
+                              <span
+                                className={`font-bold tracking-wider truncate ${panel.digitalDisplay !== false ? 'digital-font' : ''}`}
+                                style={{ fontSize: `${panel.fontSize || 16}px`, color: dynamicColor }}
+                              >
+                                {rawStringValue !== '' ? rawStringValue : (liveValue !== undefined ? String(liveValue) : '0')}
+                              </span>
+                              {panel.unit && <span className="text-[10px] font-mono font-bold ml-1.5 shrink-0" style={{ color: dynamicColor }}>{panel.unit}</span>}
+                            </div>
+                          </div>
+                        );
+                      })()
+                    ) : panel.type === PanelType.TEXT_INPUT ? (
+                      /* Interactive Text / Numeric Input Field */
+                      <div
+                        className="w-full h-full p-2 flex flex-col justify-between overflow-hidden"
+                        onMouseDown={(e) => {
+                          if (effectiveEditMode) {
+                            handlePanelSelect(panel.panelId, e.shiftKey || e.ctrlKey || e.metaKey);
+                          }
+                        }}
+                      >
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className="text-[10px] font-bold truncate uppercase tracking-wider" style={{ color: panel.textColor || '#94a3b8' }}>
+                            {panel.panelName || 'TEXT INPUT'}
+                          </span>
+                          {panel.dataType !== 'text' && (panel.payloadMin !== undefined || panel.payloadMax !== undefined) && (
+                            <span className="text-[9px] font-mono text-slate-400 bg-slate-900 border border-slate-800 px-1.5 py-0.2 rounded">
+                              {panel.payloadMin ?? 0}..{panel.payloadMax ?? 100}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center space-x-1.5 my-0.5">
+                          <input
+                            type={panel.dataType === 'text' ? 'text' : 'number'}
+                            value={
+                              textInputValues[panel.panelId] !== undefined
+                                ? textInputValues[panel.panelId]
+                                : (liveValue !== undefined ? String(liveValue) : '')
+                            }
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setTextInputValues(prev => ({ ...prev, [panel.panelId]: val }));
+                              if (textInputErrors[panel.panelId]) {
+                                setTextInputErrors(prev => ({ ...prev, [panel.panelId]: null }));
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.stopPropagation();
+                                const val = textInputValues[panel.panelId] ?? String(liveValue ?? '');
+                                handleSendTextInput(panel, val);
+                              }
+                            }}
+                            onMouseDown={(e) => {
+                              if (!effectiveEditMode) e.stopPropagation();
+                            }}
+                            onTouchStart={(e) => {
+                              if (!effectiveEditMode) e.stopPropagation();
+                            }}
+                            onClick={(e) => {
+                              if (!effectiveEditMode) e.stopPropagation();
+                            }}
+                            placeholder={panel.dataType === 'text' ? 'Enter text...' : `Value (${panel.payloadMin ?? 0} - ${panel.payloadMax ?? 100})...`}
+                            className="flex-1 bg-black/80 border border-slate-700 focus:border-amber-500 text-amber-300 font-mono text-xs rounded-lg px-2 py-1 outline-none min-w-0"
+                          />
                           <button
-                            key={i}
                             type="button"
-                            onMouseDown={(e) => e.stopPropagation()}
+                            onMouseDown={(e) => {
+                              if (!effectiveEditMode) e.stopPropagation();
+                            }}
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (onPublish) onPublish(panel.publishTopic || panel.topic, formatPublishPayload(opt.value, panel));
+                              const val = textInputValues[panel.panelId] ?? String(liveValue ?? '');
+                              handleSendTextInput(panel, val);
                             }}
-                            className={`px-2 py-1 rounded-lg text-[11px] font-semibold flex items-center space-x-1.5 border transition-colors cursor-pointer ${
-                              isActive
-                                ? 'bg-amber-500/20 text-amber-300 border-amber-500 font-bold shadow-sm'
-                                : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
-                            }`}
+                            className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition-transform active:scale-95 shrink-0 cursor-pointer flex items-center space-x-1"
                           >
-                            <div className={`w-3 h-3 rounded-full border flex items-center justify-center shrink-0 ${
-                              isActive ? 'border-amber-400 bg-amber-400/20' : 'border-slate-600'
-                            }`}>
-                              {isActive && <div className="w-1 h-1 rounded-full bg-amber-400 shadow-[0_0_4px_#f59e0b]"></div>}
-                            </div>
-                            <span style={{ color: panel.textColor }}>{opt.label}</span>
+                            <span>Send</span>
+                            <i className="fas fa-paper-plane text-[9px]"></i>
                           </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : panel.type === PanelType.LINE_GRAPH ? (
-                  /* Line Graph Element */
-                  <div className="w-full h-full p-1 flex flex-col overflow-hidden bg-[#080d16] border border-slate-800/80 rounded-xl shadow-2xl">
-                    <LineGraph 
-                      panel={panel}
-                      history={historyValues?.[panel.panelId] || (panel.topic ? historyValues?.[panel.topic] : [])} 
-                      historyValues={historyValues}
-                      latestValues={latestValues}
-                      unit={panel.unit} 
-                      color={panel.penColor || panel.firstColor || '#38bdf8'} 
-                      penThickness={panel.penThickness || 2}
-                      graphType={panel.graphType || 'line'}
-                      showGrid={panel.showGrid !== false}
-                      fillArea={panel.fillArea !== false}
-                      showMonitoringTable={panel.showMonitoringTable !== false}
-                      enableDualCursor={panel.enableDualCursor}
-                      pens={panel.pens}
-                      payloadMin={panel.payloadMin}
-                      payloadMax={panel.payloadMax}
-                    />
-                  </div>
-                ) : panel.type === PanelType.GAUGE ? (
-                  <div className="w-full h-full p-2 flex flex-col items-center justify-between text-center overflow-hidden">
-                    <span className="text-[10px] font-bold truncate w-full text-center shrink-0" style={{ color: panel.textColor || '#94a3b8' }}>
-                      {panel.panelName || 'GAUGE'}
-                    </span>
-                    <div className="w-full flex-1 flex items-center justify-center overflow-hidden min-h-0">
-                      <Gauge 
-                        value={typeof liveValue === 'number' && !isNaN(liveValue) ? liveValue : (liveValue !== undefined && !isNaN(Number(liveValue)) ? Number(liveValue) : 0)} 
-                        min={panel.payloadMin ?? 0} 
-                        max={panel.payloadMax ?? 100} 
-                        unit={panel.unit || ''}
-                        color1={panel.firstColor || '#38bdf8'}
-                        color2={panel.secondColor || '#10b981'}
-                        color3={panel.thirdColor || '#f43f5e'}
-                        precision={panel.decimalPrecision ?? 1}
-                        lowThreshold={panel.lowThreshold}
-                        highThreshold={panel.highThreshold}
-                        fontSize={panel.fontSize}
-                      />
-                    </div>
-                  </div>
-                ) : panel.type === PanelType.IMAGE || panel.type === 'image' ? (
-                  /* Media Asset (JPG, PNG, GIF, SVG) Element or Symbol Factory 3.0 Dynamic Symbol */
-                  <div className="w-full h-full relative flex items-center justify-center overflow-hidden rounded-[inherit]">
-                    {panel.symbolId || panel.symbolAnimType ? (
-                      <DynamicIndustrialSymbol
-                        symbolId={panel.symbolId}
-                        panel={panel}
-                        liveValue={liveValue}
-                        latestValues={latestValues}
-                        className="w-full h-full"
-                        activeSubPartId={activeSubPartSelection?.panelId === panel.panelId ? activeSubPartSelection.partId : undefined}
-                      />
-                    ) : panel.imageUrl || panel.staticText ? (
-                      <img
-                        src={panel.imageUrl || panel.staticText}
-                        alt={panel.panelName || 'Imported Media'}
-                        className="w-full h-full pointer-events-none select-none transition-all"
-                        style={{
-                          objectFit: (panel.imageFit as any) || 'contain',
-                          opacity: panel.opacity !== undefined ? panel.opacity : 1
-                        }}
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center justify-center text-purple-400/70 p-2">
-                        <i className="fas fa-file-image text-2xl mb-1"></i>
-                        <span className="text-[10px] font-bold">No Image Source</span>
+                        </div>
+
+                        {textInputErrors[panel.panelId] ? (
+                          <span className="text-[9px] text-rose-400 font-semibold truncate block">
+                            {textInputErrors[panel.panelId]}
+                          </span>
+                        ) : (
+                          <div className="flex items-center justify-between text-[9px] font-mono text-slate-500">
+                            <span className="truncate">Val: {liveValue !== undefined ? String(liveValue) : '---'}</span>
+                            {panel.unit && <span className="text-sky-400 font-bold ml-1">{panel.unit}</span>}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                ) : panel.type === PanelType.CLOCK || (panel.type as string) === 'clock' ? (
-                  /* Realtime Date & Time Clock Widget */
-                  <LiveClockWidget panel={panel} />
-                ) : panel.type === PanelType.ALARM_LOG || (panel.type as string) === 'alarm_log' ? (
-                  /* Alarm Historian Live Log Canvas Widget */
-                  <AlarmHistorianWidget panel={panel} />
-                ) : panel.type === PanelType.SHAPE || (panel.type as string) === 'shape' || panel.type === PanelType.PIPE || (panel.type as string) === 'pipe' ? (
-                  /* Vector / Geometric Shape Element */
-                  ((shapePts) => (
-                    <div className="w-full h-full relative flex items-center justify-center select-none overflow-visible">
-                      {panel.shapeType === 'circle' ? (
-                        <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
-                          <defs>
-                            <clipPath id={`clip_circle_${panel.panelId}`}>
-                              <ellipse cx="50" cy="50" rx="46" ry="46" />
-                            </clipPath>
-                            <linearGradient id={`grad_meniscus_circle_${panel.panelId}`} x1="0%" y1="0%" x2="0%" y2="100%">
-                              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.35" />
-                              <stop offset="50%" stopColor="#000000" stopOpacity="0.0" />
-                              <stop offset="100%" stopColor="#000000" stopOpacity="0.3" />
-                            </linearGradient>
-                          </defs>
-                          {/* Background Shape */}
-                          <ellipse 
-                            cx="50" cy="50" rx="46" ry="46" 
-                            fill={effectiveBg && effectiveBg !== 'transparent' && !effectiveBg.includes('15, 23, 42') ? effectiveBg : 'rgba(15, 23, 42, 0.6)'} 
+                    ) : panel.type === PanelType.LED ? (
+                      /* Fan / Status Indicator Lamp */
+                      ((isOn: boolean) => {
+                        const activeIcon = isOn ? (panel.iconOn || 'fa-fan') : (panel.iconOff || 'fa-fan');
+                        const activeColor = isOn ? (panel.iconColorOn || '#10b981') : (panel.iconColorOff || '#64748b');
+                        const isAnimate = isOn ? !!panel.rotateOn : !!panel.rotateOff;
+                        const isFlash = isOn ? !!panel.flashOn : !!panel.flashOff;
+                        const animSpeed = isOn ? (panel.animSpeedOn || 'medium') : (panel.animSpeedOff || 'medium');
+
+                        return (
+                          <div className="w-full h-full p-2 flex items-center justify-between space-x-2">
+                            <div className="flex flex-col truncate">
+                              <span className="text-[10px] font-bold truncate" style={{ color: panel.textColor || '#cbd5e1' }}>{panel.panelName}</span>
+                              <span className="text-[9px] font-mono text-slate-400">
+                                {isOn ? (panel.payloadOnText || 'RUNNING') : (panel.payloadOffText || 'STOPPED')}
+                              </span>
+                            </div>
+                            <div
+                              className="w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0 border"
+                              style={{
+                                backgroundColor: isOn
+                                  ? `${activeColor}25`
+                                  : '#1e293b',
+                                borderColor: isOn
+                                  ? activeColor
+                                  : '#334155',
+                                color: activeColor
+                              }}
+                            >
+                              <SmartIcon icon={activeIcon} isAnimate={isAnimate} isFlash={isFlash} speed={animSpeed} />
+                            </div>
+                          </div>
+                        );
+                      })(String(liveValue) === String(panel.payloadOn ?? '1'))
+                    ) : panel.type === PanelType.COMBO_BOX ? (
+                      /* Combo Box Dropdown Element */
+                      <div className="w-full h-full p-2 flex flex-col justify-between overflow-hidden">
+                        <span className="text-[10px] font-bold truncate uppercase tracking-wider mb-1" style={{ color: panel.textColor || '#94a3b8' }}>
+                          {panel.panelName}
+                        </span>
+                        <select
+                          value={rawStringValue}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            const selectedVal = e.target.value;
+                            if (onPublish) onPublish(panel.publishTopic || panel.topic, formatPublishPayload(selectedVal, panel));
+                          }}
+                          style={{ color: panel.textColor || '#fcd34d' }}
+                          className="w-full bg-slate-950 border border-slate-700 font-bold text-xs rounded-lg px-2 py-1.5 outline-none cursor-pointer font-mono"
+                        >
+                          <option value="" disabled className="text-slate-500">Select option...</option>
+                          {getNormalizedOptions(panel).map((opt, i) => (
+                            <option key={i} value={opt.value} className="bg-slate-900 text-white">
+                              {opt.label} ({opt.value})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : panel.type === PanelType.RADIO_BUTTONS || panel.type === PanelType.MULTI_STATE ? (
+                      /* Radio Button Group Element */
+                      <div className="w-full h-full p-2 flex flex-col overflow-hidden">
+                        <span className="text-[10px] font-bold truncate uppercase tracking-wider mb-1" style={{ color: panel.textColor || '#94a3b8' }}>
+                          {panel.panelName}
+                        </span>
+                        <div className="flex flex-wrap gap-1.5 overflow-y-auto max-h-full">
+                          {getNormalizedOptions(panel).map((opt, i) => {
+                            const isActive = rawStringValue === opt.value || rawStringValue === opt.label || rawStringValue === String(i);
+                            return (
+                              <button
+                                key={i}
+                                type="button"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (onPublish) onPublish(panel.publishTopic || panel.topic, formatPublishPayload(opt.value, panel));
+                                }}
+                                className={`px-2 py-1 rounded-lg text-[11px] font-semibold flex items-center space-x-1.5 border transition-colors cursor-pointer ${isActive
+                                  ? 'bg-amber-500/20 text-amber-300 border-amber-500 font-bold shadow-sm'
+                                  : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
+                                  }`}
+                              >
+                                <div className={`w-3 h-3 rounded-full border flex items-center justify-center shrink-0 ${isActive ? 'border-amber-400 bg-amber-400/20' : 'border-slate-600'
+                                  }`}>
+                                  {isActive && <div className="w-1 h-1 rounded-full bg-amber-400 shadow-[0_0_4px_#f59e0b]"></div>}
+                                </div>
+                                <span style={{ color: panel.textColor }}>{opt.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : panel.type === PanelType.LINE_GRAPH ? (
+                      /* Line Graph Element */
+                      <div className="w-full h-full p-1 flex flex-col overflow-hidden bg-[#080d16] border border-slate-800/80 rounded-xl shadow-2xl">
+                        <LineGraph
+                          panel={panel}
+                          history={historyValues?.[panel.panelId] || (panel.topic ? historyValues?.[panel.topic] : [])}
+                          historyValues={historyValues}
+                          latestValues={latestValues}
+                          unit={panel.unit}
+                          color={panel.penColor || panel.firstColor || '#38bdf8'}
+                          penThickness={panel.penThickness || 2}
+                          graphType={panel.graphType || 'line'}
+                          showGrid={panel.showGrid !== false}
+                          fillArea={panel.fillArea !== false}
+                          showMonitoringTable={panel.showMonitoringTable !== false}
+                          enableDualCursor={panel.enableDualCursor}
+                          pens={panel.pens}
+                          payloadMin={panel.payloadMin}
+                          payloadMax={panel.payloadMax}
+                        />
+                      </div>
+                    ) : panel.type === PanelType.GAUGE ? (
+                      <div className="w-full h-full p-2 flex flex-col items-center justify-between text-center overflow-hidden">
+                        <span className="text-[10px] font-bold truncate w-full text-center shrink-0" style={{ color: panel.textColor || '#94a3b8' }}>
+                          {panel.panelName || 'GAUGE'}
+                        </span>
+                        <div className="w-full flex-1 flex items-center justify-center overflow-hidden min-h-0">
+                          <Gauge
+                            value={typeof liveValue === 'number' && !isNaN(liveValue) ? liveValue : (liveValue !== undefined && !isNaN(Number(liveValue)) ? Number(liveValue) : 0)}
+                            min={panel.payloadMin ?? 0}
+                            max={panel.payloadMax ?? 100}
+                            unit={panel.unit || ''}
+                            color1={panel.firstColor || '#38bdf8'}
+                            color2={panel.secondColor || '#10b981'}
+                            color3={panel.thirdColor || '#f43f5e'}
+                            precision={panel.decimalPrecision ?? 1}
+                            lowThreshold={panel.lowThreshold}
+                            highThreshold={panel.highThreshold}
+                            fontSize={panel.fontSize}
                           />
-                          {/* Liquid Level Fill Layer */}
-                          {dynEval.levelFill && dynEval.levelFill.isLevelFill && (
-                            <g clipPath={`url(#clip_circle_${panel.panelId})`}>
-                              <rect
-                                x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
-                                y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
-                                width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
-                                height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
-                                fill={dynEval.levelFill.fillColor || '#10b981'}
-                                className="transition-all duration-300 ease-out"
-                              />
-                              <rect
-                                x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
-                                y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
-                                width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
-                                height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
-                                fill={`url(#grad_meniscus_circle_${panel.panelId})`}
-                                className="transition-all duration-300 ease-out"
-                              />
-                            </g>
-                          )}
-                          {/* Outer Border */}
-                          <ellipse 
-                            cx="50" cy="50" rx="46" ry="46" 
-                            fill="none"
-                            stroke={effectiveBorder || '#38bdf8'} 
-                            strokeWidth={panel.borderWidth || 2} 
+                        </div>
+                      </div>
+                    ) : panel.type === PanelType.IMAGE || panel.type === 'image' ? (
+                      /* Media Asset (JPG, PNG, GIF, SVG) Element or Symbol Factory 3.0 Dynamic Symbol */
+                      <div className="w-full h-full relative flex items-center justify-center overflow-hidden rounded-[inherit]">
+                        {panel.symbolId || panel.symbolAnimType ? (
+                          <DynamicIndustrialSymbol
+                            symbolId={panel.symbolId}
+                            panel={panel}
+                            liveValue={liveValue}
+                            latestValues={latestValues}
+                            className="w-full h-full"
+                            activeSubPartId={activeSubPartSelection?.panelId === panel.panelId ? activeSubPartSelection.partId : undefined}
                           />
-                          {dynEval.levelFill && dynEval.levelFill.isLevelFill && dynEval.levelFill.showPercentage !== false && (
-                            <text x="50" y="54" fontSize="12" fill="#ffffff" fontWeight="bold" fontFamily="monospace" textAnchor="middle" filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.8))">
-                              {Math.round(dynEval.levelFill.percentage)}%
-                            </text>
-                          )}
-                        </svg>
-                      ) : panel.shapeType === 'line' ? (
-                        <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
-                          <polyline
-                            points={shapePts.map(p => `${p.x},${p.y}`).join(' ')}
-                            fill="none"
-                            stroke={effectiveBorder || '#38bdf8'}
-                            strokeWidth={panel.borderWidth || 3}
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
+                        ) : panel.imageUrl || panel.staticText ? (
+                          <img
+                            src={panel.imageUrl || panel.staticText}
+                            alt={panel.panelName || 'Imported Media'}
+                            className="w-full h-full pointer-events-none select-none transition-all"
+                            style={{
+                              objectFit: (panel.imageFit as any) || 'contain',
+                              opacity: panel.opacity !== undefined ? panel.opacity : 1
+                            }}
                           />
-                        </svg>
-                      ) : panel.shapeType === 'polyline' ? (
-                        <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
-                          <polyline
-                            points={shapePts.map(p => `${p.x},${p.y}`).join(' ')}
-                            fill="none"
-                            stroke={effectiveBorder || '#38bdf8'}
-                            strokeWidth={panel.borderWidth || 3}
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      ) : panel.shapeType === 'polygon' || panel.shapeType === 'custom_polygon' ? (
-                        (() => {
-                          const boxW = Math.max(10, pos.w);
-                          const boxH = Math.max(10, pos.h);
-                          const polyPts = shapePts.map(p => `${(p.x / 100) * boxW},${(p.y / 100) * boxH}`).join(' ');
-                          return (
-                            <svg className="w-full h-full overflow-visible" viewBox={`0 0 ${boxW} ${boxH}`}>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center text-purple-400/70 p-2">
+                            <i className="fas fa-file-image text-2xl mb-1"></i>
+                            <span className="text-[10px] font-bold">No Image Source</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : panel.type === PanelType.CLOCK || (panel.type as string) === 'clock' ? (
+                      /* Realtime Date & Time Clock Widget */
+                      <LiveClockWidget panel={panel} />
+                    ) : panel.type === PanelType.ALARM_LOG || (panel.type as string) === 'alarm_log' ? (
+                      /* Alarm Historian Live Log Canvas Widget */
+                      <AlarmHistorianWidget panel={panel} />
+                    ) : panel.type === PanelType.CANVAS_3D || (panel.type as string) === 'canvas_3d' ? (
+                      /* Embedded 3D Assembly Viewport — independent WebGL renderer per widget.
+                         Transparent background so the 3D model floats over the 2D canvas.
+                         Tags are auto-matched by ID with no remapping required. */
+                      <HmiCanvas3dViewport
+                        panel={panel}
+                        latestValues={latestValues}
+                        isRuntimeMode={!effectiveEditMode}
+                        isSelected={selectedPanelIds.includes(panel.panelId)}
+                      />
+                    ) : panel.type === PanelType.TASC_GRID || (panel.type as string) === 'tasc_grid' ? (
+                      /* Industrial SCADA TASCGrid Live SQL Database Table on HMI Canvas */
+                      <div
+                        className="w-full h-full flex flex-col overflow-hidden select-none pointer-events-auto rounded-xl shadow-2xl p-0"
+                        onMouseDown={(e) => {
+                          if (effectiveEditMode) {
+                            handlePanelSelect(panel.panelId, e.shiftKey || e.ctrlKey || e.metaKey);
+                          }
+                        }}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          onEditPanel(panel);
+                        }}
+                        onContextMenu={(e) => {
+                          e.stopPropagation();
+                          handleContextMenu(e, panel.panelId);
+                        }}
+                      >
+                        <TASCGrid
+                          tabs={panel.sqlTabs}
+                          dataSourceId={panel.sqlDataSourceId}
+                          database={panel.sqlDatabase || 'DAIKIN_EMS'}
+                          table={panel.sqlTableName || 'MeterName'}
+                          schema={panel.sqlSchema || 'dbo'}
+                          customQuery={panel.sqlCustomQuery}
+                          title={panel.panelName}
+                          pollIntervalMs={panel.sqlPollIntervalMs ?? 3000}
+                          pageSize={panel.pageSize || 5}
+                          thresholdRules={panel.sqlThresholdRules}
+                          manipulatorIds={panel.sqlManipulatorIds}
+                          showToolbar={true}
+                          showSearch={true}
+                          showExport={true}
+                        />
+                      </div>
+                    ) : panel.type === PanelType.SHAPE || (panel.type as string) === 'shape' || panel.type === PanelType.PIPE || (panel.type as string) === 'pipe' ? (
+                      /* Vector / Geometric Shape Element */
+                      ((shapePts) => (
+                        <div className="w-full h-full relative flex items-center justify-center select-none overflow-visible">
+                          {panel.shapeType === 'circle' ? (
+                            <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
                               <defs>
-                                <clipPath id={`clip_poly_${panel.panelId}`}>
-                                  <polygon points={polyPts} />
+                                <clipPath id={`clip_circle_${panel.panelId}`}>
+                                  <ellipse cx="50" cy="50" rx="46" ry="46" />
                                 </clipPath>
-                                <linearGradient id={`grad_meniscus_poly_${panel.panelId}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                                <linearGradient id={`grad_meniscus_circle_${panel.panelId}`} x1="0%" y1="0%" x2="0%" y2="100%">
                                   <stop offset="0%" stopColor="#ffffff" stopOpacity="0.35" />
                                   <stop offset="50%" stopColor="#000000" stopOpacity="0.0" />
                                   <stop offset="100%" stopColor="#000000" stopOpacity="0.3" />
                                 </linearGradient>
                               </defs>
-                              <polygon
-                                points={polyPts}
+                              {/* Background Shape */}
+                              <ellipse
+                                cx="50" cy="50" rx="46" ry="46"
                                 fill={effectiveBg && effectiveBg !== 'transparent' && !effectiveBg.includes('15, 23, 42') ? effectiveBg : 'rgba(15, 23, 42, 0.6)'}
                               />
+                              {/* Liquid Level Fill Layer */}
                               {dynEval.levelFill && dynEval.levelFill.isLevelFill && (
-                                <g clipPath={`url(#clip_poly_${panel.panelId})`}>
+                                <g clipPath={`url(#clip_circle_${panel.panelId})`}>
                                   <rect
-                                    x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${boxW * (1 - dynEval.levelFill.percentage / 100)}` : '0'}
-                                    y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${boxH * (1 - dynEval.levelFill.percentage / 100)}` : '0'}
-                                    width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${boxW * (dynEval.levelFill.percentage / 100)}` : boxW}
-                                    height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${boxH * (dynEval.levelFill.percentage / 100)}` : boxH}
-                                    fill={dynEval.levelFill.fillColor || '#38bdf8'}
+                                    x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                    y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                    width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
+                                    height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
+                                    fill={dynEval.levelFill.fillColor || '#10b981'}
                                     className="transition-all duration-300 ease-out"
                                   />
                                   <rect
-                                    x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${boxW * (1 - dynEval.levelFill.percentage / 100)}` : '0'}
-                                    y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${boxH * (1 - dynEval.levelFill.percentage / 100)}` : '0'}
-                                    width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${boxW * (dynEval.levelFill.percentage / 100)}` : boxW}
-                                    height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${boxH * (dynEval.levelFill.percentage / 100)}` : boxH}
-                                    fill={`url(#grad_meniscus_poly_${panel.panelId})`}
+                                    x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                    y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                    width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
+                                    height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
+                                    fill={`url(#grad_meniscus_circle_${panel.panelId})`}
                                     className="transition-all duration-300 ease-out"
                                   />
                                 </g>
                               )}
-                              <polygon
-                                points={polyPts}
+                              {/* Outer Border */}
+                              <ellipse
+                                cx="50" cy="50" rx="46" ry="46"
                                 fill="none"
                                 stroke={effectiveBorder || '#38bdf8'}
                                 strokeWidth={panel.borderWidth || 2}
-                                strokeLinejoin="round"
                               />
                               {dynEval.levelFill && dynEval.levelFill.isLevelFill && dynEval.levelFill.showPercentage !== false && (
-                                <text x={boxW / 2} y={boxH / 2 + 4} fontSize="12" fill="#ffffff" fontWeight="bold" fontFamily="monospace" textAnchor="middle" filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.8))">
+                                <text x="50" y="54" fontSize="12" fill="#ffffff" fontWeight="bold" fontFamily="monospace" textAnchor="middle" filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.8))">
                                   {Math.round(dynEval.levelFill.percentage)}%
                                 </text>
                               )}
                             </svg>
-                          );
-                        })()
-                      ) : panel.shapeType === 'pipe' || panel.type === PanelType.PIPE || (panel.type as string) === 'pipe' ? (
-                        /* Iconics GraphWorX Style 3D Process Pipe with Realistic Turning Radius, Midline Highlight & Bubble Flow Mechanics */
-                        (() => {
-                          const boxW = Math.max(10, pos.w);
-                          const boxH = Math.max(10, pos.h);
-                          const pixelPts = shapePts.map(p => ({
-                            x: (p.x / 100) * boxW,
-                            y: (p.y / 100) * boxH
-                          }));
-                          const dPath = getPipeFilletPath(pixelPts, panel.pipeCornerRadius || 16);
-                          const pipeThick = Math.min(60, Math.max(2, panel.borderWidth ?? 10));
-                          const pipeRadius = Math.max(1.5, pipeThick / 2);
+                          ) : panel.shapeType === 'line' ? (
+                            <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+                              <polyline
+                                points={shapePts.map(p => `${p.x},${p.y}`).join(' ')}
+                                fill="none"
+                                stroke={effectiveBorder || '#38bdf8'}
+                                strokeWidth={panel.borderWidth || 3}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          ) : panel.shapeType === 'polyline' ? (
+                            <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+                              <polyline
+                                points={shapePts.map(p => `${p.x},${p.y}`).join(' ')}
+                                fill="none"
+                                stroke={effectiveBorder || '#38bdf8'}
+                                strokeWidth={panel.borderWidth || 3}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          ) : panel.shapeType === 'polygon' || panel.shapeType === 'custom_polygon' ? (
+                            (() => {
+                              const boxW = Math.max(10, pos.w);
+                              const boxH = Math.max(10, pos.h);
+                              const polyPts = shapePts.map(p => `${(p.x / 100) * boxW},${(p.y / 100) * boxH}`).join(' ');
+                              return (
+                                <svg className="w-full h-full overflow-visible" viewBox={`0 0 ${boxW} ${boxH}`}>
+                                  <defs>
+                                    <clipPath id={`clip_poly_${panel.panelId}`}>
+                                      <polygon points={polyPts} />
+                                    </clipPath>
+                                    <linearGradient id={`grad_meniscus_poly_${panel.panelId}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                                      <stop offset="0%" stopColor="#ffffff" stopOpacity="0.35" />
+                                      <stop offset="50%" stopColor="#000000" stopOpacity="0.0" />
+                                      <stop offset="100%" stopColor="#000000" stopOpacity="0.3" />
+                                    </linearGradient>
+                                  </defs>
+                                  <polygon
+                                    points={polyPts}
+                                    fill={effectiveBg && effectiveBg !== 'transparent' && !effectiveBg.includes('15, 23, 42') ? effectiveBg : 'rgba(15, 23, 42, 0.6)'}
+                                  />
+                                  {dynEval.levelFill && dynEval.levelFill.isLevelFill && (
+                                    <g clipPath={`url(#clip_poly_${panel.panelId})`}>
+                                      <rect
+                                        x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${boxW * (1 - dynEval.levelFill.percentage / 100)}` : '0'}
+                                        y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${boxH * (1 - dynEval.levelFill.percentage / 100)}` : '0'}
+                                        width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${boxW * (dynEval.levelFill.percentage / 100)}` : boxW}
+                                        height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${boxH * (dynEval.levelFill.percentage / 100)}` : boxH}
+                                        fill={dynEval.levelFill.fillColor || '#38bdf8'}
+                                        className="transition-all duration-300 ease-out"
+                                      />
+                                      <rect
+                                        x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${boxW * (1 - dynEval.levelFill.percentage / 100)}` : '0'}
+                                        y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${boxH * (1 - dynEval.levelFill.percentage / 100)}` : '0'}
+                                        width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${boxW * (dynEval.levelFill.percentage / 100)}` : boxW}
+                                        height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${boxH * (dynEval.levelFill.percentage / 100)}` : boxH}
+                                        fill={`url(#grad_meniscus_poly_${panel.panelId})`}
+                                        className="transition-all duration-300 ease-out"
+                                      />
+                                    </g>
+                                  )}
+                                  <polygon
+                                    points={polyPts}
+                                    fill="none"
+                                    stroke={effectiveBorder || '#38bdf8'}
+                                    strokeWidth={panel.borderWidth || 2}
+                                    strokeLinejoin="round"
+                                  />
+                                  {dynEval.levelFill && dynEval.levelFill.isLevelFill && dynEval.levelFill.showPercentage !== false && (
+                                    <text x={boxW / 2} y={boxH / 2 + 4} fontSize="12" fill="#ffffff" fontWeight="bold" fontFamily="monospace" textAnchor="middle" filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.8))">
+                                      {Math.round(dynEval.levelFill.percentage)}%
+                                    </text>
+                                  )}
+                                </svg>
+                              );
+                            })()
+                          ) : panel.shapeType === 'pipe' || panel.type === PanelType.PIPE || (panel.type as string) === 'pipe' ? (
+                            /* Iconics GraphWorX Style 3D Process Pipe with Realistic Turning Radius, Midline Highlight & Bubble Flow Mechanics */
+                            (() => {
+                              const boxW = Math.max(10, pos.w);
+                              const boxH = Math.max(10, pos.h);
+                              const pixelPts = shapePts.map(p => ({
+                                x: (p.x / 100) * boxW,
+                                y: (p.y / 100) * boxH
+                              }));
+                              const dPath = getPipeFilletPath(pixelPts, panel.pipeCornerRadius || 16);
+                              const pipeThick = Math.min(60, Math.max(2, panel.borderWidth ?? 10));
+                              const pipeRadius = Math.max(1.5, pipeThick / 2);
 
-                          // Evaluate Tag Condition for Fluid Flow Animation
-                          const checkPipeAnimCondition = () => {
-                            if (panel.pipeAnimCondition === 'tag_condition') {
-                              if (liveValue === undefined || liveValue === null) return false;
-                              const targetVal = panel.pipeAnimValue !== undefined ? panel.pipeAnimValue : '1';
-                              const op = panel.pipeAnimOperator || '=';
+                              // Evaluate Tag Condition for Fluid Flow Animation
+                              const checkPipeAnimCondition = () => {
+                                if (panel.pipeAnimCondition === 'tag_condition') {
+                                  if (liveValue === undefined || liveValue === null) return false;
+                                  const targetVal = panel.pipeAnimValue !== undefined ? panel.pipeAnimValue : '1';
+                                  const op = panel.pipeAnimOperator || '=';
 
-                              const numLive = Number(liveValue);
-                              const numTarget = Number(targetVal);
-                              const isBothNumeric = !isNaN(numLive) && !isNaN(numTarget);
+                                  const numLive = Number(liveValue);
+                                  const numTarget = Number(targetVal);
+                                  const isBothNumeric = !isNaN(numLive) && !isNaN(numTarget);
 
-                              if (op === '=') return String(liveValue) === String(targetVal);
-                              if (op === '!=') return String(liveValue) !== String(targetVal);
-                              if (isBothNumeric) {
-                                if (op === '>') return numLive > numTarget;
-                                if (op === '<') return numLive < numTarget;
-                                if (op === '>=') return numLive >= numTarget;
-                                if (op === '<=') return numLive <= numTarget;
-                              }
-                              return String(liveValue) === String(targetVal);
-                            }
-                            return panel.rotateOn !== false;
-                          };
+                                  if (op === '=') return String(liveValue) === String(targetVal);
+                                  if (op === '!=') return String(liveValue) !== String(targetVal);
+                                  if (isBothNumeric) {
+                                    if (op === '>') return numLive > numTarget;
+                                    if (op === '<') return numLive < numTarget;
+                                    if (op === '>=') return numLive >= numTarget;
+                                    if (op === '<=') return numLive <= numTarget;
+                                  }
+                                  return String(liveValue) === String(targetVal);
+                                }
+                                return panel.rotateOn !== false;
+                              };
 
-                          const isFlowAnimating = checkPipeAnimCondition();
-                          const flowDir = panel.pipeFlowDirection || 'ltr';
-                          const endType = panel.pipeEndType || 'flange';
-                          const animStyle = panel.pipeAnimStyle || 'bubbles';
+                              const isFlowAnimating = checkPipeAnimCondition();
+                              const flowDir = panel.pipeFlowDirection || 'ltr';
+                              const endType = panel.pipeEndType || 'flange';
+                              const animStyle = panel.pipeAnimStyle || 'bubbles';
 
-                          return (
-                            <svg className="w-full h-full overflow-visible" viewBox={`0 0 ${boxW} ${boxH}`}>
-                              <defs>
-                                <linearGradient id={`pipeGrad_${panel.panelId}`} x1="0%" y1="0%" x2="0%" y2="100%">
-                                  <stop offset="0%" stopColor="#1e293b" />
-                                  <stop offset="25%" stopColor={panel.borderColor || '#64748b'} />
-                                  <stop offset="50%" stopColor="#f8fafc" />
-                                  <stop offset="75%" stopColor={panel.borderColor || '#64748b'} />
-                                  <stop offset="100%" stopColor="#0f172a" />
-                                </linearGradient>
-                                <style>{`
+                              return (
+                                <svg className="w-full h-full overflow-visible" viewBox={`0 0 ${boxW} ${boxH}`}>
+                                  <defs>
+                                    <linearGradient id={`pipeGrad_${panel.panelId}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                                      <stop offset="0%" stopColor="#1e293b" />
+                                      <stop offset="25%" stopColor={panel.borderColor || '#64748b'} />
+                                      <stop offset="50%" stopColor="#f8fafc" />
+                                      <stop offset="75%" stopColor={panel.borderColor || '#64748b'} />
+                                      <stop offset="100%" stopColor="#0f172a" />
+                                    </linearGradient>
+                                    <style>{`
                                   @keyframes pipeFlowLtr {
                                     from { stroke-dashoffset: 40; }
                                     to { stroke-dashoffset: 0; }
@@ -4807,704 +4717,700 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                     to { stroke-dashoffset: 40; }
                                   }
                                 `}</style>
+                                  </defs>
+
+                                  {/* Layer 1: Outer Dark Boundary Wall / Shadow */}
+                                  <path
+                                    d={dPath}
+                                    fill="none"
+                                    stroke="#090d16"
+                                    strokeWidth={pipeThick + 2}
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+
+                                  {/* Layer 2: 3D Metallic Pipe Body Casing */}
+                                  <path
+                                    d={dPath}
+                                    fill="none"
+                                    stroke={panel.borderColor || '#64748b'}
+                                    strokeWidth={pipeThick}
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+
+                                  {/* Layer 3: Midline Center Specular Light Gradient Highlight (Iconics GraphWorX 3D Cylindrical Sheen) */}
+                                  <path
+                                    d={dPath}
+                                    fill="none"
+                                    stroke="#ffffff"
+                                    strokeWidth={Math.max(1, Math.floor(pipeThick * 0.28))}
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    style={{ opacity: 0.65 }}
+                                  />
+
+                                  {/* Layer 4: Inner Fluid Core Tube */}
+                                  <path
+                                    d={dPath}
+                                    fill="none"
+                                    stroke={dynEval.levelFill?.fillColor || panel.firstColor || '#ef4444'}
+                                    strokeWidth={Math.max(2, Math.floor(pipeThick * 0.48))}
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    style={{ opacity: 0.85 }}
+                                  />
+
+                                  {/* Layer 5: Bubble Flow Mechanics Animation */}
+                                  {animStyle === 'bubbles' ? (
+                                    <g>
+                                      {/* Big Bubbles */}
+                                      <path
+                                        d={dPath}
+                                        fill="none"
+                                        stroke="#ffffff"
+                                        strokeWidth={Math.max(2.2, Math.floor(pipeThick * 0.38))}
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeDasharray="0 28 0 38"
+                                        style={{
+                                          animation: isFlowAnimating
+                                            ? `${flowDir === 'rtl' ? 'pipeFlowRtl' : 'pipeFlowLtr'} 1.5s linear infinite`
+                                            : 'none',
+                                          opacity: isFlowAnimating ? 0.95 : 0.25
+                                        }}
+                                      />
+                                      {/* Medium Bubbles */}
+                                      <path
+                                        d={dPath}
+                                        fill="none"
+                                        stroke="#ffffff"
+                                        strokeWidth={Math.max(1.6, Math.floor(pipeThick * 0.25))}
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeDasharray="0 18 0 24"
+                                        style={{
+                                          animation: isFlowAnimating
+                                            ? `${flowDir === 'rtl' ? 'pipeFlowRtl' : 'pipeFlowLtr'} 1.1s linear infinite`
+                                            : 'none',
+                                          opacity: isFlowAnimating ? 0.85 : 0.2
+                                        }}
+                                      />
+                                      {/* Small Bubbles */}
+                                      <path
+                                        d={dPath}
+                                        fill="none"
+                                        stroke="#ffffff"
+                                        strokeWidth={Math.max(1.0, Math.floor(pipeThick * 0.15))}
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeDasharray="0 10 0 14"
+                                        style={{
+                                          animation: isFlowAnimating
+                                            ? `${flowDir === 'rtl' ? 'pipeFlowRtl' : 'pipeFlowLtr'} 0.8s linear infinite`
+                                            : 'none',
+                                          opacity: isFlowAnimating ? 0.75 : 0.15
+                                        }}
+                                      />
+                                    </g>
+                                  ) : (
+                                    /* Dashed Flow Pattern Fallback */
+                                    <path
+                                      d={dPath}
+                                      fill="none"
+                                      stroke="#ffffff"
+                                      strokeWidth={Math.max(1.5, Math.floor(pipeThick * 0.3))}
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeDasharray="10 8"
+                                      style={{
+                                        animation: isFlowAnimating
+                                          ? `${flowDir === 'rtl' ? 'pipeFlowRtl' : 'pipeFlowLtr'} 1.2s linear infinite`
+                                          : 'none',
+                                        opacity: isFlowAnimating ? 0.9 : 0.3
+                                      }}
+                                    />
+                                  )}
+
+                                  {/* End Fittings (Flange, Round, Triangle) */}
+                                  {pixelPts.map((pt, idx) => {
+                                    const isStartOrEnd = idx === 0 || idx === pixelPts.length - 1;
+                                    let angle = 0;
+                                    if (idx === 0 && pixelPts.length > 1) {
+                                      angle = Math.atan2(pixelPts[1].y - pt.y, pixelPts[1].x - pt.x) * (180 / Math.PI);
+                                    } else if (idx === pixelPts.length - 1 && pixelPts.length > 1) {
+                                      angle = Math.atan2(pt.y - pixelPts[idx - 1].y, pt.x - pixelPts[idx - 1].x) * (180 / Math.PI);
+                                    } else if (idx > 0 && idx < pixelPts.length - 1) {
+                                      angle = Math.atan2(pixelPts[idx + 1].y - pixelPts[idx - 1].y, pixelPts[idx + 1].x - pixelPts[idx - 1].x) * (180 / Math.PI);
+                                    }
+
+                                    return (
+                                      <g key={idx} transform={`translate(${pt.x}, ${pt.y}) rotate(${angle})`}>
+                                        {isStartOrEnd ? (
+                                          endType === 'round' ? (
+                                            /* Round Dome Cap End Fitting */
+                                            <g>
+                                              <circle r={pipeRadius + 1.8} fill={panel.borderColor || '#64748b'} stroke="#0f172a" strokeWidth="0.8" />
+                                              <circle r={Math.max(1, pipeRadius - 0.8)} fill="#ffffff" opacity="0.8" />
+                                            </g>
+                                          ) : endType === 'triangle' ? (
+                                            /* Triangle / Nozzle Conical End Fitting */
+                                            <g>
+                                              <polygon
+                                                points={`-${pipeRadius},-${pipeRadius + 3} ${pipeRadius + 4},0 -${pipeRadius},${pipeRadius + 3}`}
+                                                fill={panel.borderColor || '#64748b'}
+                                                stroke="#0f172a"
+                                                strokeWidth="0.8"
+                                              />
+                                              <polygon
+                                                points={`-${pipeRadius - 1},-${pipeRadius - 0.5} ${pipeRadius + 1},0 -${pipeRadius - 1},${pipeRadius - 0.5}`}
+                                                fill="#ffffff"
+                                                opacity="0.8"
+                                              />
+                                            </g>
+                                          ) : (
+                                            /* Industrial Collar Flange with Bolt Anchors */
+                                            <g>
+                                              <rect x="-3" y={-(pipeRadius + 3)} width="6" height={(pipeRadius + 3) * 2} rx="1.5" fill={panel.borderColor || '#64748b'} stroke="#0f172a" strokeWidth="0.8" />
+                                              <rect x="-1" y={-(pipeRadius + 1.5)} width="2" height={(pipeRadius + 1.5) * 2} fill="#ffffff" opacity="0.8" />
+                                              <circle cx="0" cy={-(pipeRadius + 1.8)} r="1" fill="#f8fafc" />
+                                              <circle cx="0" cy={pipeRadius + 1.8} r="1" fill="#f8fafc" />
+                                            </g>
+                                          )
+                                        ) : null}
+                                      </g>
+                                    );
+                                  })}
+                                </svg>
+                              );
+                            })()
+                          ) : panel.shapeType === 'triangle' ? (
+                            <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+                              <defs>
+                                <clipPath id={`clip_tri_${panel.panelId}`}>
+                                  <polygon points="50,5 95,95 5,95" />
+                                </clipPath>
+                                <linearGradient id={`grad_meniscus_tri_${panel.panelId}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                                  <stop offset="0%" stopColor="#ffffff" stopOpacity="0.35" />
+                                  <stop offset="50%" stopColor="#000000" stopOpacity="0.0" />
+                                  <stop offset="100%" stopColor="#000000" stopOpacity="0.3" />
+                                </linearGradient>
                               </defs>
-
-                              {/* Layer 1: Outer Dark Boundary Wall / Shadow */}
-                              <path
-                                d={dPath}
-                                fill="none"
-                                stroke="#090d16"
-                                strokeWidth={pipeThick + 2}
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
+                              <polygon
+                                points="50,5 95,95 5,95"
+                                fill={effectiveBg && effectiveBg !== 'transparent' && !effectiveBg.includes('15, 23, 42') ? effectiveBg : 'rgba(15, 23, 42, 0.6)'}
                               />
-
-                              {/* Layer 2: 3D Metallic Pipe Body Casing */}
-                              <path
-                                d={dPath}
-                                fill="none"
-                                stroke={panel.borderColor || '#64748b'}
-                                strokeWidth={pipeThick}
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-
-                              {/* Layer 3: Midline Center Specular Light Gradient Highlight (Iconics GraphWorX 3D Cylindrical Sheen) */}
-                              <path
-                                d={dPath}
-                                fill="none"
-                                stroke="#ffffff"
-                                strokeWidth={Math.max(1, Math.floor(pipeThick * 0.28))}
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                style={{ opacity: 0.65 }}
-                              />
-
-                              {/* Layer 4: Inner Fluid Core Tube */}
-                              <path
-                                d={dPath}
-                                fill="none"
-                                stroke={dynEval.levelFill?.fillColor || panel.firstColor || '#ef4444'}
-                                strokeWidth={Math.max(2, Math.floor(pipeThick * 0.48))}
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                style={{ opacity: 0.85 }}
-                              />
-
-                              {/* Layer 5: Bubble Flow Mechanics Animation */}
-                              {animStyle === 'bubbles' ? (
-                                <g>
-                                  {/* Big Bubbles */}
-                                  <path
-                                    d={dPath}
-                                    fill="none"
-                                    stroke="#ffffff"
-                                    strokeWidth={Math.max(2.2, Math.floor(pipeThick * 0.38))}
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeDasharray="0 28 0 38"
-                                    style={{
-                                      animation: isFlowAnimating
-                                        ? `${flowDir === 'rtl' ? 'pipeFlowRtl' : 'pipeFlowLtr'} 1.5s linear infinite`
-                                        : 'none',
-                                      opacity: isFlowAnimating ? 0.95 : 0.25
-                                    }}
+                              {dynEval.levelFill && dynEval.levelFill.isLevelFill && (
+                                <g clipPath={`url(#clip_tri_${panel.panelId})`}>
+                                  <rect
+                                    x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                    y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                    width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
+                                    height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
+                                    fill={dynEval.levelFill.fillColor || '#10b981'}
+                                    className="transition-all duration-300 ease-out"
                                   />
-                                  {/* Medium Bubbles */}
-                                  <path
-                                    d={dPath}
-                                    fill="none"
-                                    stroke="#ffffff"
-                                    strokeWidth={Math.max(1.6, Math.floor(pipeThick * 0.25))}
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeDasharray="0 18 0 24"
-                                    style={{
-                                      animation: isFlowAnimating
-                                        ? `${flowDir === 'rtl' ? 'pipeFlowRtl' : 'pipeFlowLtr'} 1.1s linear infinite`
-                                        : 'none',
-                                      opacity: isFlowAnimating ? 0.85 : 0.2
-                                    }}
-                                  />
-                                  {/* Small Bubbles */}
-                                  <path
-                                    d={dPath}
-                                    fill="none"
-                                    stroke="#ffffff"
-                                    strokeWidth={Math.max(1.0, Math.floor(pipeThick * 0.15))}
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeDasharray="0 10 0 14"
-                                    style={{
-                                      animation: isFlowAnimating
-                                        ? `${flowDir === 'rtl' ? 'pipeFlowRtl' : 'pipeFlowLtr'} 0.8s linear infinite`
-                                        : 'none',
-                                      opacity: isFlowAnimating ? 0.75 : 0.15
-                                    }}
+                                  <rect
+                                    x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                    y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                    width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
+                                    height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
+                                    fill={`url(#grad_meniscus_tri_${panel.panelId})`}
+                                    className="transition-all duration-300 ease-out"
                                   />
                                 </g>
-                              ) : (
-                                /* Dashed Flow Pattern Fallback */
-                                <path
-                                  d={dPath}
-                                  fill="none"
-                                  stroke="#ffffff"
-                                  strokeWidth={Math.max(1.5, Math.floor(pipeThick * 0.3))}
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeDasharray="10 8"
-                                  style={{
-                                    animation: isFlowAnimating
-                                      ? `${flowDir === 'rtl' ? 'pipeFlowRtl' : 'pipeFlowLtr'} 1.2s linear infinite`
-                                      : 'none',
-                                    opacity: isFlowAnimating ? 0.9 : 0.3
-                                  }}
-                                />
                               )}
-
-                              {/* End Fittings (Flange, Round, Triangle) */}
-                              {pixelPts.map((pt, idx) => {
-                                const isStartOrEnd = idx === 0 || idx === pixelPts.length - 1;
-                                let angle = 0;
-                                if (idx === 0 && pixelPts.length > 1) {
-                                  angle = Math.atan2(pixelPts[1].y - pt.y, pixelPts[1].x - pt.x) * (180 / Math.PI);
-                                } else if (idx === pixelPts.length - 1 && pixelPts.length > 1) {
-                                  angle = Math.atan2(pt.y - pixelPts[idx - 1].y, pt.x - pixelPts[idx - 1].x) * (180 / Math.PI);
-                                } else if (idx > 0 && idx < pixelPts.length - 1) {
-                                  angle = Math.atan2(pixelPts[idx + 1].y - pixelPts[idx - 1].y, pixelPts[idx + 1].x - pixelPts[idx - 1].x) * (180 / Math.PI);
-                                }
-
-                                return (
-                                  <g key={idx} transform={`translate(${pt.x}, ${pt.y}) rotate(${angle})`}>
-                                    {isStartOrEnd ? (
-                                      endType === 'round' ? (
-                                        /* Round Dome Cap End Fitting */
-                                        <g>
-                                          <circle r={pipeRadius + 1.8} fill={panel.borderColor || '#64748b'} stroke="#0f172a" strokeWidth="0.8" />
-                                          <circle r={Math.max(1, pipeRadius - 0.8)} fill="#ffffff" opacity="0.8" />
-                                        </g>
-                                      ) : endType === 'triangle' ? (
-                                        /* Triangle / Nozzle Conical End Fitting */
-                                        <g>
-                                          <polygon
-                                            points={`-${pipeRadius},-${pipeRadius + 3} ${pipeRadius + 4},0 -${pipeRadius},${pipeRadius + 3}`}
-                                            fill={panel.borderColor || '#64748b'}
-                                            stroke="#0f172a"
-                                            strokeWidth="0.8"
-                                          />
-                                          <polygon
-                                            points={`-${pipeRadius - 1},-${pipeRadius - 0.5} ${pipeRadius + 1},0 -${pipeRadius - 1},${pipeRadius - 0.5}`}
-                                            fill="#ffffff"
-                                            opacity="0.8"
-                                          />
-                                        </g>
-                                      ) : (
-                                        /* Industrial Collar Flange with Bolt Anchors */
-                                        <g>
-                                          <rect x="-3" y={-(pipeRadius + 3)} width="6" height={(pipeRadius + 3) * 2} rx="1.5" fill={panel.borderColor || '#64748b'} stroke="#0f172a" strokeWidth="0.8" />
-                                          <rect x="-1" y={-(pipeRadius + 1.5)} width="2" height={(pipeRadius + 1.5) * 2} fill="#ffffff" opacity="0.8" />
-                                          <circle cx="0" cy={-(pipeRadius + 1.8)} r="1" fill="#f8fafc" />
-                                          <circle cx="0" cy={pipeRadius + 1.8} r="1" fill="#f8fafc" />
-                                        </g>
-                                      )
-                                    ) : null}
-                                  </g>
-                                );
-                              })}
+                              <polygon
+                                points="50,5 95,95 5,95"
+                                fill="none"
+                                stroke={effectiveBorder || '#38bdf8'}
+                                strokeWidth={panel.borderWidth || 2}
+                                strokeLinejoin="round"
+                              />
+                              {dynEval.levelFill && dynEval.levelFill.isLevelFill && dynEval.levelFill.showPercentage !== false && (
+                                <text x="50" y="65" fontSize="12" fill="#ffffff" fontWeight="bold" fontFamily="monospace" textAnchor="middle" filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.8))">
+                                  {Math.round(dynEval.levelFill.percentage)}%
+                                </text>
+                              )}
                             </svg>
-                          );
-                        })()
-                      ) : panel.shapeType === 'triangle' ? (
-                        <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
-                          <defs>
-                            <clipPath id={`clip_tri_${panel.panelId}`}>
-                              <polygon points="50,5 95,95 5,95" />
-                            </clipPath>
-                            <linearGradient id={`grad_meniscus_tri_${panel.panelId}`} x1="0%" y1="0%" x2="0%" y2="100%">
-                              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.35" />
-                              <stop offset="50%" stopColor="#000000" stopOpacity="0.0" />
-                              <stop offset="100%" stopColor="#000000" stopOpacity="0.3" />
-                            </linearGradient>
-                          </defs>
-                          <polygon 
-                            points="50,5 95,95 5,95" 
-                            fill={effectiveBg && effectiveBg !== 'transparent' && !effectiveBg.includes('15, 23, 42') ? effectiveBg : 'rgba(15, 23, 42, 0.6)'} 
-                          />
-                          {dynEval.levelFill && dynEval.levelFill.isLevelFill && (
-                            <g clipPath={`url(#clip_tri_${panel.panelId})`}>
-                              <rect
-                                x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
-                                y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
-                                width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
-                                height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
-                                fill={dynEval.levelFill.fillColor || '#10b981'}
-                                className="transition-all duration-300 ease-out"
+                          ) : panel.shapeType === 'star' ? (
+                            <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+                              <defs>
+                                <clipPath id={`clip_star_${panel.panelId}`}>
+                                  <polygon points="50,5 63,35 95,38 71,60 78,92 50,75 22,92 29,60 5,38 37,35" />
+                                </clipPath>
+                                <linearGradient id={`grad_meniscus_star_${panel.panelId}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                                  <stop offset="0%" stopColor="#ffffff" stopOpacity="0.35" />
+                                  <stop offset="50%" stopColor="#000000" stopOpacity="0.0" />
+                                  <stop offset="100%" stopColor="#000000" stopOpacity="0.3" />
+                                </linearGradient>
+                              </defs>
+                              <polygon
+                                points="50,5 63,35 95,38 71,60 78,92 50,75 22,92 29,60 5,38 37,35"
+                                fill={effectiveBg && effectiveBg !== 'transparent' && !effectiveBg.includes('15, 23, 42') ? effectiveBg : 'rgba(15, 23, 42, 0.6)'}
                               />
-                              <rect
-                                x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
-                                y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
-                                width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
-                                height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
-                                fill={`url(#grad_meniscus_tri_${panel.panelId})`}
-                                className="transition-all duration-300 ease-out"
+                              {dynEval.levelFill && dynEval.levelFill.isLevelFill && (
+                                <g clipPath={`url(#clip_star_${panel.panelId})`}>
+                                  <rect
+                                    x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                    y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                    width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
+                                    height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
+                                    fill={dynEval.levelFill.fillColor || '#f59e0b'}
+                                    className="transition-all duration-300 ease-out"
+                                  />
+                                  <rect
+                                    x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                    y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                    width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
+                                    height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
+                                    fill={`url(#grad_meniscus_star_${panel.panelId})`}
+                                    className="transition-all duration-300 ease-out"
+                                  />
+                                </g>
+                              )}
+                              <polygon
+                                points="50,5 63,35 95,38 71,60 78,92 50,75 22,92 29,60 5,38 37,35"
+                                fill="none"
+                                stroke={effectiveBorder || '#f59e0b'}
+                                strokeWidth={panel.borderWidth || 2}
+                                strokeLinejoin="round"
                               />
-                            </g>
-                          )}
-                          <polygon 
-                            points="50,5 95,95 5,95" 
-                            fill="none"
-                            stroke={effectiveBorder || '#38bdf8'} 
-                            strokeWidth={panel.borderWidth || 2} 
-                            strokeLinejoin="round"
-                          />
-                          {dynEval.levelFill && dynEval.levelFill.isLevelFill && dynEval.levelFill.showPercentage !== false && (
-                            <text x="50" y="65" fontSize="12" fill="#ffffff" fontWeight="bold" fontFamily="monospace" textAnchor="middle" filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.8))">
-                              {Math.round(dynEval.levelFill.percentage)}%
-                            </text>
-                          )}
-                        </svg>
-                      ) : panel.shapeType === 'star' ? (
-                        <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
-                          <defs>
-                            <clipPath id={`clip_star_${panel.panelId}`}>
-                              <polygon points="50,5 63,35 95,38 71,60 78,92 50,75 22,92 29,60 5,38 37,35" />
-                            </clipPath>
-                            <linearGradient id={`grad_meniscus_star_${panel.panelId}`} x1="0%" y1="0%" x2="0%" y2="100%">
-                              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.35" />
-                              <stop offset="50%" stopColor="#000000" stopOpacity="0.0" />
-                              <stop offset="100%" stopColor="#000000" stopOpacity="0.3" />
-                            </linearGradient>
-                          </defs>
-                          <polygon 
-                            points="50,5 63,35 95,38 71,60 78,92 50,75 22,92 29,60 5,38 37,35" 
-                            fill={effectiveBg && effectiveBg !== 'transparent' && !effectiveBg.includes('15, 23, 42') ? effectiveBg : 'rgba(15, 23, 42, 0.6)'} 
-                          />
-                          {dynEval.levelFill && dynEval.levelFill.isLevelFill && (
-                            <g clipPath={`url(#clip_star_${panel.panelId})`}>
-                              <rect
-                                x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
-                                y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
-                                width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
-                                height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
-                                fill={dynEval.levelFill.fillColor || '#f59e0b'}
-                                className="transition-all duration-300 ease-out"
+                              {dynEval.levelFill && dynEval.levelFill.isLevelFill && dynEval.levelFill.showPercentage !== false && (
+                                <text x="50" y="58" fontSize="12" fill="#ffffff" fontWeight="bold" fontFamily="monospace" textAnchor="middle" filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.8))">
+                                  {Math.round(dynEval.levelFill.percentage)}%
+                                </text>
+                              )}
+                            </svg>
+                          ) : panel.shapeType === 'arrow' ? (
+                            <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+                              <defs>
+                                <clipPath id={`clip_arrow_${panel.panelId}`}>
+                                  <polygon points="0,35 60,35 60,10 100,50 60,90 60,65 0,65" />
+                                </clipPath>
+                                <linearGradient id={`grad_meniscus_arrow_${panel.panelId}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                                  <stop offset="0%" stopColor="#ffffff" stopOpacity="0.35" />
+                                  <stop offset="50%" stopColor="#000000" stopOpacity="0.0" />
+                                  <stop offset="100%" stopColor="#000000" stopOpacity="0.3" />
+                                </linearGradient>
+                              </defs>
+                              <polygon
+                                points="0,35 60,35 60,10 100,50 60,90 60,65 0,65"
+                                fill={effectiveBg && effectiveBg !== 'transparent' && !effectiveBg.includes('15, 23, 42') ? effectiveBg : 'rgba(15, 23, 42, 0.6)'}
                               />
-                              <rect
-                                x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
-                                y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
-                                width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
-                                height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
-                                fill={`url(#grad_meniscus_star_${panel.panelId})`}
-                                className="transition-all duration-300 ease-out"
+                              {dynEval.levelFill && dynEval.levelFill.isLevelFill && (
+                                <g clipPath={`url(#clip_arrow_${panel.panelId})`}>
+                                  <rect
+                                    x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                    y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                    width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
+                                    height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
+                                    fill={dynEval.levelFill.fillColor || '#10b981'}
+                                    className="transition-all duration-300 ease-out"
+                                  />
+                                  <rect
+                                    x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                    y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
+                                    width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
+                                    height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
+                                    fill={`url(#grad_meniscus_arrow_${panel.panelId})`}
+                                    className="transition-all duration-300 ease-out"
+                                  />
+                                </g>
+                              )}
+                              <polygon
+                                points="0,35 60,35 60,10 100,50 60,90 60,65 0,65"
+                                fill="none"
+                                stroke={effectiveBorder || '#10b981'}
+                                strokeWidth={panel.borderWidth || 2}
+                                strokeLinejoin="round"
                               />
-                            </g>
-                          )}
-                          <polygon 
-                            points="50,5 63,35 95,38 71,60 78,92 50,75 22,92 29,60 5,38 37,35" 
-                            fill="none"
-                            stroke={effectiveBorder || '#f59e0b'} 
-                            strokeWidth={panel.borderWidth || 2} 
-                            strokeLinejoin="round"
-                          />
-                          {dynEval.levelFill && dynEval.levelFill.isLevelFill && dynEval.levelFill.showPercentage !== false && (
-                            <text x="50" y="58" fontSize="12" fill="#ffffff" fontWeight="bold" fontFamily="monospace" textAnchor="middle" filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.8))">
-                              {Math.round(dynEval.levelFill.percentage)}%
-                            </text>
-                          )}
-                        </svg>
-                      ) : panel.shapeType === 'arrow' ? (
-                        <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
-                          <defs>
-                            <clipPath id={`clip_arrow_${panel.panelId}`}>
-                              <polygon points="0,35 60,35 60,10 100,50 60,90 60,65 0,65" />
-                            </clipPath>
-                            <linearGradient id={`grad_meniscus_arrow_${panel.panelId}`} x1="0%" y1="0%" x2="0%" y2="100%">
-                              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.35" />
-                              <stop offset="50%" stopColor="#000000" stopOpacity="0.0" />
-                              <stop offset="100%" stopColor="#000000" stopOpacity="0.3" />
-                            </linearGradient>
-                          </defs>
-                          <polygon 
-                            points="0,35 60,35 60,10 100,50 60,90 60,65 0,65" 
-                            fill={effectiveBg && effectiveBg !== 'transparent' && !effectiveBg.includes('15, 23, 42') ? effectiveBg : 'rgba(15, 23, 42, 0.6)'} 
-                          />
-                          {dynEval.levelFill && dynEval.levelFill.isLevelFill && (
-                            <g clipPath={`url(#clip_arrow_${panel.panelId})`}>
-                              <rect
-                                x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
-                                y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
-                                width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
-                                height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
-                                fill={dynEval.levelFill.fillColor || '#10b981'}
-                                className="transition-all duration-300 ease-out"
-                              />
-                              <rect
-                                x={dynEval.levelFill.fillDirection === 'right_to_left' ? `${100 - dynEval.levelFill.percentage}` : '0'}
-                                y={dynEval.levelFill.fillDirection === 'bottom_to_top' ? `${100 - dynEval.levelFill.percentage}` : '0'}
-                                width={dynEval.levelFill.fillDirection === 'left_to_right' || dynEval.levelFill.fillDirection === 'right_to_left' ? `${dynEval.levelFill.percentage}` : '100'}
-                                height={dynEval.levelFill.fillDirection === 'bottom_to_top' || dynEval.levelFill.fillDirection === 'top_to_bottom' ? `${dynEval.levelFill.percentage}` : '100'}
-                                fill={`url(#grad_meniscus_arrow_${panel.panelId})`}
-                                className="transition-all duration-300 ease-out"
-                              />
-                            </g>
-                          )}
-                          <polygon 
-                            points="0,35 60,35 60,10 100,50 60,90 60,65 0,65" 
-                            fill="none"
-                            stroke={effectiveBorder || '#10b981'} 
-                            strokeWidth={panel.borderWidth || 2} 
-                            strokeLinejoin="round"
-                          />
-                          {dynEval.levelFill && dynEval.levelFill.isLevelFill && dynEval.levelFill.showPercentage !== false && (
-                            <text x="50" y="54" fontSize="12" fill="#ffffff" fontWeight="bold" fontFamily="monospace" textAnchor="middle" filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.8))">
-                              {Math.round(dynEval.levelFill.percentage)}%
-                            </text>
-                          )}
-                        </svg>
-                      ) : (
-                        /* Rectangle / Shape Box with Dynamic Liquid Level Fill */
-                        <div 
-                          className="w-full h-full border-2 flex items-center justify-center transition-all overflow-hidden relative"
-                          style={{
-                            backgroundColor: effectiveBg || 'rgba(15, 23, 42, 0.6)',
-                            borderColor: effectiveBorder || '#38bdf8',
-                            borderRadius: `${panel.borderRadius ?? 8}px`
-                          }}
-                        >
-                          {/* Liquid Level Fill Overlay Layer */}
-                          {dynEval.levelFill && dynEval.levelFill.isLevelFill && (
-                            <div 
-                              className="absolute transition-all duration-300 ease-out z-0 pointer-events-none"
+                              {dynEval.levelFill && dynEval.levelFill.isLevelFill && dynEval.levelFill.showPercentage !== false && (
+                                <text x="50" y="54" fontSize="12" fill="#ffffff" fontWeight="bold" fontFamily="monospace" textAnchor="middle" filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.8))">
+                                  {Math.round(dynEval.levelFill.percentage)}%
+                                </text>
+                              )}
+                            </svg>
+                          ) : (
+                            /* Rectangle / Shape Box with Dynamic Liquid Level Fill */
+                            <div
+                              className="w-full h-full border-2 flex items-center justify-center transition-all overflow-hidden relative"
                               style={{
-                                backgroundColor: dynEval.levelFill.fillColor || '#10b981',
-                                ...(dynEval.levelFill.fillDirection === 'bottom_to_top'
-                                  ? { bottom: 0, left: 0, right: 0, height: `${dynEval.levelFill.percentage}%` }
-                                  : dynEval.levelFill.fillDirection === 'top_to_bottom'
-                                  ? { top: 0, left: 0, right: 0, height: `${dynEval.levelFill.percentage}%` }
-                                  : dynEval.levelFill.fillDirection === 'right_to_left'
-                                  ? { top: 0, bottom: 0, right: 0, width: `${dynEval.levelFill.percentage}%` }
-                                  : { top: 0, bottom: 0, left: 0, width: `${dynEval.levelFill.percentage}%` }
-                                )
+                                backgroundColor: effectiveBg || 'rgba(15, 23, 42, 0.6)',
+                                borderColor: effectiveBorder || '#38bdf8',
+                                borderRadius: `${panel.borderRadius ?? 8}px`
                               }}
                             >
-                              {/* Fluid wave / meniscus sheen highlight */}
-                              <div className="w-full h-full bg-gradient-to-t from-black/20 via-transparent to-white/30" />
+                              {/* Liquid Level Fill Overlay Layer */}
+                              {dynEval.levelFill && dynEval.levelFill.isLevelFill && (
+                                <div
+                                  className="absolute transition-all duration-300 ease-out z-0 pointer-events-none"
+                                  style={{
+                                    backgroundColor: dynEval.levelFill.fillColor || '#10b981',
+                                    ...(dynEval.levelFill.fillDirection === 'bottom_to_top'
+                                      ? { bottom: 0, left: 0, right: 0, height: `${dynEval.levelFill.percentage}%` }
+                                      : dynEval.levelFill.fillDirection === 'top_to_bottom'
+                                        ? { top: 0, left: 0, right: 0, height: `${dynEval.levelFill.percentage}%` }
+                                        : dynEval.levelFill.fillDirection === 'right_to_left'
+                                          ? { top: 0, bottom: 0, right: 0, width: `${dynEval.levelFill.percentage}%` }
+                                          : { top: 0, bottom: 0, left: 0, width: `${dynEval.levelFill.percentage}%` }
+                                    )
+                                  }}
+                                >
+                                  {/* Fluid wave / meniscus sheen highlight */}
+                                  <div className="w-full h-full bg-gradient-to-t from-black/20 via-transparent to-white/30" />
+                                </div>
+                              )}
+
+                              {/* Shape Label / Numeric Readout Overlay */}
+                              <div className="relative z-10 flex flex-col items-center justify-center p-1 text-center truncate max-w-full">
+                                {panel.panelName && (
+                                  <span className="text-[10px] font-bold text-slate-200 truncate px-2 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                                    {panel.panelName}
+                                  </span>
+                                )}
+                                {dynEval.levelFill && dynEval.levelFill.isLevelFill && dynEval.levelFill.showPercentage !== false && (
+                                  <span className="text-xs font-mono font-black text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                                    {Math.round(dynEval.levelFill.percentage)}%
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           )}
 
-                          {/* Shape Label / Numeric Readout Overlay */}
-                          <div className="relative z-10 flex flex-col items-center justify-center p-1 text-center truncate max-w-full">
-                            {panel.panelName && (
-                              <span className="text-[10px] font-bold text-slate-200 truncate px-2 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
-                                {panel.panelName}
-                              </span>
-                            )}
-                            {dynEval.levelFill && dynEval.levelFill.isLevelFill && dynEval.levelFill.showPercentage !== false && (
-                              <span className="text-xs font-mono font-black text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
-                                {Math.round(dynEval.levelFill.percentage)}%
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Interactive Vertex Node Bending Points for Lines, Polylines, Process Pipes & Custom Polygons */}
-                      {isSelected && effectiveEditMode && (panel.shapeType === 'polyline' || panel.shapeType === 'custom_polygon' || panel.shapeType === 'line' || panel.shapeType === 'polygon' || panel.shapeType === 'pipe' || panel.type === PanelType.PIPE || (panel.type as string) === 'pipe') && (
-                        <>
-                          <div className="absolute inset-0 pointer-events-auto z-[80]">
-                            {shapePts.map((pt, nIdx) => {
-                              const isNodeSelected = selectedNodeInfo?.panelId === panel.panelId && selectedNodeInfo?.nodeIndex === nIdx;
-                              return (
-                                <div
-                                  key={nIdx}
-                                  onMouseDown={(e) => handleNodeMouseDown(e, panel.panelId, nIdx)}
-                                  className={`w-5 h-5 rounded-full absolute -translate-x-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing hover:scale-125 transition-transform shadow-xl border-2 font-bold text-[9px] flex items-center justify-center select-none ${
-                                    isNodeSelected
-                                      ? 'bg-cyan-300 text-slate-950 border-cyan-100 ring-4 ring-cyan-400 ring-offset-2 ring-offset-slate-950 scale-125 z-[85] animate-pulse'
-                                      : 'bg-amber-400 text-slate-950 border-slate-950 hover:bg-amber-300 z-[75]'
-                                  }`}
-                                  style={{ left: `${pt.x}%`, top: `${pt.y}%` }}
-                                  title={`Bending Point ${nIdx + 1} (${pt.x}%, ${pt.y}%) - Click to select, drag or use Arrow keys (← ↑ → ↓) to move`}
-                                >
-                                  {nIdx + 1}
-                                </div>
-                              );
-                            })}
-                          </div>
-
-                          <div className={`absolute ${pos.y < 45 ? 'top-2 left-2' : '-top-9 left-0'} flex items-center space-x-1 bg-slate-950/95 border border-amber-500/60 text-amber-300 px-2 py-0.5 rounded-lg text-[10px] font-bold shadow-xl z-[75] pointer-events-auto`}>
-                            <i className="fas fa-draw-polygon text-amber-400 text-xs"></i>
-                            <span className="hidden sm:inline">Nodes ({shapePts.length}):</span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAddShapeNode(panel);
-                              }}
-                              className="px-1.5 py-0.2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded font-black cursor-pointer shadow-sm transition-transform active:scale-95"
-                              title="Add bending point to pipe segment"
-                            >
-                              + Point
-                            </button>
-                            {shapePts.length > 2 && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRemoveShapeNode(panel);
-                                }}
-                                className="px-1.5 py-0.2 bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 rounded font-bold cursor-pointer border border-rose-500/30 transition-transform active:scale-95"
-                                title="Remove selected or last bending point"
-                              >
-                                - Remove
-                              </button>
-                            )}
-                            {selectedNodeInfo && selectedNodeInfo.panelId === panel.panelId && (
-                              <span className="ml-1 text-[9px] text-cyan-300 font-mono bg-cyan-950/80 px-1.5 py-0.2 rounded border border-cyan-500/40">
-                                Pt #{selectedNodeInfo.nodeIndex + 1} Active (← ↑ → ↓)
-                              </span>
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))(panel.shapePoints || (
-                    panel.shapeType === 'polyline' || panel.shapeType === 'line' || panel.shapeType === 'pipe' || panel.type === PanelType.PIPE || (panel.type as string) === 'pipe'
-                      ? [{ x: 0, y: 50 }, { x: 50, y: 50 }, { x: 100, y: 50 }]
-                      : [{ x: 50, y: 5 }, { x: 95, y: 35 }, { x: 80, y: 95 }, { x: 20, y: 95 }, { x: 5, y: 35 }]
-                  ))
-                ) : (
-                  /* Default fallback box with Liquid Level Fill */
-                  <div className="w-full h-full p-2 flex flex-col justify-center items-center text-center truncate relative overflow-hidden">
-                    {/* Liquid Level Fill Overlay Layer */}
-                    {dynEval.levelFill && dynEval.levelFill.isLevelFill && (
-                      <div 
-                        className="absolute transition-all duration-300 ease-out z-0 pointer-events-none"
-                        style={{
-                          backgroundColor: dynEval.levelFill.fillColor || '#10b981',
-                          ...(dynEval.levelFill.fillDirection === 'bottom_to_top'
-                            ? { bottom: 0, left: 0, right: 0, height: `${dynEval.levelFill.percentage}%` }
-                            : dynEval.levelFill.fillDirection === 'top_to_bottom'
-                            ? { top: 0, left: 0, right: 0, height: `${dynEval.levelFill.percentage}%` }
-                            : dynEval.levelFill.fillDirection === 'right_to_left'
-                            ? { top: 0, bottom: 0, right: 0, width: `${dynEval.levelFill.percentage}%` }
-                            : { top: 0, bottom: 0, left: 0, width: `${dynEval.levelFill.percentage}%` }
-                          )
-                        }}
-                      >
-                        <div className="w-full h-full bg-gradient-to-t from-black/20 via-transparent to-white/30" />
-                      </div>
-                    )}
-                    <div className="relative z-10">
-                      <span className="text-[10px] font-bold truncate w-full" style={{ color: panel.textColor || '#cbd5e1' }}>{panel.panelName}</span>
-                      {liveValue !== undefined ? (
-                        <span className="text-xs font-mono font-bold mt-1 block" style={{ color: panel.textColor || '#fbbf24' }}>
-                          {String(liveValue)}
-                        </span>
-                      ) : (
-                        dynEval.levelFill && dynEval.levelFill.showPercentage !== false ? (
-                          <span className="text-xs font-mono font-bold mt-1 block" style={{ color: panel.textColor || '#fbbf24' }}>
-                            {`${Math.round(dynEval.levelFill.percentage)}%`}
-                          </span>
-                        ) : null
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Group Badge Indicator */}
-                {panel.groupId && (
-                  <div className="absolute top-1 left-1 bg-indigo-500/80 text-white px-1.5 py-0.2 rounded text-[8px] font-mono font-bold uppercase shadow">
-                    <i className="fas fa-link mr-0.5 text-[7px]"></i>
-                    GRP
-                  </div>
-                )}
-
-                {/* Trip / Fault Hazard Badge Overlay */}
-                {isTripActive && (
-                  <div className="absolute top-0 right-0 z-40 trip-badge-overlay flex items-center space-x-0.5 bg-red-600/90 text-white px-1.5 py-0.5 rounded-bl-lg rounded-tr-[inherit] shadow-lg">
-                    <i className="fas fa-exclamation-triangle text-[9px] text-yellow-300"></i>
-                    <span className="text-[8px] font-black uppercase tracking-wide">TRIP</span>
-                  </div>
-                )}
-
-                {/* Edit Mode Selection Handle Badges */}
-                {effectiveEditMode && isSelected && (
-                  <>
-                    {panel.isLocked ? (
-                      <div className={`absolute ${pos.y < 30 ? 'top-1 right-1' : '-top-3 -right-2'} px-1.5 py-0.5 rounded text-[9px] font-black uppercase shadow z-[70] bg-rose-500 text-white flex items-center space-x-1 border border-rose-400`}>
-                        <i className="fas fa-lock text-[8px]"></i>
-                        <span>Locked</span>
-                      </div>
-                    ) : (
-                      <div className={`absolute ${pos.y < 30 ? 'top-1 right-1' : '-top-3 -right-2'} px-1.5 py-0.5 rounded text-[9px] font-black uppercase shadow z-[70] ${
-                        isMaster ? 'bg-amber-500 text-slate-950' : 'bg-sky-500 text-slate-950'
-                      }`}>
-                        {isMaster ? 'Master Ref' : 'Selected'}
-                      </div>
-                    )}
-
-                    {/* Interactive Resize & Rotation Control Handles (Disabled when locked) */}
-                    {!panel.isLocked && (
-                      <div className="absolute inset-0 pointer-events-none z-40">
-                        {/* Outline dashed border */}
-                        <div className="absolute inset-0 border-2 border-sky-400 border-dashed rounded-[inherit] pointer-events-none" />
-
-                        {/* Rotation Handle (Top Center) */}
-                        <div 
-                          className={`absolute ${pos.y < 45 ? 'top-2 left-1/2 -translate-x-1/2' : '-top-9 left-1/2 -translate-x-1/2'} flex flex-col items-center pointer-events-auto cursor-grab active:cursor-grabbing group/rot z-[70]`}
-                          onMouseDown={(e) => handleRotateStart(e, panel, e.currentTarget.parentElement)}
-                          title="Click and drag to rotate element (Shift for 15° snap)"
-                        >
-                          <div className="w-6 h-6 rounded-full bg-amber-400 text-slate-950 border-2 border-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.8)] flex items-center justify-center text-[10px] font-bold hover:scale-125 transition-transform">
-                            <i className="fas fa-rotate"></i>
-                          </div>
-                          <div className="w-0.5 h-3 bg-amber-400"></div>
-                        </div>
-
-                        {/* 8 Corner & Edge Resize Handles */}
-                        {/* Top-Left */}
-                        <div
-                          onMouseDown={(e) => handleResizeStart(e, panel, 'nw')}
-                          className="absolute -top-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nwse-resize pointer-events-auto hover:scale-125 transition-transform"
-                          title="Resize Top-Left"
-                        />
-                        {/* Top-Center */}
-                        <div
-                          onMouseDown={(e) => handleResizeStart(e, panel, 'n')}
-                          className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ns-resize pointer-events-auto hover:scale-125 transition-transform"
-                          title="Resize Height (Top)"
-                        />
-                        {/* Top-Right */}
-                        <div
-                          onMouseDown={(e) => handleResizeStart(e, panel, 'ne')}
-                          className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nesw-resize pointer-events-auto hover:scale-125 transition-transform"
-                          title="Resize Top-Right"
-                        />
-                        {/* Middle-Right */}
-                        <div
-                          onMouseDown={(e) => handleResizeStart(e, panel, 'e')}
-                          className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ew-resize pointer-events-auto hover:scale-125 transition-transform"
-                          title="Resize Width (Right)"
-                        />
-                        {/* Bottom-Right */}
-                        <div
-                          onMouseDown={(e) => handleResizeStart(e, panel, 'se')}
-                          className="absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nwse-resize pointer-events-auto hover:scale-125 transition-transform"
-                          title="Resize Bottom-Right"
-                        />
-                        {/* Bottom-Center */}
-                        <div
-                          onMouseDown={(e) => handleResizeStart(e, panel, 's')}
-                          className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ns-resize pointer-events-auto hover:scale-125 transition-transform"
-                          title="Resize Height (Bottom)"
-                        />
-                        {/* Bottom-Left */}
-                        <div
-                          onMouseDown={(e) => handleResizeStart(e, panel, 'sw')}
-                          className="absolute -bottom-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nesw-resize pointer-events-auto hover:scale-125 transition-transform"
-                          title="Resize Bottom-Left"
-                        />
-                        {/* Middle-Left */}
-                        <div
-                          onMouseDown={(e) => handleResizeStart(e, panel, 'w')}
-                          className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ew-resize pointer-events-auto hover:scale-125 transition-transform"
-                          title="Resize Width (Left)"
-                        />
-
-                        {/* Dimension & Rotation Badge Overlay */}
-                        <div className={`absolute ${pos.y + pos.h > 720 ? 'bottom-1' : '-bottom-6'} left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-900/95 text-amber-300 border border-slate-700 rounded text-[9px] font-mono shadow-xl font-bold whitespace-nowrap pointer-events-none z-[70]`}>
-                          {pos.w} × {pos.h} px {panel.rotation ? `| ${panel.rotation}°` : ''}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* ─── DESIGN-TIME INTERACTIVE MULTI-NODE MOTION PATH VECTOR OVERLAY ─── */}
-                    {panel.enableMotionDynamics && (() => {
-                      const effectivePoints = getEffectiveMotionPathPoints(panel);
-
-                      return (
-                        <div className="absolute inset-0 pointer-events-none z-[80]">
-                          {/* Motion Vector SVG Polyline & Arrowhead */}
-                          <svg className="overflow-visible absolute top-0 left-0 w-full h-full pointer-events-none">
-                            <defs>
-                              <marker
-                                id={`motionArrow_${panel.panelId}`}
-                                viewBox="0 0 10 10"
-                                refX="6"
-                                refY="5"
-                                markerWidth="6"
-                                markerHeight="6"
-                                orient="auto-start-reverse"
-                              >
-                                <path d="M 0 1 L 10 5 L 0 9 z" fill="#f59e0b" />
-                              </marker>
-                            </defs>
-                            {effectivePoints.map((pt, i) => {
-                              if (i === 0) return null;
-                              const prev = effectivePoints[i - 1];
-                              const isLast = i === effectivePoints.length - 1;
-                              return (
-                                <line
-                                  key={i}
-                                  x1={prev.x + pos.w / 2}
-                                  y1={prev.y + pos.h / 2}
-                                  x2={pt.x + pos.w / 2}
-                                  y2={pt.y + pos.h / 2}
-                                  stroke="#f59e0b"
-                                  strokeWidth="2.5"
-                                  strokeDasharray="6 4"
-                                  markerEnd={isLast ? `url(#motionArrow_${panel.panelId})` : undefined}
-                                  opacity="0.85"
-                                />
-                              );
-                            })}
-                          </svg>
-
-                          {/* Draggable Node Handles for all Path Points */}
-                          {effectivePoints.map((pt, i) => {
-                            const isStart = i === 0;
-                            const isEnd = i === effectivePoints.length - 1;
-                            return (
-                              <div
-                                key={i}
-                                onMouseDown={(e) => handleMotionHandleMouseDown(e, panel.panelId, i)}
-                                className={`w-6 h-6 rounded-full absolute -translate-x-1/2 -translate-y-1/2 border-2 border-white font-black text-[9px] flex items-center justify-center shadow-2xl pointer-events-auto cursor-grab active:cursor-grabbing hover:scale-125 transition-transform select-none ${
-                                  isStart
-                                    ? 'bg-emerald-500 text-slate-950 ring-4 ring-emerald-500/30 z-[90]'
-                                    : isEnd
-                                    ? 'bg-amber-400 text-slate-950 ring-4 ring-amber-500/40 z-[95] animate-pulse'
-                                    : 'bg-cyan-400 text-slate-950 ring-4 ring-cyan-500/40 z-[92]'
-                                }`}
-                                style={{
-                                  left: `${pt.x + pos.w / 2}px`,
-                                  top: `${pt.y + pos.h / 2}px`
-                                }}
-                                title={`Motion Node ${i + 1} (${pt.x}px, ${pt.y}px) - Drag to bend/turn path!`}
-                              >
-                                {isStart ? '0' : isEnd ? '100' : `${i + 1}`}
+                          {/* Interactive Vertex Node Bending Points for Lines, Polylines, Process Pipes & Custom Polygons */}
+                          {isSelected && effectiveEditMode && (panel.shapeType === 'polyline' || panel.shapeType === 'custom_polygon' || panel.shapeType === 'line' || panel.shapeType === 'polygon' || panel.shapeType === 'pipe' || panel.type === PanelType.PIPE || (panel.type as string) === 'pipe') && (
+                            <>
+                              <div className="absolute inset-0 pointer-events-auto z-[80]">
+                                {shapePts.map((pt, nIdx) => {
+                                  const isNodeSelected = selectedNodeInfo?.panelId === panel.panelId && selectedNodeInfo?.nodeIndex === nIdx;
+                                  return (
+                                    <div
+                                      key={nIdx}
+                                      onMouseDown={(e) => handleNodeMouseDown(e, panel.panelId, nIdx)}
+                                      className={`w-5 h-5 rounded-full absolute -translate-x-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing hover:scale-125 transition-transform shadow-xl border-2 font-bold text-[9px] flex items-center justify-center select-none ${isNodeSelected
+                                        ? 'bg-cyan-300 text-slate-950 border-cyan-100 ring-4 ring-cyan-400 ring-offset-2 ring-offset-slate-950 scale-125 z-[85] animate-pulse'
+                                        : 'bg-amber-400 text-slate-950 border-slate-950 hover:bg-amber-300 z-[75]'
+                                        }`}
+                                      style={{ left: `${pt.x}%`, top: `${pt.y}%` }}
+                                      title={`Bending Point ${nIdx + 1} (${pt.x}%, ${pt.y}%) - Click to select, drag or use Arrow keys (← ↑ → ↓) to move`}
+                                    >
+                                      {nIdx + 1}
+                                    </div>
+                                  );
+                                })}
                               </div>
-                            );
-                          })}
 
-                          {/* Quick Motion Path Mini-Toolbar */}
-                          <div
-                            className={`absolute ${pos.y < 45 ? 'top-2 left-2' : '-top-8 left-0'} bg-slate-950/95 border border-amber-500/60 text-amber-300 px-2 py-0.5 rounded-lg text-[9px] font-mono font-bold whitespace-nowrap shadow-xl pointer-events-auto flex items-center space-x-1.5 z-[96]`}
-                          >
-                            <i className="fas fa-route text-amber-400 text-[10px]"></i>
-                            <span className="hidden sm:inline">Path Nodes ({effectivePoints.length}):</span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAddMotionPathNode(panel);
-                              }}
-                              className="px-1.5 py-0.2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded font-black cursor-pointer shadow-sm transition-transform active:scale-95"
-                              title="Add a bend node to turn the motion path"
-                            >
-                              + Bend
-                            </button>
-                            {effectivePoints.length > 2 && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRemoveMotionPathNode(panel);
-                                }}
-                                className="px-1.5 py-0.2 bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 rounded font-bold cursor-pointer border border-rose-500/30 transition-transform active:scale-95"
-                                title="Remove intermediate bending node"
-                              >
-                                - Point
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleToggleMotionOrient(panel);
-                              }}
-                              className={`px-1.5 py-0.2 rounded font-bold cursor-pointer transition-colors border ${
-                                panel.motionOrientToPath
-                                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                                  : 'bg-slate-800 text-slate-400 border-slate-700'
-                              }`}
-                              title="Turn/rotate element heading along path turns"
-                            >
-                              <i className="fas fa-compass text-[9px] mr-1"></i>
-                              {panel.motionOrientToPath ? 'Turn: ON' : 'Turn: OFF'}
-                            </button>
-                          </div>
+                              <div className={`absolute ${pos.y < 45 ? 'top-2 left-2' : '-top-9 left-0'} flex items-center space-x-1 bg-slate-950/95 border border-amber-500/60 text-amber-300 px-2 py-0.5 rounded-lg text-[10px] font-bold shadow-xl z-[75] pointer-events-auto`}>
+                                <i className="fas fa-draw-polygon text-amber-400 text-xs"></i>
+                                <span className="hidden sm:inline">Nodes ({shapePts.length}):</span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleAddShapeNode(panel);
+                                  }}
+                                  className="px-1.5 py-0.2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded font-black cursor-pointer shadow-sm transition-transform active:scale-95"
+                                  title="Add bending point to pipe segment"
+                                >
+                                  + Point
+                                </button>
+                                {shapePts.length > 2 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRemoveShapeNode(panel);
+                                    }}
+                                    className="px-1.5 py-0.2 bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 rounded font-bold cursor-pointer border border-rose-500/30 transition-transform active:scale-95"
+                                    title="Remove selected or last bending point"
+                                  >
+                                    - Remove
+                                  </button>
+                                )}
+                                {selectedNodeInfo && selectedNodeInfo.panelId === panel.panelId && (
+                                  <span className="ml-1 text-[9px] text-cyan-300 font-mono bg-cyan-950/80 px-1.5 py-0.2 rounded border border-cyan-500/40">
+                                    Pt #{selectedNodeInfo.nodeIndex + 1} Active (← ↑ → ↓)
+                                  </span>
+                                )}
+                              </div>
+                            </>
+                          )}
                         </div>
-                      );
-                    })()}
-                  </>
-                )}
-              </div>
-            );
-          })
-        )}
+                      ))(panel.shapePoints || (
+                        panel.shapeType === 'polyline' || panel.shapeType === 'line' || panel.shapeType === 'pipe' || panel.type === PanelType.PIPE || (panel.type as string) === 'pipe'
+                          ? [{ x: 0, y: 50 }, { x: 50, y: 50 }, { x: 100, y: 50 }]
+                          : [{ x: 50, y: 5 }, { x: 95, y: 35 }, { x: 80, y: 95 }, { x: 20, y: 95 }, { x: 5, y: 35 }]
+                      ))
+                    ) : (
+                      /* Default fallback box with Liquid Level Fill */
+                      <div className="w-full h-full p-2 flex flex-col justify-center items-center text-center truncate relative overflow-hidden">
+                        {/* Liquid Level Fill Overlay Layer */}
+                        {dynEval.levelFill && dynEval.levelFill.isLevelFill && (
+                          <div
+                            className="absolute transition-all duration-300 ease-out z-0 pointer-events-none"
+                            style={{
+                              backgroundColor: dynEval.levelFill.fillColor || '#10b981',
+                              ...(dynEval.levelFill.fillDirection === 'bottom_to_top'
+                                ? { bottom: 0, left: 0, right: 0, height: `${dynEval.levelFill.percentage}%` }
+                                : dynEval.levelFill.fillDirection === 'top_to_bottom'
+                                  ? { top: 0, left: 0, right: 0, height: `${dynEval.levelFill.percentage}%` }
+                                  : dynEval.levelFill.fillDirection === 'right_to_left'
+                                    ? { top: 0, bottom: 0, right: 0, width: `${dynEval.levelFill.percentage}%` }
+                                    : { top: 0, bottom: 0, left: 0, width: `${dynEval.levelFill.percentage}%` }
+                              )
+                            }}
+                          >
+                            <div className="w-full h-full bg-gradient-to-t from-black/20 via-transparent to-white/30" />
+                          </div>
+                        )}
+                        <div className="relative z-10">
+                          <span className="text-[10px] font-bold truncate w-full" style={{ color: panel.textColor || '#cbd5e1' }}>{panel.panelName}</span>
+                          {liveValue !== undefined ? (
+                            <span className="text-xs font-mono font-bold mt-1 block" style={{ color: panel.textColor || '#fbbf24' }}>
+                              {String(liveValue)}
+                            </span>
+                          ) : (
+                            dynEval.levelFill && dynEval.levelFill.showPercentage !== false ? (
+                              <span className="text-xs font-mono font-bold mt-1 block" style={{ color: panel.textColor || '#fbbf24' }}>
+                                {`${Math.round(dynEval.levelFill.percentage)}%`}
+                              </span>
+                            ) : null
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Group Badge Indicator */}
+                    {panel.groupId && (
+                      <div className="absolute top-1 left-1 bg-indigo-500/80 text-white px-1.5 py-0.2 rounded text-[8px] font-mono font-bold uppercase shadow">
+                        <i className="fas fa-link mr-0.5 text-[7px]"></i>
+                        GRP
+                      </div>
+                    )}
+
+                    {/* Trip / Fault Hazard Badge Overlay */}
+                    {isTripActive && (
+                      <div className="absolute top-0 right-0 z-40 trip-badge-overlay flex items-center space-x-0.5 bg-red-600/90 text-white px-1.5 py-0.5 rounded-bl-lg rounded-tr-[inherit] shadow-lg">
+                        <i className="fas fa-exclamation-triangle text-[9px] text-yellow-300"></i>
+                        <span className="text-[8px] font-black uppercase tracking-wide">TRIP</span>
+                      </div>
+                    )}
+
+                    {/* Edit Mode Selection Handle Badges */}
+                    {effectiveEditMode && isSelected && (
+                      <>
+                        {panel.isLocked ? (
+                          <div className={`absolute ${pos.y < 30 ? 'top-1 right-1' : '-top-3 -right-2'} px-1.5 py-0.5 rounded text-[9px] font-black uppercase shadow z-[70] bg-rose-500 text-white flex items-center space-x-1 border border-rose-400`}>
+                            <i className="fas fa-lock text-[8px]"></i>
+                            <span>Locked</span>
+                          </div>
+                        ) : (
+                          <div className={`absolute ${pos.y < 30 ? 'top-1 right-1' : '-top-3 -right-2'} px-1.5 py-0.5 rounded text-[9px] font-black uppercase shadow z-[70] ${isMaster ? 'bg-amber-500 text-slate-950' : 'bg-sky-500 text-slate-950'
+                            }`}>
+                            {isMaster ? 'Master Ref' : 'Selected'}
+                          </div>
+                        )}
+
+                        {/* Interactive Resize & Rotation Control Handles (Disabled when locked) */}
+                        {!panel.isLocked && (
+                          <div className="absolute inset-0 pointer-events-none z-40">
+                            {/* Outline dashed border */}
+                            <div className="absolute inset-0 border-2 border-sky-400 border-dashed rounded-[inherit] pointer-events-none" />
+
+                            {/* Rotation Handle (Top Center) */}
+                            <div
+                              className={`absolute ${pos.y < 45 ? 'top-2 left-1/2 -translate-x-1/2' : '-top-9 left-1/2 -translate-x-1/2'} flex flex-col items-center pointer-events-auto cursor-grab active:cursor-grabbing group/rot z-[70]`}
+                              onMouseDown={(e) => handleRotateStart(e, panel, e.currentTarget.parentElement)}
+                              title="Click and drag to rotate element (Shift for 15° snap)"
+                            >
+                              <div className="w-6 h-6 rounded-full bg-amber-400 text-slate-950 border-2 border-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.8)] flex items-center justify-center text-[10px] font-bold hover:scale-125 transition-transform">
+                                <i className="fas fa-rotate"></i>
+                              </div>
+                              <div className="w-0.5 h-3 bg-amber-400"></div>
+                            </div>
+
+                            {/* 8 Corner & Edge Resize Handles */}
+                            {/* Top-Left */}
+                            <div
+                              onMouseDown={(e) => handleResizeStart(e, panel, 'nw')}
+                              className="absolute -top-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nwse-resize pointer-events-auto hover:scale-125 transition-transform"
+                              title="Resize Top-Left"
+                            />
+                            {/* Top-Center */}
+                            <div
+                              onMouseDown={(e) => handleResizeStart(e, panel, 'n')}
+                              className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ns-resize pointer-events-auto hover:scale-125 transition-transform"
+                              title="Resize Height (Top)"
+                            />
+                            {/* Top-Right */}
+                            <div
+                              onMouseDown={(e) => handleResizeStart(e, panel, 'ne')}
+                              className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nesw-resize pointer-events-auto hover:scale-125 transition-transform"
+                              title="Resize Top-Right"
+                            />
+                            {/* Middle-Right */}
+                            <div
+                              onMouseDown={(e) => handleResizeStart(e, panel, 'e')}
+                              className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ew-resize pointer-events-auto hover:scale-125 transition-transform"
+                              title="Resize Width (Right)"
+                            />
+                            {/* Bottom-Right */}
+                            <div
+                              onMouseDown={(e) => handleResizeStart(e, panel, 'se')}
+                              className="absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nwse-resize pointer-events-auto hover:scale-125 transition-transform"
+                              title="Resize Bottom-Right"
+                            />
+                            {/* Bottom-Center */}
+                            <div
+                              onMouseDown={(e) => handleResizeStart(e, panel, 's')}
+                              className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ns-resize pointer-events-auto hover:scale-125 transition-transform"
+                              title="Resize Height (Bottom)"
+                            />
+                            {/* Bottom-Left */}
+                            <div
+                              onMouseDown={(e) => handleResizeStart(e, panel, 'sw')}
+                              className="absolute -bottom-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nesw-resize pointer-events-auto hover:scale-125 transition-transform"
+                              title="Resize Bottom-Left"
+                            />
+                            {/* Middle-Left */}
+                            <div
+                              onMouseDown={(e) => handleResizeStart(e, panel, 'w')}
+                              className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ew-resize pointer-events-auto hover:scale-125 transition-transform"
+                              title="Resize Width (Left)"
+                            />
+
+                            {/* Dimension & Rotation Badge Overlay */}
+                            <div className={`absolute ${pos.y + pos.h > 720 ? 'bottom-1' : '-bottom-6'} left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-900/95 text-amber-300 border border-slate-700 rounded text-[9px] font-mono shadow-xl font-bold whitespace-nowrap pointer-events-none z-[70]`}>
+                              {pos.w} × {pos.h} px {panel.rotation ? `| ${panel.rotation}°` : ''}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ─── DESIGN-TIME INTERACTIVE MULTI-NODE MOTION PATH VECTOR OVERLAY ─── */}
+                        {panel.enableMotionDynamics && (() => {
+                          const effectivePoints = getEffectiveMotionPathPoints(panel);
+
+                          return (
+                            <div className="absolute inset-0 pointer-events-none z-[80]">
+                              {/* Motion Vector SVG Polyline & Arrowhead */}
+                              <svg className="overflow-visible absolute top-0 left-0 w-full h-full pointer-events-none">
+                                <defs>
+                                  <marker
+                                    id={`motionArrow_${panel.panelId}`}
+                                    viewBox="0 0 10 10"
+                                    refX="6"
+                                    refY="5"
+                                    markerWidth="6"
+                                    markerHeight="6"
+                                    orient="auto-start-reverse"
+                                  >
+                                    <path d="M 0 1 L 10 5 L 0 9 z" fill="#f59e0b" />
+                                  </marker>
+                                </defs>
+                                {effectivePoints.map((pt, i) => {
+                                  if (i === 0) return null;
+                                  const prev = effectivePoints[i - 1];
+                                  const isLast = i === effectivePoints.length - 1;
+                                  return (
+                                    <line
+                                      key={i}
+                                      x1={prev.x + pos.w / 2}
+                                      y1={prev.y + pos.h / 2}
+                                      x2={pt.x + pos.w / 2}
+                                      y2={pt.y + pos.h / 2}
+                                      stroke="#f59e0b"
+                                      strokeWidth="2.5"
+                                      strokeDasharray="6 4"
+                                      markerEnd={isLast ? `url(#motionArrow_${panel.panelId})` : undefined}
+                                      opacity="0.85"
+                                    />
+                                  );
+                                })}
+                              </svg>
+
+                              {/* Draggable Node Handles for all Path Points */}
+                              {effectivePoints.map((pt, i) => {
+                                const isStart = i === 0;
+                                const isEnd = i === effectivePoints.length - 1;
+                                return (
+                                  <div
+                                    key={i}
+                                    onMouseDown={(e) => handleMotionHandleMouseDown(e, panel.panelId, i)}
+                                    className={`w-6 h-6 rounded-full absolute -translate-x-1/2 -translate-y-1/2 border-2 border-white font-black text-[9px] flex items-center justify-center shadow-2xl pointer-events-auto cursor-grab active:cursor-grabbing hover:scale-125 transition-transform select-none ${isStart
+                                      ? 'bg-emerald-500 text-slate-950 ring-4 ring-emerald-500/30 z-[90]'
+                                      : isEnd
+                                        ? 'bg-amber-400 text-slate-950 ring-4 ring-amber-500/40 z-[95] animate-pulse'
+                                        : 'bg-cyan-400 text-slate-950 ring-4 ring-cyan-500/40 z-[92]'
+                                      }`}
+                                    style={{
+                                      left: `${pt.x + pos.w / 2}px`,
+                                      top: `${pt.y + pos.h / 2}px`
+                                    }}
+                                    title={`Motion Node ${i + 1} (${pt.x}px, ${pt.y}px) - Drag to bend/turn path!`}
+                                  >
+                                    {isStart ? '0' : isEnd ? '100' : `${i + 1}`}
+                                  </div>
+                                );
+                              })}
+
+                              {/* Quick Motion Path Mini-Toolbar */}
+                              <div
+                                className={`absolute ${pos.y < 45 ? 'top-2 left-2' : '-top-8 left-0'} bg-slate-950/95 border border-amber-500/60 text-amber-300 px-2 py-0.5 rounded-lg text-[9px] font-mono font-bold whitespace-nowrap shadow-xl pointer-events-auto flex items-center space-x-1.5 z-[96]`}
+                              >
+                                <i className="fas fa-route text-amber-400 text-[10px]"></i>
+                                <span className="hidden sm:inline">Path Nodes ({effectivePoints.length}):</span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleAddMotionPathNode(panel);
+                                  }}
+                                  className="px-1.5 py-0.2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded font-black cursor-pointer shadow-sm transition-transform active:scale-95"
+                                  title="Add a bend node to turn the motion path"
+                                >
+                                  + Bend
+                                </button>
+                                {effectivePoints.length > 2 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRemoveMotionPathNode(panel);
+                                    }}
+                                    className="px-1.5 py-0.2 bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 rounded font-bold cursor-pointer border border-rose-500/30 transition-transform active:scale-95"
+                                    title="Remove intermediate bending node"
+                                  >
+                                    - Point
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleToggleMotionOrient(panel);
+                                  }}
+                                  className={`px-1.5 py-0.2 rounded font-bold cursor-pointer transition-colors border ${panel.motionOrientToPath
+                                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                                    }`}
+                                  title="Turn/rotate element heading along path turns"
+                                >
+                                  <i className="fas fa-compass text-[9px] mr-1"></i>
+                                  {panel.motionOrientToPath ? 'Turn: ON' : 'Turn: OFF'}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
-      </div>
       </div>
 
       {/* Floating Right-Click Context Menu */}
@@ -5616,11 +5522,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   handlePasteProperties();
                   setContextMenu({ isOpen: false, x: 0, y: 0 });
                 }}
-                className={`w-full text-left px-3 py-1.5 rounded-xl flex items-center space-x-2.5 transition-colors ${
-                  copiedProperties
-                    ? 'hover:bg-slate-800 text-amber-300 hover:text-amber-200 font-bold'
-                    : 'opacity-40 cursor-not-allowed text-slate-500'
-                }`}
+                className={`w-full text-left px-3 py-1.5 rounded-xl flex items-center space-x-2.5 transition-colors ${copiedProperties
+                  ? 'hover:bg-slate-800 text-amber-300 hover:text-amber-200 font-bold'
+                  : 'opacity-40 cursor-not-allowed text-slate-500'
+                  }`}
               >
                 <i className="fas fa-paint-roller text-amber-400 w-4 text-center"></i>
                 <span>Paste Visual Properties ({selectedPanelIds.length})</span>
@@ -5710,6 +5615,47 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 </button>
               )}
 
+              {/* 3D Canvas: Import from Library (only shown when right-clicking a CANVAS_3D panel) */}
+              {(() => {
+                const targetPanel = panels.find(p => p.panelId === contextMenu.panelId);
+                return targetPanel?.type === PanelType.CANVAS_3D ? (
+                  <>
+                    <div className="border-t border-slate-800/80 my-1"></div>
+                    <div className="px-2.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-indigo-400 flex items-center gap-2">
+                      <i className="fas fa-cube text-indigo-400"></i>
+                      <span>3D Assembly</span>
+                      {targetPanel.canvas3dAssemblyId && (
+                        <span className="ml-auto text-emerald-400 text-[9px]"><i className="fas fa-check-circle"></i> Loaded</span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLibraryBrowserTarget(contextMenu.panelId!);
+                        setContextMenu({ isOpen: false, x: 0, y: 0 });
+                      }}
+                      className="w-full text-left px-3 py-1.5 rounded-xl hover:bg-indigo-500/20 text-indigo-300 hover:text-indigo-200 flex items-center space-x-2.5 transition-colors font-bold"
+                    >
+                      <i className="fas fa-arrow-down-to-bracket text-indigo-400 w-4 text-center"></i>
+                      <span>Import from Library ({ProjectLibrary.count()})</span>
+                    </button>
+                    {targetPanel.canvas3dAssemblyId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleUpdatePanelPropSingle(contextMenu.panelId!, 'canvas3dAssemblyId', undefined);
+                          setContextMenu({ isOpen: false, x: 0, y: 0 });
+                        }}
+                        className="w-full text-left px-3 py-1 rounded-xl hover:bg-rose-500/10 text-rose-400 hover:text-rose-300 flex items-center space-x-2.5 transition-colors"
+                      >
+                        <i className="fas fa-xmark text-rose-400 w-4 text-center"></i>
+                        <span>Clear 3D Assembly</span>
+                      </button>
+                    )}
+                  </>
+                ) : null;
+              })()}
+
               <div className="border-t border-slate-800/80 my-1"></div>
 
               <button
@@ -5757,6 +5703,37 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
               >
                 <i className="fas fa-plus text-sky-400 w-4 text-center"></i>
                 <span>Add New Element</span>
+              </button>
+
+              {/* Add 3D Canvas Widget */}
+              <button
+                type="button"
+                onClick={() => {
+                  const targetDashId = activeDashboard?.dashboardId;
+                  const targetConnId = appState.connections[0]?.connectionId || 'conn_demo';
+                  if (!targetDashId) return; // no dashboard selected, ignore
+                  const newPanel: Panel = {
+                    panelId: `panel_3d_${Date.now()}`,
+                    panelName: '3D Viewport',
+                    type: PanelType.CANVAS_3D,
+                    dashboardId: targetDashId,
+                    connectionId: targetConnId,
+                    x: contextMenu.canvasX ?? 60,
+                    y: contextMenu.canvasY ?? 60,
+                    w: 400,
+                    h: 320,
+                    canvas3dCameraPreset: 'isometric',
+                    canvas3dShowGrid: true,
+                    canvas3dShowAxes: true,
+                    canvas3dBgAlpha: 0,
+                  } as Panel;
+                  store.handleSavePanel(newPanel);
+                  setContextMenu({ isOpen: false, x: 0, y: 0 });
+                }}
+                className="w-full text-left px-3 py-1.5 rounded-xl hover:bg-indigo-500/20 text-indigo-300 hover:text-indigo-200 flex items-center space-x-2.5 transition-colors font-bold"
+              >
+                <i className="fas fa-cube text-indigo-400 w-4 text-center"></i>
+                <span>Add 3D Canvas</span>
               </button>
 
               <button
@@ -5815,6 +5792,83 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
         onClose={() => setIsSymbolLibraryOpen(false)}
         onSelectSymbol={handleSelectIndustrialSymbol}
       />
+
+      {/* Project 3D Library Browser — opens when user right-clicks a CANVAS_3D panel and selects 'Import from Library' */}
+      <ProjectLibraryBrowser
+        isOpen={!!libraryBrowserTarget}
+        onClose={() => setLibraryBrowserTarget(null)}
+        onImport={(assembly) => {
+          if (libraryBrowserTarget) {
+            // Write the assemblyId into the panel — HmiCanvas3dViewport detects the change
+            // via a useEffect and loads the new assembly. Tags are matched by SCADA object
+            // IDs which are the same across 3D Studio and HMI canvas (no remapping needed).
+            handleUpdatePanelPropSingle(libraryBrowserTarget, 'canvas3dAssemblyId', assembly.assemblyId);
+          }
+          setLibraryBrowserTarget(null);
+        }}
+      />
+
+      {/* Delete Confirmation Popup Modal */}
+      {deleteModalConfig.isOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150"
+          onClick={() => setDeleteModalConfig({ isOpen: false, panelIds: [], panelNames: [] })}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setDeleteModalConfig({ isOpen: false, panelIds: [], panelNames: [] });
+            if (e.key === 'Enter') handleConfirmDelete();
+          }}
+          tabIndex={-1}
+        >
+          <div
+            className="bg-[#0f172a] border border-rose-500/40 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start space-x-3.5">
+              <div className="w-11 h-11 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0">
+                <i className="fas fa-trash-can text-lg"></i>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-bold text-white tracking-wide">
+                  {deleteModalConfig.panelIds.length > 1
+                    ? `Delete ${deleteModalConfig.panelIds.length} Selected Elements?`
+                    : `Delete Element?`}
+                </h3>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  {deleteModalConfig.panelIds.length > 1 ? (
+                    <>Are you sure you want to delete <span className="text-rose-400 font-semibold">{deleteModalConfig.panelIds.length} elements</span> ({deleteModalConfig.panelNames.slice(0, 3).join(', ')}{deleteModalConfig.panelNames.length > 3 ? '...' : ''}) from the canvas?</>
+                  ) : (
+                    <>Are you sure you want to delete <span className="text-rose-400 font-semibold">"{deleteModalConfig.panelNames[0] || 'Selected Element'}"</span> from the canvas?</>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 text-[11px] text-slate-400 flex items-center space-x-2">
+              <i className="fas fa-info-circle text-sky-400 text-xs"></i>
+              <span>You can restore deleted elements at any time with <kbd className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200 font-mono text-[10px] border border-slate-700">Ctrl+Z</kbd></span>
+            </div>
+
+            <div className="flex items-center justify-end space-x-2.5 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setDeleteModalConfig({ isOpen: false, panelIds: [], panelNames: [] })}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold text-xs transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                autoFocus
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-rose-600/30 transition-all flex items-center space-x-1.5 cursor-pointer"
+              >
+                <i className="fas fa-trash-can text-xs"></i>
+                <span>Delete</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Visual Property Copy / Paste Toast Banner */}
       {propertyCopiedToast && (

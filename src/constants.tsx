@@ -23,7 +23,8 @@ export const PANEL_ICONS: Record<string, React.ReactNode> = {
   clock: <i className="fas fa-clock"></i>,
   pipe: <i className="fas fa-grip-lines"></i>,
   shape: <i className="fas fa-shapes"></i>,
-  alarm_log: <i className="fas fa-history"></i>
+  alarm_log: <i className="fas fa-history"></i>,
+  tasc_grid: <i className="fas fa-table-columns"></i>
 };
 
 export const DEFAULT_COLORS = {

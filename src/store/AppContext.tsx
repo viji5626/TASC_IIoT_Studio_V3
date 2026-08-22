@@ -89,6 +89,8 @@ export interface AppContextType {
   setActiveDashboardId: React.Dispatch<React.SetStateAction<string>>;
   activeMode: 'grid' | 'hmi';
   setActiveMode: React.Dispatch<React.SetStateAction<'grid' | 'hmi'>>;
+  isHmiEditMode: boolean;
+  setIsHmiEditMode: React.Dispatch<React.SetStateAction<boolean>>;
   isLayoutMode: boolean;
   setIsLayoutMode: React.Dispatch<React.SetStateAction<boolean>>;
   selectedPanelId: string | null;
@@ -267,6 +269,10 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     appState.dashboards[0]?.dashboardId || ''
   );
   const [isLayoutMode, setIsLayoutMode] = useState(false);
+  const [isHmiEditMode, setIsHmiEditMode] = useState<boolean>(() => {
+    const isClient = userRole === 'client' || productEdition === ProductEdition.CLIENT_RUNTIME || !!appState.isLockedPackage;
+    return !isClient;
+  });
   const [selectedPanelId, setSelectedPanelId] = useState<string | null>(null);
   const [isEngineeringChoiceOpen, setIsEngineeringChoiceOpen] = useState(false);
 
@@ -424,13 +430,23 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
       setActiveDashboardId(targetDashId);
     }
 
+    const isTableOrGraph = type === 'tasc_grid' || type === 'line_graph' || type === 'alarm_log';
+
     setEditingPanel({
       type,
       dashboardId: targetDashId,
       connectionId: targetConnId,
-      panelName: `New ${type.toUpperCase()}`,
+      panelName: type === 'tasc_grid' ? 'SQL Telemetry Table' : `New ${type.toUpperCase()}`,
       topic: `sensors/${type}`,
-      qos: 0
+      qos: 0,
+      colSpan: isTableOrGraph ? 2 : 1,
+      rowSpan: isTableOrGraph ? 2 : 1,
+      w: type === 'tasc_grid' ? 640 : undefined,
+      h: type === 'tasc_grid' ? 320 : undefined,
+      sqlDatabase: 'DAIKIN_EMS',
+      sqlTableName: 'MeterName',
+      sqlSchema: 'dbo',
+      sqlPollIntervalMs: 3000,
     });
   }, [editionMgr, appState, activeDashboard, activeConnection, setAppState, setActiveDashboardId, setEditingPanel, setShowClientReadOnlyNotice, setCommunityLimitNotice]);
 
@@ -481,6 +497,8 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
 
     const completePanel: Panel = {
       ...panelData,
+      w: panelData.w || (panelData.type === 'tasc_grid' ? 640 : 200),
+      h: panelData.h || (panelData.type === 'tasc_grid' ? 320 : 180),
       dashboardId: targetDashId,
       connectionId: targetConnId,
       panelId: panelData.panelId || `panel_${Date.now()}`
@@ -1258,6 +1276,8 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     setActiveDashboardId,
     activeMode,
     setActiveMode,
+    isHmiEditMode,
+    setIsHmiEditMode,
     isLayoutMode,
     setIsLayoutMode,
     selectedPanelId,

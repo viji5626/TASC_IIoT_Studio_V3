@@ -9,23 +9,12 @@ import {
 } from './types';
 import { AppContextProvider, useAppContext } from './store/AppContext';
 import BentoGrid from './components/BentoGrid';
-import AddPanelModal from './components/AddPanelModal';
-import EditPanelModal from './components/EditPanelModal';
-import ClonePanelModal from './components/ClonePanelModal';
-import AlarmModal from './components/AlarmModal';
+import Sidebar from './components/Sidebar';
 import AddConnectionView from './components/AddConnectionView';
 import AddDashboardView from './components/AddDashboardView';
-import EditDashboardModal from './components/EditDashboardModal';
-import DashboardMenu from './components/DashboardMenu';
-import Sidebar from './components/Sidebar';
 import SettingsView from './components/SettingsView';
 import BackupRestoreView from './components/BackupRestoreView';
-import ShareConnectionModal from './components/ShareConnectionModal';
-import PinModal from './components/PinModal';
 import LandingPage from './components/LandingPage';
-import ExportClientPackageModal from './components/ExportClientPackageModal';
-import ExitSessionModal from './components/ExitSessionModal';
-import ClearAllModal from './components/ClearAllModal';
 import TopicManagerView from './components/TopicManagerView';
 import TagManagerView from './components/TagManagerView';
 import { HistorianTrendView } from './components/HistorianTrendView';
@@ -33,23 +22,18 @@ import DriverConnectionsView from './components/DriverConnectionsView';
 import DriverTagManagerView from './components/DriverTagManagerView';
 import OpcUaBrowserView from './components/OpcUaBrowserView';
 import DriverDiagnosticsView from './components/DriverDiagnosticsView';
-import AppLogo from './components/AppLogo';
-import EngineeringChoiceModal from './components/EngineeringChoiceModal';
 import WebHmiCanvasView from './components/WebHmiCanvasView';
 import { sanitizeAppState } from './utils/EditionManager';
-import { ConfirmModal } from './components/ConfirmModal';
-import { FddPredictiveMaintenanceModal } from './components/FddPredictiveMaintenanceModal';
-import { CoachMarkOverlay } from './components/CoachMarkOverlay';
 import { UserManualView } from './components/UserManualView';
 import { ReportingView } from './components/ReportingView';
+import { SqlStudioView } from './components/SqlStudioView';
 import { useDeviceCapability } from './utils/deviceDetection';
-import { MultiDriverStatusPill } from './components/MultiDriverStatusPill';
 import { saveCommercialState } from './utils/editionStorage';
-import { AlarmHistorianModal } from './components/AlarmHistorianModal';
 import { AiAssistantView } from './components/AiAssistantView';
-import { AiChatFab } from './components/AiChatFab';
-import { AiChatDrawer } from './components/AiChatDrawer';
 import { AiErrorBoundary } from './components/AiErrorBoundary';
+import { Scada3dEditorView } from './3d/ui/Scada3dEditorView';
+import { TopNavbar } from './components/TopNavbar';
+import { ModalRegistry } from './components/ModalRegistry';
 
 function AppContent() {
   const {
@@ -98,6 +82,7 @@ function AppContent() {
     setActiveDashboardId,
     activeMode,
     setActiveMode,
+    isHmiEditMode,
     isLayoutMode,
     setIsLayoutMode,
     selectedPanelId,
@@ -292,511 +277,48 @@ function AppContent() {
   return (
     <div className="flex flex-col h-screen w-screen text-slate-200 overflow-hidden font-sans select-none" style={{ backgroundColor: activeThemeObj.bgCanvas }}>
       {/* Top Navbar */}
-      <header 
-        onWheel={(e) => {
-          if (isMobile && e.deltaY !== 0) {
-            e.currentTarget.scrollLeft += e.deltaY;
-          }
-        }}
-        className={`theme-header px-2 sm:px-3 border-b border-slate-800 flex items-center justify-between z-40 backdrop-blur-md w-full max-w-full ${
-          isDesktop
-            ? 'flex-wrap min-h-[48px] py-1 gap-y-1.5 overflow-visible'
-            : 'h-11 sm:h-[48px] overflow-x-auto custom-horizontal-scrollbar touch-scroll overscroll-x-contain shrink-0'
-        }`}
-      >
-        <div className={`flex items-center gap-1.5 sm:gap-2 ${isDesktop ? 'flex-wrap' : 'shrink-0'}`}>
-          
-          {/* Sticky Left Brand Container (Hamburger + Logo + Title) */}
-          <div className="flex items-center space-x-1.5 shrink-0 sticky left-0 theme-header z-30 pr-1.5">
-            <button 
-              type="button" 
-              data-tour="sidebar-btn"
-              onClick={() => setIsSidebarOpen(true)}
-              className="p-1 sm:p-1.5 text-slate-300 hover:text-white rounded-lg hover:bg-slate-800/80 active:scale-95 transition-all shrink-0 cursor-pointer"
-              title="Open Menu"
-            >
-              <i className="fas fa-bars text-sm sm:text-base"></i>
-            </button>
-            
-            <AppLogo 
-              size="sm" 
-              accentColor={activeThemeObj.primary} 
-              isCommunity={userRole === 'community' || productEdition === ProductEdition.COMMUNITY} 
-            />
-            <span className="font-extrabold text-white text-xs sm:text-sm tracking-tight whitespace-nowrap shrink-0 hidden lg:inline">TASC IIoT Studio</span>
-          </div>
+      <TopNavbar
+        appState={appState}
+        userRole={userRole}
+        productEdition={productEdition}
+        clientInfo={clientInfo}
+        currentView={currentView}
+        setCurrentView={setCurrentView}
+        activeConnection={activeConnection}
+        activeDashboardId={activeDashboardId}
+        setActiveDashboardId={setActiveDashboardId}
+        activeMode={activeMode}
+        setActiveMode={setActiveMode}
+        isHmiEditMode={isHmiEditMode}
+        isLayoutMode={isLayoutMode}
+        setIsLayoutMode={setIsLayoutMode}
+        isLocked={isLocked}
+        handleToggleLock={handleToggleLock}
+        isFullscreen={isFullscreen}
+        handleToggleFullscreen={handleToggleFullscreen}
+        handleExitFullscreen={handleExitFullscreen}
+        unreadScheduledReports={unreadScheduledReports}
+        setUnreadScheduledReports={setUnreadScheduledReports}
+        mqttConnected={mqttConnected}
+        isSimulated={isSimulated}
+        activeAlarms={activeAlarms}
+        activeThemeObj={activeThemeObj}
+        editionMgr={editionMgr}
+        setIsSidebarOpen={setIsSidebarOpen}
+        setIsAlarmModalOpen={setIsAlarmModalOpen}
+        setIsAlarmHistorianModalOpen={setIsAlarmHistorianModalOpen}
+        setIsFddModalOpen={setIsFddModalOpen}
+        setIsEngineeringChoiceOpen={setIsEngineeringChoiceOpen}
+        setIsCloneModalOpen={setIsCloneModalOpen}
+        setIsDashMenuOpen={setIsDashMenuOpen}
+        handleOpenActiveBrokerSettings={handleOpenActiveBrokerSettings}
+        handleSelectDashboard={handleSelectDashboard}
+        handleRequestExitSession={handleRequestExitSession}
+        setShowClientReadOnlyNotice={setShowClientReadOnlyNotice}
+        setCommunityLimitNotice={setCommunityLimitNotice}
+        handleOpenAddPanel={handleOpenAddPanel}
+      />
 
-          {/* Multi-Driver & MQTT Live Connection Status Pill with Multi-Dots & Dropdown Popover */}
-          <div data-tour="drivers-pill">
-            <MultiDriverStatusPill
-              mqttConnection={activeMqttConnection}
-              allMqttConnections={appState.connections}
-              mqttConnected={mqttConnected}
-              isSimulated={isSimulated}
-              driverConnections={appState.driverConnections}
-              isClient={editionMgr.IsClient() || userRole === 'client' || !!appState.isLockedPackage}
-              onOpenMqttSettings={handleOpenActiveBrokerSettings}
-              onOpenDriverConnections={() => setCurrentView(AppView.DRIVER_CONNECTIONS)}
-            />
-          </div>
-
-          {/* Inbuilt Alarm Center Bell Button */}
-          <button
-            type="button"
-            data-tour="alarms-btn"
-            onClick={() => setIsAlarmModalOpen(true)}
-            className={`flex items-center space-x-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer relative shrink-0 min-h-[30px] ${
-              activeAlarms.length > 0
-                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/60 hover:bg-rose-500/30 animate-pulse'
-                : 'bg-slate-800/80 text-slate-400 border border-slate-700 hover:text-white'
-            }`}
-            title="Telemetry Inbuilt Parameter Alarms"
-          >
-            <i className={`fas fa-bell text-xs ${activeAlarms.length > 0 ? 'text-rose-400 animate-bounce' : 'text-slate-400'}`}></i>
-            <span className="hidden lg:inline">ALARMS</span>
-            {activeAlarms.length > 0 && (
-              <span className="bg-rose-500 text-black text-[9px] font-mono font-black px-1.5 py-0.2 rounded-full">
-                {activeAlarms.length}
-              </span>
-            )}
-          </button>
-
-          {/* Alarm Historian Button */}
-          <button
-            type="button"
-            data-tour="historian-btn"
-            onClick={() => setIsAlarmHistorianModalOpen(true)}
-            className="flex items-center space-x-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/50 hover:bg-indigo-500/30 transition-all cursor-pointer shadow-sm shrink-0 min-h-[30px]"
-            title="Industrial Alarm Historian Window (FIFO Storage & Exporter)"
-          >
-            <i className="fas fa-history text-xs text-indigo-400"></i>
-            <span className="hidden xl:inline">HISTORIAN</span>
-          </button>
-
-          {/* TASC FDD & Predictive CBM Button (PC / Desktop Exclusive) */}
-          {isDesktop && (
-            <button
-              type="button"
-              data-tour="fdd-btn"
-              onClick={() => setIsFddModalOpen(true)}
-              className="flex items-center space-x-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold bg-gradient-to-r from-amber-600/20 to-indigo-600/20 text-amber-300 border border-amber-500/50 hover:bg-amber-600/30 transition-all cursor-pointer shadow-sm shrink-0 min-h-[30px]"
-              title="TASC FDD Fault Detection, CBM & Predictive Maintenance"
-            >
-              <i className="fas fa-shield-halved text-xs text-amber-400"></i>
-              <span className="hidden xl:inline">FDD / CBM</span>
-            </button>
-          )}
-
-          {/* User Manual Handbook Button */}
-          <button
-            type="button"
-            data-tour="manual-btn"
-            onClick={() => setCurrentView(AppView.USER_MANUAL)}
-            className={`flex items-center space-x-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer shadow-sm shrink-0 min-h-[30px] ${
-              currentView === AppView.USER_MANUAL
-                ? 'bg-sky-500 text-slate-950 shadow-md'
-                : 'bg-slate-800/90 text-slate-300 border border-slate-700 hover:text-white hover:bg-slate-750'
-            }`}
-            title="Comprehensive Engineering User Manual & Schematics Book"
-          >
-            <i className="fas fa-book-bookmark text-xs text-sky-400" />
-            <span className="hidden 2xl:inline">MANUAL</span>
-          </button>
-
-          {/* Reports Button */}
-          <button
-            type="button"
-            onClick={() => {
-              setCurrentView(AppView.REPORTING);
-              setUnreadScheduledReports(0);
-            }}
-            className={`flex items-center space-x-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer shadow-sm shrink-0 min-h-[30px] ${
-              currentView === AppView.REPORTING
-                ? 'bg-sky-500 text-slate-950 shadow-md'
-                : 'bg-slate-800/90 text-slate-300 border border-slate-700 hover:text-white hover:bg-slate-750'
-            }`}
-            title="Reports — Template Ingestion, Automated Schedules & AI Reports"
-          >
-            <i className="fas fa-chart-bar text-xs text-sky-400" />
-            <span className="hidden 2xl:inline">REPORTS</span>
-            {unreadScheduledReports > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 font-black text-[9px] animate-pulse">
-                {unreadScheduledReports}
-              </span>
-            )}
-          </button>
-
-          {userRole === 'community' || productEdition === ProductEdition.COMMUNITY ? (
-            <div className="flex items-center space-x-1.5 shrink-0">
-              {/* Ultra-Compact Community Edition Badge */}
-              <button
-                type="button"
-                onClick={handleRequestExitSession}
-                className="flex items-center space-x-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-1 rounded-lg text-[10px] font-bold hover:bg-emerald-500/30 transition-all cursor-pointer shrink-0 min-h-[30px]"
-                title={`Community Edition (Free) • ${appState.dashboards.length} Screens / 10 Widgets Max — Click to exit / change mode`}
-              >
-                <i className="fas fa-cube text-xs text-emerald-400"></i>
-                <span className="hidden 2xl:inline">COMMUNITY</span>
-                <span className={`text-[9px] px-1 rounded font-mono font-extrabold ${appState.panels.length > 10 ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-slate-950'}`}>
-                  Demo ({appState.panels.length}/10W)
-                </span>
-              </button>
-
-              {!isFullscreen && (
-                <button
-                  type="button"
-                  onClick={handleToggleFullscreen}
-                  className="flex items-center space-x-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 px-2 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer shrink-0 min-h-[30px]"
-                  title="Toggle Fullscreen Mode"
-                >
-                  <i className="fas fa-expand text-xs text-emerald-400"></i>
-                  <span className="hidden md:inline">Full Screen</span>
-                </button>
-              )}
-
-              {/* Workstation Mode Switcher Toggle for Community Edition */}
-              <div className="flex items-center p-0.5 bg-slate-950 rounded-lg border border-slate-800 shrink-0 min-h-[30px]">
-                <button
-                  type="button"
-                  onClick={() => setActiveMode('grid')}
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
-                    activeMode === 'grid'
-                      ? 'bg-emerald-500 text-slate-950 shadow'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                  title="Switch to IIoT Grid Dashboard Studio"
-                >
-                  <i className="fas fa-border-all text-xs"></i>
-                  <span className="hidden sm:inline">Grid Studio</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveMode('hmi')}
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
-                    activeMode === 'hmi'
-                      ? 'bg-sky-500 text-slate-950 shadow'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                  title="Switch to Absolute Web HMI Canvas Designer"
-                >
-                  <i className="fas fa-microchip text-xs"></i>
-                  <span className="hidden sm:inline">HMI Canvas</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsEngineeringChoiceOpen(true)}
-                  className="p-1 text-slate-400 hover:text-emerald-400"
-                  title="Change Workstation Architecture Mode"
-                >
-                  <i className="fas fa-sliders text-xs"></i>
-                </button>
-              </div>
-
-              {/* HMI Screen Switcher Dropdown */}
-              {appState.dashboards && appState.dashboards.length > 0 && (
-                <select
-                  value={activeDashboardId}
-                  onChange={(e) => handleSelectDashboard(e.target.value)}
-                  className="bg-slate-950 text-sky-400 font-bold text-xs px-2 py-1 rounded-lg border border-slate-800 outline-none focus:border-sky-500 cursor-pointer max-w-[130px] sm:max-w-[180px] shadow-inner shrink-0 truncate hover:border-slate-700 transition-colors min-h-[30px]"
-                  title="Switch Active HMI Screen Page"
-                >
-                  {appState.dashboards.map(d => (
-                    <option key={d.dashboardId} value={d.dashboardId} className="bg-slate-900 text-white font-normal">
-                      {d.dashboardName} {d.isHome ? '★ (Home)' : ''}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {/* Inline Fullscreen Controls */}
-              {isFullscreen && (
-                <div className="flex items-center space-x-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => window.dispatchEvent(new CustomEvent('hmi-restore-autofit'))}
-                    className="flex items-center space-x-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[30px]"
-                    title="Restore Fit (Reset zoom to fit all screen elements)"
-                  >
-                    <i className="fas fa-compress-arrows-alt text-xs text-indigo-400"></i>
-                    <span className="hidden md:inline">Restore Fit</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleExitFullscreen}
-                    className="flex items-center space-x-1 bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[30px]"
-                    title="Exit Full Screen Mode"
-                  >
-                    <i className="fas fa-compress text-xs text-sky-400"></i>
-                    <span className="hidden md:inline">Exit Full Screen</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : userRole === 'client' || productEdition === ProductEdition.CLIENT_RUNTIME ? (
-            <div className="flex items-center space-x-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={handleRequestExitSession}
-                className="flex items-center space-x-1 bg-sky-500/20 text-sky-300 border border-sky-500/30 px-2 py-1 rounded-lg text-[10px] font-bold hover:bg-sky-500/30 transition-all cursor-pointer shrink-0 min-h-[30px]"
-                title="Client Edition (Operator Mode) — Click to exit / change mode"
-              >
-                <i className="fas fa-shield-halved text-xs text-sky-400"></i>
-                <span className="hidden lg:inline">{clientInfo?.clientName || 'CLIENT EDITION'}</span>
-                <span className="text-[9px] bg-sky-500 text-slate-950 px-1 rounded font-mono font-extrabold">OPERATOR</span>
-              </button>
-
-              {!isFullscreen && (
-                <button
-                  type="button"
-                  onClick={handleToggleFullscreen}
-                  className="flex items-center space-x-1 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 px-2 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer shrink-0 min-h-[30px]"
-                  title="Toggle Fullscreen Mode"
-                >
-                  <i className="fas fa-expand text-xs text-sky-400"></i>
-                  <span className="hidden md:inline">Full Screen</span>
-                </button>
-              )}
-
-              {/* Workstation Mode Switcher Toggle for Client Edition */}
-              <div className="flex items-center p-0.5 bg-slate-950 rounded-lg border border-slate-800 shrink-0 min-h-[30px]">
-                <button
-                  type="button"
-                  onClick={() => setActiveMode('grid')}
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
-                    activeMode === 'grid'
-                      ? 'bg-sky-500 text-slate-950 shadow'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                  title="Switch to IIoT Grid Dashboard View"
-                >
-                  <i className="fas fa-border-all text-xs"></i>
-                  <span className="hidden sm:inline">Grid View</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveMode('hmi')}
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
-                    activeMode === 'hmi'
-                      ? 'bg-sky-500 text-slate-950 shadow'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                  title="Switch to Absolute Web HMI Canvas View"
-                >
-                  <i className="fas fa-microchip text-xs"></i>
-                  <span className="hidden sm:inline">HMI View</span>
-                </button>
-              </div>
-
-              {/* HMI Screen Switcher Dropdown */}
-              {appState.dashboards && appState.dashboards.length > 0 && (
-                <select
-                  value={activeDashboardId}
-                  onChange={(e) => handleSelectDashboard(e.target.value)}
-                  className="bg-slate-950 text-sky-400 font-bold text-xs px-2 py-1 rounded-lg border border-slate-800 outline-none focus:border-sky-500 cursor-pointer max-w-[130px] sm:max-w-[180px] shadow-inner shrink-0 truncate hover:border-slate-700 transition-colors min-h-[30px]"
-                  title="Switch Active HMI Screen Page"
-                >
-                  {appState.dashboards.map(d => (
-                    <option key={d.dashboardId} value={d.dashboardId} className="bg-slate-900 text-white font-normal">
-                      {d.dashboardName} {d.isHome ? '★ (Home)' : ''}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {/* Inline Fullscreen Controls */}
-              {isFullscreen && (
-                <div className="flex items-center space-x-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => window.dispatchEvent(new CustomEvent('hmi-restore-autofit'))}
-                    className="flex items-center space-x-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[30px]"
-                    title="Restore Fit (Reset zoom to fit all screen elements)"
-                  >
-                    <i className="fas fa-compress-arrows-alt text-xs text-indigo-400"></i>
-                    <span className="hidden md:inline">Restore Fit</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleExitFullscreen}
-                    className="flex items-center space-x-1 bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[30px]"
-                    title="Exit Full Screen Mode"
-                  >
-                    <i className="fas fa-compress text-xs text-sky-400"></i>
-                    <span className="hidden md:inline">Exit Full Screen</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="flex items-center space-x-1.5 shrink-0">
-
-              {!isFullscreen && (
-                <button
-                  type="button"
-                  onClick={handleToggleFullscreen}
-                  className="flex items-center space-x-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 px-2 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer shrink-0 min-h-[30px]"
-                  title="Toggle Fullscreen Mode"
-                >
-                  <i className="fas fa-expand text-xs text-amber-400"></i>
-                  <span className="hidden md:inline">Full Screen</span>
-                </button>
-              )}
-
-              {/* Workstation Mode Switcher Toggle */}
-              <div data-tour="view-toggle" className="flex items-center p-0.5 bg-slate-950 rounded-lg border border-slate-800 shrink-0 min-h-[30px]">
-                <button
-                  type="button"
-                  onClick={() => setActiveMode('grid')}
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
-                    activeMode === 'grid'
-                      ? 'bg-amber-500 text-slate-950 shadow'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                  title="Switch to IIoT Grid Dashboard Studio"
-                >
-                  <i className="fas fa-border-all text-xs"></i>
-                  <span className="hidden sm:inline">Grid Studio</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveMode('hmi')}
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
-                    activeMode === 'hmi'
-                      ? 'bg-sky-500 text-slate-950 shadow'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                  title="Switch to Absolute Web HMI Canvas Designer"
-                >
-                  <i className="fas fa-microchip text-xs"></i>
-                  <span className="hidden sm:inline">HMI Canvas</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsEngineeringChoiceOpen(true)}
-                  className="p-1 text-slate-400 hover:text-amber-400"
-                  title="Change Engineering Architecture Mode"
-                >
-                  <i className="fas fa-sliders text-xs"></i>
-                </button>
-              </div>
-
-              {/* HMI Screen Switcher Dropdown */}
-              {appState.dashboards && appState.dashboards.length > 0 && (
-                <select
-                  value={activeDashboardId}
-                  onChange={(e) => handleSelectDashboard(e.target.value)}
-                  className="bg-slate-950 text-sky-400 font-bold text-xs px-2 py-1 rounded-lg border border-slate-800 outline-none focus:border-sky-500 cursor-pointer max-w-[130px] sm:max-w-[180px] shadow-inner shrink-0 truncate hover:border-slate-700 transition-colors min-h-[30px]"
-                  title="Switch Active HMI Screen Page"
-                >
-                  {appState.dashboards.map(d => (
-                    <option key={d.dashboardId} value={d.dashboardId} className="bg-slate-900 text-white font-normal">
-                      {d.dashboardName} {d.isHome ? '★ (Home)' : ''}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {/* Inline Fullscreen Controls */}
-              {isFullscreen && (
-                <div className="flex items-center space-x-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => window.dispatchEvent(new CustomEvent('hmi-restore-autofit'))}
-                    className="flex items-center space-x-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[30px]"
-                    title="Restore Fit (Reset zoom to fit all screen elements)"
-                  >
-                    <i className="fas fa-compress-arrows-alt text-xs text-indigo-400"></i>
-                    <span className="hidden md:inline">Restore Fit</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleExitFullscreen}
-                    className="flex items-center space-x-1 bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[30px]"
-                    title="Exit Full Screen Mode"
-                  >
-                    <i className="fas fa-compress text-xs text-sky-400"></i>
-                    <span className="hidden md:inline">Exit Full Screen</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Right Toolbar */}
-        <div className={`flex items-center gap-1.5 ${isDesktop ? 'flex-wrap' : 'shrink-0'}`}>
-
-          {currentView === AppView.DASHBOARD && activeMode === 'grid' && (
-            <>
-              {!isFullscreen && (
-                <button 
-                  type="button"
-                  onClick={() => {
-                    const check = editionMgr.CanCreateScreen(appState);
-                    if (!check.allowed) {
-                      if (editionMgr.IsClient()) {
-                        setShowClientReadOnlyNotice(true);
-                        setTimeout(() => setShowClientReadOnlyNotice(false), 4500);
-                      } else if (check.reason) {
-                        setCommunityLimitNotice(check.reason);
-                        setTimeout(() => setCommunityLimitNotice(null), 5000);
-                      }
-                      return;
-                    }
-                    setCurrentView(AppView.ADD_DASHBOARD);
-                  }}
-                  className="px-2.5 py-1 bg-sky-500 hover:bg-sky-400 text-slate-950 font-extrabold rounded-lg text-xs transition-all flex items-center space-x-1.5 cursor-pointer shrink-0 shadow-md active:scale-95"
-                  title="Create New HMI Dashboard Screen Page"
-                >
-                  <i className="fas fa-plus text-xs"></i>
-                  <span>New Screen</span>
-                </button>
-              )}
-
-              {!isLocked && !isFullscreen && (
-                <button 
-                  onClick={() => setIsCloneModalOpen(true)}
-                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-                  title="Clone Panel"
-                >
-                  <i className="fas fa-clone text-sm" style={{ color: activeThemeObj.primary }}></i>
-                </button>
-              )}
-
-              {isLocked && (
-                <button
-                  onClick={handleToggleLock}
-                  className="px-2.5 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-semibold flex items-center space-x-1.5 hover:bg-amber-500/30 transition-colors"
-                  title="Panel Edits Locked — Click to unlock"
-                >
-                  <i className="fas fa-lock text-[11px]"></i>
-                  <span className="hidden sm:inline">Locked</span>
-                </button>
-              )}
-
-              {isLayoutMode && (
-                <button
-                  onClick={() => setIsLayoutMode(false)}
-                  className="px-2.5 py-1 bg-sky-500/20 text-sky-400 border border-sky-500/30 rounded-lg text-xs font-semibold flex items-center space-x-1.5 animate-pulse hover:bg-sky-500/30 transition-colors"
-                  title="Layout Editing Active — Click done when finished"
-                >
-                  <i className="fas fa-table-cells text-[11px]"></i>
-                  <span className="hidden sm:inline">Editing Layout</span>
-                </button>
-              )}
-
-              {/* 3-Dot Dropdown Menu - Shown strictly in Grid Studio mode */}
-              <button 
-                onClick={() => setIsDashMenuOpen(true)}
-                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-                title="Dashboard Options Menu"
-              >
-                <i className="fas fa-ellipsis-vertical text-sm"></i>
-              </button>
-            </>
-          )}
-        </div>
-      </header>
 
       {/* Main Content Area */}
       <main className="flex-grow overflow-hidden flex flex-col relative">
@@ -1109,6 +631,37 @@ function AppContent() {
           <HistorianTrendView />
         )}
 
+        {currentView === AppView.SCADA_3D && (
+          isMobile ? (
+            <div className="flex-grow flex flex-col items-center justify-center p-6 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 flex items-center justify-center text-2xl mb-3 shadow-lg">
+                <i className="fas fa-cube"></i>
+              </div>
+              <h3 className="text-lg font-bold text-white mb-1">Desktop SCADA Feature</h3>
+              <p className="text-xs text-slate-400 max-w-sm mb-4">
+                3D SCADA Studio scene authoring requires a desktop PC environment.
+              </p>
+              <button
+                onClick={() => setCurrentView(AppView.DASHBOARD)}
+                className="px-4 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg cursor-pointer"
+              >
+                Return to Dashboard
+              </button>
+            </div>
+          ) : (
+            <Scada3dEditorView
+              latestValues={latestValues}
+              dashboards={appState.dashboards}
+              onNavigateTo2dDashboard={(dashId) => {
+                setActiveDashboardId(dashId);
+                setActiveMode('hmi');
+                setCurrentView(AppView.DASHBOARD);
+              }}
+              userRole={userRole}
+            />
+          )
+        )}
+
         {currentView === AppView.DRIVER_CONNECTIONS && (
           <DriverConnectionsView />
         )}
@@ -1132,6 +685,32 @@ function AppContent() {
             appState={appState}
             onNavigate={setCurrentView}
           />
+        )}
+
+        {currentView === AppView.SQL_STUDIO && (
+          isMobile ? (
+            <div className="flex-grow flex flex-col items-center justify-center p-6 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 flex items-center justify-center text-2xl mb-3 shadow-lg">
+                <i className="fas fa-table-columns"></i>
+              </div>
+              <h3 className="text-lg font-bold text-white mb-1">Desktop Workstation Feature</h3>
+              <p className="text-xs text-slate-400 max-w-sm mb-4">
+                SQL Server Connector & Database Studio requires a desktop PC environment for multi-tab SQL querying and data manipulation.
+              </p>
+              <button
+                onClick={() => setCurrentView(AppView.DASHBOARD)}
+                className="px-4 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg cursor-pointer"
+              >
+                Return to Dashboard
+              </button>
+            </div>
+          ) : (
+            <SqlStudioView
+              onBack={() => setCurrentView(AppView.DASHBOARD)}
+              appState={appState}
+              onNavigate={setCurrentView}
+            />
+          )
         )}
 
         {currentView === AppView.BACKUP && (
@@ -1196,275 +775,79 @@ function AppContent() {
         onOpenTour={() => setIsTourOpen(true)}
       />
 
-      <DashboardMenu 
-        isOpen={isDashMenuOpen} 
-        onClose={() => setIsDashMenuOpen(false)} 
+      <ModalRegistry
+        appState={appState}
+        setAppState={setAppState}
+        userRole={userRole}
+        productEdition={productEdition}
+        clientInfo={clientInfo}
+        currentView={currentView}
+        setCurrentView={setCurrentView}
+        activeMode={activeMode}
+        setActiveMode={setActiveMode}
         isLocked={isLocked}
         isLayoutMode={isLayoutMode}
-        hasPin={!!appState.editPin}
-        onToggleLock={handleToggleLock}
-        onEditLayout={handleEditLayout}
-        onAddDashboard={() => {
-          const check = editionMgr.CanCreateScreen(appState);
-          if (!check.allowed) {
-            if (check.reason) {
-              setCommunityLimitNotice(check.reason);
-              setTimeout(() => setCommunityLimitNotice(null), 5000);
-            }
-            return;
-          }
-          setCurrentView(AppView.ADD_DASHBOARD);
-        }}
-      />
-
-      <PinModal
-        isOpen={isPinModalOpen}
-        onClose={() => {
-          setIsPinModalOpen(false);
-          setPendingAction(null);
-        }}
-        mode={pinModalMode}
-        correctPin={appState.editPin}
-        onSuccess={(newPin) => {
-          if (pinModalMode === 'set') {
-            setAppState(prev => ({ ...prev, editPin: newPin }));
-            setIsPinModalOpen(false);
-          } else {
-            setIsPinModalOpen(false);
-            if (pendingAction) {
-              pendingAction();
-              setPendingAction(null);
-            }
-          }
-        }}
-      />
-
-      <AddPanelModal 
-        isOpen={isAddPanelOpen}
-        onClose={() => setIsAddPanelOpen(false)}
-        onSelect={handleAddPanelSelect}
-      />
-
-      <EditPanelModal 
-        panel={editingPanel || {}}
-        isOpen={!!editingPanel}
-        onClose={() => setEditingPanel(null)}
-      />
-
-      {editingDashboard && (
-        <EditDashboardModal
-          dashboard={editingDashboard}
-          onCancel={() => setEditingDashboard(null)}
-          onSave={(updatedDash) => {
-            setAppState(prev => {
-              let updatedDashboards = prev.dashboards.map(d => {
-                if (d.dashboardId === updatedDash.dashboardId) {
-                  return updatedDash;
-                }
-                if (updatedDash.isHome) {
-                  return { ...d, isHome: false };
-                }
-                return d;
-              });
-
-              if (!updatedDashboards.some(d => d.isHome) && updatedDashboards.length > 0) {
-                updatedDashboards[0] = { ...updatedDashboards[0], isHome: true };
-              }
-
-              return { ...prev, dashboards: updatedDashboards };
-            });
-            setEditingDashboard(null);
-          }}
-        />
-      )}
-
-      <ClonePanelModal 
-        isOpen={isCloneModalOpen}
-        onClose={() => setIsCloneModalOpen(false)}
-        dashboards={appState.dashboards}
-        panels={appState.panels}
-        onClone={handleClonePanels}
-      />
-
-      {sharingConnection && (
-        <ShareConnectionModal 
-          connection={sharingConnection}
-          dashboards={appState.dashboards.filter(d => d.connectionId === sharingConnection.connectionId)}
-          panels={appState.panels.filter(p => appState.dashboards.filter(d => d.connectionId === sharingConnection.connectionId).some(d => d.dashboardId === p.dashboardId))}
-          onClose={() => setSharingConnection(null)}
-        />
-      )}
-
-      <ExportClientPackageModal
-        isOpen={isExportClientPackageOpen}
-        onClose={() => setIsExportClientPackageOpen(false)}
-        appState={appState}
-      />
-
-      <ClearAllModal
-        isOpen={isClearAllModalOpen}
-        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-        onConfirmClearAll={handleConfirmClearAll}
-        widgetCount={appState.panels.length}
-        connectionCount={appState.connections.length}
-        dashboardCount={appState.dashboards.length}
-        editionName={userRole === 'community' || productEdition === ProductEdition.COMMUNITY ? 'Community Edition' : 'Engineering Studio'}
-      />
-
-      {/* Mandatory Client Edition Save Setup Modal */}
-      {!isClientSetupSaved && (userRole === 'client' || productEdition === ProductEdition.CLIENT_RUNTIME) && (
-        <div className="fixed inset-0 z-[500] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-sky-500/40 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl p-6 text-slate-100 space-y-5 animate-in zoom-in-95 duration-200">
-            <div className="w-14 h-14 rounded-2xl bg-sky-500/10 border border-sky-500/30 text-sky-400 flex items-center justify-center text-2xl mx-auto shadow-inner">
-              <i className="fas fa-floppy-disk"></i>
-            </div>
-
-            <div className="text-center space-y-1">
-              <h3 className="text-xl font-bold text-white">Save Setup for Future Operation</h3>
-              <p className="text-xs text-slate-400">Client Edition Browser Local Storage</p>
-            </div>
-
-            <div className="bg-sky-500/10 border border-sky-500/30 rounded-2xl p-4 text-center space-y-2">
-              <p className="text-sm font-extrabold text-sky-300">
-                Please save the setup for future operation
-              </p>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Saving this HMI layout and MQTT connection setup will store it securely in your browser memory so it automatically loads every time you open this app.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                try {
-                  localStorage.setItem('tasc_client_setup_saved', 'true');
-                  localStorage.setItem('mqtt_dash_pro_state', JSON.stringify(appState));
-                } catch {}
-                setIsClientSetupSaved(true);
-              }}
-              className="w-full py-3.5 px-4 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-slate-950 font-extrabold text-xs uppercase tracking-wider rounded-2xl shadow-lg shadow-sky-500/25 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer"
-            >
-              <i className="fas fa-check-circle text-base"></i>
-              <span>Save Setup to Browser Memory</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Global Inbuilt Telemetry Alarm Pop-up Modal */}
-      <AlarmModal
-        isOpen={isAlarmModalOpen}
-        onClose={() => setIsAlarmModalOpen(false)}
+        editionMgr={editionMgr}
+        activeDashboard={activeDashboard}
         activeAlarms={activeAlarms}
-        onAcknowledgeAlarm={handleAcknowledgeAlarm}
-        onAcknowledgeAll={handleAcknowledgeAllAlarms}
-        isVibrateEnabled={isVibrateEnabled}
-        onToggleVibrate={() => setIsVibrateEnabled(!isVibrateEnabled)}
-        isSoundEnabled={isSoundEnabled}
-        onToggleSound={() => setIsSoundEnabled(!isSoundEnabled)}
-        isAutoPopupEnabled={isAutoPopupEnabled}
-        onToggleAutoPopup={() => setIsAutoPopupEnabled(!isAutoPopupEnabled)}
         latestAlarmTriggered={latestAlarmTriggered}
-        onOpenHistorian={() => {
-          setIsAlarmModalOpen(false);
-          setIsAlarmHistorianModalOpen(true);
-        }}
+        latestValues={latestValues}
+        isDashMenuOpen={isDashMenuOpen}
+        setIsDashMenuOpen={setIsDashMenuOpen}
+        isPinModalOpen={isPinModalOpen}
+        setIsPinModalOpen={setIsPinModalOpen}
+        pinModalMode={pinModalMode}
+        pendingAction={pendingAction}
+        setPendingAction={setPendingAction}
+        isAddPanelOpen={isAddPanelOpen}
+        setIsAddPanelOpen={setIsAddPanelOpen}
+        editingPanel={editingPanel}
+        setEditingPanel={setEditingPanel}
+        editingDashboard={editingDashboard}
+        setEditingDashboard={setEditingDashboard}
+        isCloneModalOpen={isCloneModalOpen}
+        setIsCloneModalOpen={setIsCloneModalOpen}
+        sharingConnection={sharingConnection}
+        setSharingConnection={setSharingConnection}
+        isExportClientPackageOpen={isExportClientPackageOpen}
+        setIsExportClientPackageOpen={setIsExportClientPackageOpen}
+        isClearAllModalOpen={isClearAllModalOpen}
+        confirmModal={confirmModal}
+        setConfirmModal={setConfirmModal}
+        isClientSetupSaved={isClientSetupSaved}
+        setIsClientSetupSaved={setIsClientSetupSaved}
+        isAlarmModalOpen={isAlarmModalOpen}
+        setIsAlarmModalOpen={setIsAlarmModalOpen}
+        isAlarmHistorianModalOpen={isAlarmHistorianModalOpen}
+        setIsAlarmHistorianModalOpen={setIsAlarmHistorianModalOpen}
+        isFddModalOpen={isFddModalOpen}
+        setIsFddModalOpen={setIsFddModalOpen}
+        isVibrateEnabled={isVibrateEnabled}
+        setIsVibrateEnabled={setIsVibrateEnabled}
+        isSoundEnabled={isSoundEnabled}
+        setIsSoundEnabled={setIsSoundEnabled}
+        isAutoPopupEnabled={isAutoPopupEnabled}
+        setIsAutoPopupEnabled={setIsAutoPopupEnabled}
+        handleAcknowledgeAlarm={handleAcknowledgeAlarm}
+        handleAcknowledgeAllAlarms={handleAcknowledgeAllAlarms}
+        isTourOpen={isTourOpen}
+        setIsTourOpen={setIsTourOpen}
+        isAiDrawerOpen={isAiDrawerOpen}
+        setIsAiDrawerOpen={setIsAiDrawerOpen}
+        isExitSessionModalOpen={isExitSessionModalOpen}
+        setIsExitSessionModalOpen={setIsExitSessionModalOpen}
+        isEngineeringChoiceOpen={isEngineeringChoiceOpen}
+        setIsEngineeringChoiceOpen={setIsEngineeringChoiceOpen}
+        handleToggleLock={handleToggleLock}
+        handleEditLayout={handleEditLayout}
+        handleAddPanelSelect={handleAddPanelSelect}
+        handleClonePanels={handleClonePanels}
+        handleConfirmClearAll={handleConfirmClearAll}
+        handleSaveAndExitSession={handleSaveAndExitSession}
+        handleExitSessionWithoutSave={handleExitSessionWithoutSave}
+        setCommunityLimitNotice={setCommunityLimitNotice}
       />
 
-      {/* Industrial Alarm Historian Resizable Window & Lifecycle Table */}
-      <AlarmHistorianModal
-        isOpen={isAlarmHistorianModalOpen}
-        onClose={() => setIsAlarmHistorianModalOpen(false)}
-        dashboardId={activeDashboard?.dashboardId}
-        onAcknowledgeAlarm={handleAcknowledgeAlarm}
-        onOpenLiveAlarms={() => {
-          setIsAlarmHistorianModalOpen(false);
-          setIsAlarmModalOpen(true);
-        }}
-        isCommunity={userRole === 'community' || productEdition === ProductEdition.COMMUNITY}
-      />
-
-      {/* TASC FDD Fault Detection, CBM & Predictive Maintenance (Desktop Only) */}
-      {isDesktop && (
-        <FddPredictiveMaintenanceModal
-          isOpen={isFddModalOpen}
-          onClose={() => setIsFddModalOpen(false)}
-        />
-      )}
-
-      {/* Interactive Coach Mark Screen Overlay Walkthrough */}
-      <CoachMarkOverlay
-        isOpen={isTourOpen}
-        onClose={() => setIsTourOpen(false)}
-        onNavigate={setCurrentView}
-        onOpenFdd={() => setIsFddModalOpen(true)}
-        onOpenAlarms={() => setIsAlarmModalOpen(true)}
-        onOpenHistorian={() => setIsAlarmHistorianModalOpen(true)}
-      />
-
-      {/* AI Copilot FAB */}
-      {userRole !== 'client' &&
-       (currentView === AppView.DASHBOARD || currentView === AppView.WEB_HMI) && (
-        <AiChatFab onClick={() => setIsAiDrawerOpen(true)} />
-      )}
-
-      {/* AI Copilot Slide-in Drawer */}
-      {userRole !== 'client' && (
-        <AiChatDrawer
-          isOpen={isAiDrawerOpen}
-          onClose={() => setIsAiDrawerOpen(false)}
-          latestValues={latestValues}
-          appState={appState}
-          activeAlarms={activeAlarms}
-          onOpenFullAssistant={() => {
-            setIsAiDrawerOpen(false);
-            setCurrentView(AppView.AI_ASSISTANT);
-          }}
-        />
-      )}
-
-      {/* Session Exit Confirmation Modal */}
-      <ExitSessionModal
-        isOpen={isExitSessionModalOpen}
-        onClose={() => setIsExitSessionModalOpen(false)}
-        onSaveAndExit={handleSaveAndExitSession}
-        onExitWithoutSave={handleExitSessionWithoutSave}
-        isCommunitySave={
-          appState.packageOrigin === 'community' ||
-          userRole === 'community' ||
-          productEdition === ProductEdition.COMMUNITY ||
-          appState.clientInfo?.clientName === 'Community Edition Save' ||
-          (!appState.clientInfo?.isSignedPackage && userRole !== 'admin')
-        }
-        editionName={
-          userRole === 'community' || productEdition === ProductEdition.COMMUNITY
-            ? 'Community Edition'
-            : appState.packageOrigin === 'community' || appState.clientInfo?.clientName === 'Community Edition Save'
-            ? 'Client Edition (Community Demo Save)'
-            : userRole === 'client' || productEdition === ProductEdition.CLIENT_RUNTIME
-            ? 'Client Edition'
-            : 'Engineering Studio'
-        }
-      />
-
-      {/* Engineering Architecture Workstation Choice Modal */}
-      <EngineeringChoiceModal
-        isOpen={isEngineeringChoiceOpen}
-        onClose={() => setIsEngineeringChoiceOpen(false)}
-        onSelectMode={(mode) => setActiveMode(mode)}
-        currentMode={activeMode}
-      />
-
-      {/* Global Confirmation Modal */}
-      <ConfirmModal
-        isOpen={confirmModal.isOpen}
-        title={confirmModal.title}
-        message={confirmModal.message}
-        confirmLabel={confirmModal.confirmLabel}
-        confirmVariant={confirmModal.confirmVariant}
-        onConfirm={confirmModal.onConfirm}
-        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-      />
     </div>
   );
 }

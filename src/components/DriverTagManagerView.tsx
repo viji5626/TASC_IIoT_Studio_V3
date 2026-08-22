@@ -27,6 +27,9 @@ const PROTOCOL_BADGES: Record<DriverProtocol, { label: string; color: string }> 
   iec61850: { label: 'IEC 61850', color: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25' },
   s7: { label: 'Siemens S7', color: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/25' },
   melsec: { label: 'MELSEC', color: 'bg-rose-500/15 text-rose-300 border-rose-500/25' },
+  ethernet_ip: { label: 'EtherNet/IP', color: 'bg-amber-500/15 text-amber-300 border-amber-500/25' },
+  profinet: { label: 'PROFINET', color: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25' },
+  profibus: { label: 'PROFIBUS', color: 'bg-purple-500/15 text-purple-300 border-purple-500/25' },
   rs485: { label: 'RS-485', color: 'bg-orange-500/15 text-orange-300 border-orange-500/25' },
   rs232: { label: 'RS-232', color: 'bg-amber-600/15 text-amber-300 border-amber-500/25' },
   usb_serial: { label: 'USB', color: 'bg-green-500/15 text-green-300 border-green-500/25' },
@@ -46,6 +49,16 @@ const emptyTag = (defaultConnId: string = ''): Partial<DriverTag> => ({
   enabled: true,
   registerType: 'holding_register',
   address: 0,
+  // PROFINET Defaults
+  pnSlot: 1,
+  pnSubslot: 1,
+  pnIoDirection: 'input',
+  pnByteOffset: 0,
+  // PROFIBUS Defaults
+  profibusNodeAddress: 3,
+  // EtherNet/IP Defaults
+  cipTagName: 'Motor_Speed',
+  cipClass: undefined,
   // S7 Defaults
   s7Area: 'DB',
   dbNumber: 1,
@@ -53,15 +66,24 @@ const emptyTag = (defaultConnId: string = ''): Partial<DriverTag> => ({
   bitOffset: 0,
   s7Address: 'DB1.DBD0',
   // MELSEC Defaults
+  melsecDeviceCode: 'D',
+  melsecHeadDeviceNumber: 100,
   melsecAddress: 'D100',
-  melsecDeviceCode: 0xA8,
   // IEC 61850 Defaults
   logicalDevice: 'LD0',
   logicalNode: 'MMXU1',
   functionalConstraint: 'MX',
-  dataObject: 'A',
-  dataAttribute: 'phsA.cVal.mag.f',
-  iecPath: 'LD0/MMXU1.A.phsA.cVal.mag.f'
+  dataObject: 'TotW',
+  dataAttribute: 'mag.f',
+  unit: '',
+  description: '',
+  scaling: {
+    enabled: false,
+    rawMin: 0,
+    rawMax: 100,
+    engMin: 0,
+    engMax: 100
+  }
 });
 
 const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
@@ -125,6 +147,26 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
   };
 
   const getAddressDisplay = (tag: DriverTag): string => {
+    if (tag.protocol === 'profinet' || (tag.pnSlot !== undefined && tag.protocol !== 'profibus')) {
+      const dir = tag.pnIoDirection === 'output' ? 'Q' : 'I';
+      const bit = tag.pnBitOffset !== undefined ? `.${tag.pnBitOffset}` : '';
+      return `Slot ${tag.pnSlot ?? 1}.${tag.pnSubslot ?? 1} [${dir}${tag.pnByteOffset ?? 0}${bit}]`;
+    }
+    if (tag.protocol === 'profibus' || tag.profibusNodeAddress !== undefined) {
+      const dir = tag.pnIoDirection === 'output' ? 'Q' : 'I';
+      const bit = tag.pnBitOffset !== undefined ? `.${tag.pnBitOffset}` : '';
+      return `Node ${tag.profibusNodeAddress ?? 3} Slot ${tag.pnSlot ?? 1} [${dir}${tag.pnByteOffset ?? 0}${bit}]`;
+    }
+    if (tag.protocol === 'ethernet_ip' || tag.cipTagName || tag.cipClass !== undefined) {
+      if (tag.cipTagName) return tag.cipTagName;
+      if (tag.cipClass === 0x04) {
+        return `Assem ${tag.cipInstance || 100} [B${tag.cipByteOffset || 0}.${tag.cipBitOffset || 0}]`;
+      }
+      if (tag.cipClass !== undefined) {
+        return `0x${tag.cipClass.toString(16).toUpperCase()}:${tag.cipInstance || 1}:${tag.cipAttribute || 1}`;
+      }
+      return tag.address?.toString() || '-';
+    }
     if (tag.protocol === 'iec61850' || tag.iecPath) {
       return tag.iecPath || `${tag.logicalDevice || 'LD0'}/${tag.logicalNode || 'MMXU1'}.${tag.dataObject || 'TotW'}.${tag.dataAttribute || 'mag.f'}`;
     }
@@ -366,6 +408,10 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
           className="bg-slate-900 border border-slate-700 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-violet-500"
         >
           <option value="all">All Protocols</option>
+          <option value="ethernet_ip">EtherNet/IP (Rockwell / CIP)</option>
+          <option value="s7">Siemens S7 (Snap7)</option>
+          <option value="melsec">Mitsubishi MELSEC</option>
+          <option value="iec61850">IEC 61850 (Substation)</option>
           <option value="modbus_tcp">Modbus TCP</option>
           <option value="modbus_rtu">Modbus RTU</option>
           <option value="opcua">OPC UA</option>
@@ -816,6 +862,277 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
                       placeholder="e.g. LD0/MMXU1.A.phsA.cVal.mag.f"
                       className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-emerald-500 font-mono"
                     />
+                  </div>
+                </div>
+              )}
+
+              {/* PROFINET IO Tag Settings */}
+              {editingTag.protocol === 'profinet' && (
+                <div className="bg-slate-850 border border-slate-700/80 rounded-xl p-3.5 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <div className="flex items-center space-x-2 text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                      <i className="fas fa-network-wired text-emerald-400"></i>
+                      <span>PROFINET IO Slot / Subslot Process Mapping</span>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 bg-emerald-900/60 text-emerald-300 rounded-md border border-emerald-700/50">
+                      GSDML Cyclic I/O
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-300 mb-1">Direction</label>
+                      <select
+                        value={editingTag.pnIoDirection || 'input'}
+                        onChange={e => setField('pnIoDirection', e.target.value as any)}
+                        className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-emerald-500 font-mono"
+                      >
+                        <option value="input">Input (I / Controller In)</option>
+                        <option value="output">Output (Q / Controller Out)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-300 mb-1">Slot #</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={editingTag.pnSlot ?? 1}
+                        onChange={e => setField('pnSlot', parseInt(e.target.value) || 0)}
+                        className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-emerald-500 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-300 mb-1">Subslot #</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={editingTag.pnSubslot ?? 1}
+                        onChange={e => setField('pnSubslot', parseInt(e.target.value) || 1)}
+                        className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-emerald-500 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-300 mb-1">Byte Offset</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={editingTag.pnByteOffset ?? 0}
+                        onChange={e => setField('pnByteOffset', parseInt(e.target.value) || 0)}
+                        className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-emerald-500 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 mb-1">Bit Offset (0-7 for BOOL)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={7}
+                        placeholder="Optional"
+                        value={editingTag.pnBitOffset ?? ''}
+                        onChange={e => setField('pnBitOffset', e.target.value !== '' ? parseInt(e.target.value) : undefined)}
+                        className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-emerald-500 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 mb-1">Bit Mask (Hex)</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 0x01, 0xFF"
+                        value={editingTag.pnBitMask ? `0x${editingTag.pnBitMask.toString(16).toUpperCase()}` : ''}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setField('pnBitMask', val ? parseInt(val, 16) : undefined);
+                        }}
+                        className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-emerald-500 font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* PROFIBUS DP Tag Settings */}
+              {editingTag.protocol === 'profibus' && (
+                <div className="bg-slate-850 border border-slate-700/80 rounded-xl p-3.5 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <div className="flex items-center space-x-2 text-xs font-bold text-purple-400 uppercase tracking-wider">
+                      <i className="fas fa-microchip text-purple-400"></i>
+                      <span>PROFIBUS DP Slave Node & Slot Mapping</span>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 bg-purple-900/60 text-purple-300 rounded-md border border-purple-700/50">
+                      GSD DP-V0/V1
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-300 mb-1">Slave Node Addr</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={126}
+                        value={editingTag.profibusNodeAddress ?? 3}
+                        onChange={e => setField('profibusNodeAddress', parseInt(e.target.value) || 3)}
+                        className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-purple-500 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-300 mb-1">Direction</label>
+                      <select
+                        value={editingTag.pnIoDirection || 'input'}
+                        onChange={e => setField('pnIoDirection', e.target.value as any)}
+                        className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-purple-500 font-mono"
+                      >
+                        <option value="input">Input (I / Diagnostics)</option>
+                        <option value="output">Output (Q / Control)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-300 mb-1">Slot #</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={editingTag.pnSlot ?? 1}
+                        onChange={e => setField('pnSlot', parseInt(e.target.value) || 1)}
+                        className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-purple-500 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-300 mb-1">Byte Offset</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={editingTag.pnByteOffset ?? 0}
+                        onChange={e => setField('pnByteOffset', parseInt(e.target.value) || 0)}
+                        className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-purple-500 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 mb-1">Bit Offset (0-7 for BOOL)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={7}
+                        placeholder="Optional"
+                        value={editingTag.pnBitOffset ?? ''}
+                        onChange={e => setField('pnBitOffset', e.target.value !== '' ? parseInt(e.target.value) : undefined)}
+                        className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-purple-500 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 mb-1">Bit Mask (Hex)</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 0x01, 0xFF"
+                        value={editingTag.pnBitMask ? `0x${editingTag.pnBitMask.toString(16).toUpperCase()}` : ''}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setField('pnBitMask', val ? parseInt(val, 16) : undefined);
+                        }}
+                        className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-purple-500 font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* EtherNet/IP (Rockwell / CIP) Tag Settings */}
+              {editingTag.protocol === 'ethernet_ip' && (
+                <div className="bg-slate-850 border border-slate-700/80 rounded-xl p-3.5 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <div className="flex items-center space-x-2 text-xs font-bold text-amber-400 uppercase tracking-wider">
+                      <i className="fas fa-network-wired text-amber-400"></i>
+                      <span>EtherNet/IP Symbolic Tag / CIP Address</span>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 bg-amber-900/60 text-amber-300 rounded-md border border-amber-700/50">
+                      ODVA CIP Port 44818
+                    </span>
+                  </div>
+
+                  {/* Quick CIP Presets */}
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-400 mb-1">Quick Rockwell / CIP Presets</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                      {[
+                        { label: 'Motor_Speed (Real)', tag: 'Motor_Speed', dt: 'float', name: 'Motor Velocity RPM' },
+                        { label: 'SetPoint_Temp (Real)', tag: 'Program:MainProgram.SetPoint', dt: 'float', name: 'Chamber Setpoint' },
+                        { label: 'Alarm_Array[0] (Dint)', tag: 'Alarm_Words[0]', dt: 'int32', name: 'Alarm Mask Word 0' },
+                        { label: 'Start_Cmd (Bool)', tag: 'Conveyor_Start_PB', dt: 'boolean', name: 'Start Pushbutton' },
+                        { label: 'N7:0 (MicroLogix Integer)', tag: 'N7:0', dt: 'int16', name: 'MicroLogix Data File' },
+                        { label: 'F8:0 (MicroLogix Float)', tag: 'F8:0', dt: 'float', name: 'MicroLogix Analog File' }
+                      ].map(preset => (
+                        <button
+                          key={preset.tag}
+                          type="button"
+                          onClick={() => {
+                            setField('cipTagName', preset.tag);
+                            setField('dataType', preset.dt as any);
+                            if (!editingTag.tagName) setField('tagName', preset.name);
+                          }}
+                          className="text-left px-2 py-1.5 bg-slate-900 hover:bg-amber-950/60 border border-slate-700 hover:border-amber-500/50 rounded-lg text-[11px] transition-all cursor-pointer group"
+                        >
+                          <div className="font-mono text-amber-300 group-hover:text-amber-200 truncate">{preset.tag}</div>
+                          <div className="text-[9px] text-slate-400 truncate">{preset.name}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                      CIP Symbolic Tag Name or PCCC Address *
+                    </label>
+                    <input
+                      type="text"
+                      value={editingTag.cipTagName || ''}
+                      onChange={e => setField('cipTagName', e.target.value)}
+                      placeholder='e.g. Motor_Speed, Program:Main.Temp, MyArray[2], N7:0, F8:0, B3:0/1'
+                      className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-amber-500 font-mono"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Supports Controller Scope tags, Program Scope (<code className="text-amber-300">Program:Name.Tag</code>), multidimensional arrays (<code className="text-amber-300">Tag[0,1]</code>), and legacy PCCC addresses.
+                    </p>
+                  </div>
+
+                  {/* Explicit CIP Class / Instance / Attribute (Optional) */}
+                  <div className="pt-2 border-t border-slate-800">
+                    <label className="block text-[10px] font-semibold text-slate-400 mb-1">
+                      Direct CIP Class / Instance / Attribute <span className="font-normal text-slate-500">(Optional for generic/EDS devices)</span>
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <input
+                          type="number"
+                          placeholder="Class (Hex/Dec)"
+                          value={editingTag.cipClass ?? ''}
+                          onChange={e => setField('cipClass', e.target.value ? parseInt(e.target.value, 10) : undefined)}
+                          className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-amber-500 font-mono text-[11px]"
+                        />
+                      </div>
+                      <div>
+                        <input
+                          type="number"
+                          placeholder="Instance"
+                          value={editingTag.cipInstance ?? ''}
+                          onChange={e => setField('cipInstance', e.target.value ? parseInt(e.target.value, 10) : undefined)}
+                          className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-amber-500 font-mono text-[11px]"
+                        />
+                      </div>
+                      <div>
+                        <input
+                          type="number"
+                          placeholder="Attribute"
+                          value={editingTag.cipAttribute ?? ''}
+                          onChange={e => setField('cipAttribute', e.target.value ? parseInt(e.target.value, 10) : undefined)}
+                          className="w-full bg-slate-900 border border-slate-600 text-white text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-amber-500 font-mono text-[11px]"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

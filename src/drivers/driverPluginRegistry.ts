@@ -10,6 +10,9 @@ import { DriverConnection, DriverProtocol, DriverTag } from '../types';
 import { Iec61850Driver } from './iec61850/iec61850Driver';
 import { SiemensS7Driver } from './siemens_s7/siemensS7Driver';
 import { MelsecDriver } from './mitsubishi_melsec/melsecDriver';
+import { EthernetIpDriver } from './ethernet_ip/ethernetIpDriver';
+import { ProfinetDriver } from './profinet/profinetDriver';
+import { ProfibusDriver } from './profibus/profibusDriver';
 
 export interface IDriverPlugin {
   protocol: DriverProtocol;
@@ -63,6 +66,51 @@ export class DriverPluginRegistry {
       readTag: (tag, conn) => melsecDriver.readTag(tag, conn),
       writeTag: (tag, conn, val) => melsecDriver.writeTag(tag, conn, val),
       browse: (conn) => melsecDriver.browseMelsecDevices(conn)
+    });
+
+    // 4. Ethernet/IP (CIP) Industrial Driver
+    const eipDriver = EthernetIpDriver.getInstance();
+    this.registerPlugin({
+      protocol: 'ethernet_ip',
+      testConnection: (conn) => eipDriver.testConnection(conn),
+      readTag: (tag, conn) => eipDriver.readTag(tag, conn),
+      writeTag: (tag, conn, val) => eipDriver.writeTag(tag, conn, val),
+      browse: (conn) => eipDriver.browseCipTags(conn)
+    });
+
+    // 5. PROFINET (IO) Industrial Driver
+    const pnDriver = ProfinetDriver.getInstance();
+    this.registerPlugin({
+      protocol: 'profinet',
+      testConnection: async (conn) => {
+        const res = await pnDriver.testProfinetConnection(conn);
+        return {
+          success: res.success,
+          message: res.success
+            ? `PROFINET Node "${res.stationName}" online. DeviceID: ${res.deviceId}, Serial: ${res.serialNumber || 'N/A'}`
+            : res.error || 'Connection failed'
+        };
+      },
+      readTag: async (tag, conn) => pnDriver.readTag(conn, tag, 'default').value,
+      writeTag: async (tag, conn, val) => { await pnDriver.writeTag(conn, tag, val); },
+      browse: async () => pnDriver.performDcpScan()
+    });
+
+    // 6. PROFIBUS (DP) Industrial Driver
+    const pbDriver = ProfibusDriver.getInstance();
+    this.registerPlugin({
+      protocol: 'profibus',
+      testConnection: async (conn) => {
+        const res = await pbDriver.testProfibusNode(conn);
+        return {
+          success: res.success,
+          message: res.success
+            ? `PROFIBUS Node ${res.nodeAddress} online at ${res.baudRate}. ${res.gatewayStatus}`
+            : res.error || 'Connection failed'
+        };
+      },
+      readTag: async (tag, conn) => pbDriver.readTag(conn, tag, 'default').value,
+      writeTag: async (tag, conn, val) => { await pbDriver.writeTag(conn, tag, val); }
     });
   }
 

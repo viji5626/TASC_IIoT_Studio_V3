@@ -9,6 +9,7 @@ import { isPanelTripped } from '../utils/tripHelper';
 import { getPanelTelemetryStatus } from '../utils/staleHelper';
 import { AlarmHistorianWidget } from './AlarmHistorianWidget';
 import { DynamicIndustrialSymbol } from './DynamicIndustrialSymbol';
+import { TASCGrid } from './sql';
 
 interface PanelCardProps {
   panel: Panel;
@@ -59,7 +60,7 @@ const PanelCard: React.FC<PanelCardProps> = ({
 
   // Telemetry Timeout / Disconnection Watchdog Evaluation
   const telemetryStatus = isLineGraph ? { hasData: true, isStale: false, isBad: false, isOffline: false, statusText: 'GOOD' as const } : getPanelTelemetryStatus(panel, latestValues);
-  const isOffline = telemetryStatus.isOffline;
+  const isOffline = telemetryStatus.isOffline && panel.enableStaleTimeout !== false && panel.showOfflineBadge !== false;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -733,6 +734,29 @@ const PanelCard: React.FC<PanelCardProps> = ({
         return (
           <div className="w-full h-full flex flex-col">
             <AlarmHistorianWidget panel={panel} />
+          </div>
+        );
+
+      case PanelType.TASC_GRID:
+      case 'tasc_grid' as any:
+        return (
+          <div className="w-full h-full flex flex-col overflow-hidden">
+            <TASCGrid
+              tabs={panel.sqlTabs}
+              dataSourceId={panel.sqlDataSourceId}
+              database={panel.sqlDatabase || 'DAIKIN_EMS'}
+              table={panel.sqlTableName || 'MeterName'}
+              schema={panel.sqlSchema || 'dbo'}
+              customQuery={panel.sqlCustomQuery}
+              title={panel.panelName}
+              pollIntervalMs={panel.sqlPollIntervalMs ?? 3000}
+              pageSize={panel.pageSize || 10}
+              thresholdRules={panel.sqlThresholdRules}
+              manipulatorIds={panel.sqlManipulatorIds}
+              showToolbar={true}
+              showSearch={true}
+              showExport={true}
+            />
           </div>
         );
 

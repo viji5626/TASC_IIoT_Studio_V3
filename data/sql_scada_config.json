@@ -1,0 +1,37 @@
+{
+  "dataSources": [
+    {
+      "id": "ds_1787433925015_qhxm5",
+      "name": "test",
+      "description": "",
+      "database": "Northwind",
+      "mode": "table",
+      "table": "Customers",
+      "schema": "dbo",
+      "pollIntervalMs": 3000,
+      "columns": [],
+      "thresholdRules": [],
+      "createdAt": "2026-08-22T21:25:25.015Z",
+      "updatedAt": "2026-08-22T21:25:25.015Z"
+    }
+  ],
+  "dataManipulators": [
+    {
+      "id": "dm_1787430468867_tvlms",
+      "name": "Data Manipulator 1",
+      "description": "",
+      "database": "DAIKIN_EMS",
+      "type": "procedure",
+      "procedureName": "sp_UpdateSetpoint",
+      "parameters": [
+        {
+          "name": "@id",
+          "type": "int",
+          "value": 1
+        }
+      ],
+      "createdAt": "2026-08-22T20:27:48.867Z",
+      "updatedAt": "2026-08-22T20:27:48.867Z"
+    }
+  ]
+}

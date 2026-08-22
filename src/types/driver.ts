@@ -6,6 +6,9 @@ export type DriverProtocol =
   | 'iec61850'
   | 's7'
   | 'melsec'
+  | 'ethernet_ip'
+  | 'profinet'
+  | 'profibus'
   | 'rs485'
   | 'rs232'
   | 'usb_serial'
@@ -32,6 +35,32 @@ export interface DriverConnection {
   connectionName: string;
   protocol: DriverProtocol;
   enabled: boolean;
+  // PROFINET (IO) Driver Settings
+  profinetStationName?: string;  // e.g. "et200sp-pn-io", "cognex-dm280", "kuka-krc4"
+  profinetIp?: string;           // Device IP address
+  profinetSubnet?: string;       // Subnet Mask e.g. "255.255.255.0"
+  profinetGateway?: string;      // Default Gateway e.g. "192.168.0.1"
+  profinetVendorId?: string;     // e.g. "0x002A" (Siemens), "0x011A" (Cognex)
+  profinetDeviceId?: string;     // e.g. "0x0301"
+  profinetCycleTimeMs?: number;  // Send Clock / Reduction Ratio (default: 4ms)
+  profinetSendClockMs?: number;  // Base send clock in ms (e.g. 1ms, 2ms, 4ms)
+  profinetReductionRatio?: number; // Reduction factor (1, 2, 4, 8, 16...)
+  profinetDcpScan?: boolean;     // Use DCP active scan
+  profinetSelectedDapId?: string;// Selected Head-End DAP Variant
+  gsdProfileId?: string;         // Attached GSD / GSDML Device Profile ID
+  // PROFIBUS (DP) Driver Settings
+  profibusNodeAddress?: number;  // DP Slave Station Address (0..126)
+  profibusBaudRate?: string;     // "9.6k" | "19.2k" | "93.75k" | "187.5k" | "500k" | "1.5M" | "3M" | "6M" | "12M"
+  profibusGatewayType?: 'ie_pb_link' | 'netlink' | 'serial_rs485' | 'anybus' | 'moxa';
+  profibusFdlAddress?: number;   // Master FDL Address (default: 0)
+  profibusIdentNumber?: string;  // 16-bit PNO Ident Number (e.g. "0x8054")
+  // Ethernet/IP (CIP) & Rockwell PLC Driver Settings
+  eipCpuType?: 'controllogix' | 'compactlogix' | 'micro800' | 'micrologix' | 'slc500' | 'generic_cip';
+  cipSlot?: number;             // Chassis Slot (0..17, default: 0)
+  cipRoutePath?: string;        // Connection Path e.g. "1,0" or multi-hop path
+  cipSessionTimeoutMs?: number; // Session Timeout (default: 10000ms)
+  cipUseConnectedSockets?: boolean; // Use Connected Transport or UCMM
+  edsProfileId?: string;        // Attached EDS Device Profile ID
   // Siemens S7 Driver Settings
   s7Model?: 's7_300' | 's7_400' | 's7_1200' | 's7_1500' | 's7_200' | 'logo';
   rack?: number;             // Default: 0
@@ -131,6 +160,29 @@ export interface DriverTag {
   protocol: DriverProtocol;
   sourceType: DriverTagSourceType;
   connectionId: string;
+  // PROFINET (IO) & PROFIBUS (DP) Addressing & GSD/GSDML parameters
+  pnSlot?: number;              // Slot Index (0: DAP/Head-End, 1..N: I/O Modules)
+  pnSubslot?: number;           // Subslot Index (1..N)
+  pnIoDirection?: 'input' | 'output'; // Process Input or Process Output
+  pnByteOffset?: number;        // Byte Offset within Submodule/Slot I/O buffer
+  pnBitOffset?: number;         // Bit Offset (0..7)
+  pnBitLength?: number;         // Length in bits (1..32)
+  pnBitMask?: number;           // Bitmask
+  pnRecordIndex?: number;       // Acyclic Data Record Index (e.g. 0xAFF0 for I&M0, 0x0036 for Diagnostics)
+  pnStringTrimLength?: boolean; // Automatic dynamic string trimming via length header
+  pnLengthHeaderOffset?: number;// Offset of length header word
+  profibusNodeAddress?: number; // Target PROFIBUS Node Address (0..126)
+  // Ethernet/IP (CIP) Addressing & EDS parameters
+  cipTagName?: string;          // e.g. "Motor_Speed", "Program:MainProgram.Tank_Level", "N7:0"
+  cipClass?: number;            // e.g. 0x04 (Assembly Object), 0x2A (AC Drive Object)
+  cipInstance?: number;         // e.g. 100 (Input Assembly), 150 (Output Assembly)
+  cipAttribute?: number;        // e.g. 3 (Data Attribute)
+  cipByteOffset?: number;       // Offset in bytes within assembly buffer
+  cipBitOffset?: number;        // Sub-byte bit offset (0..7)
+  cipBitLength?: number;        // Length in bits for bitfield parameter (1..32)
+  cipBitMask?: number;          // Bitmask for read/write masking
+  cipDataType?: string;         // "BOOL", "SINT", "INT", "DINT", "LINT", "REAL", "STRING", "UDT"
+  edsParamId?: number;          // Associated EDS Parameter ID
   // Siemens S7 Addressing
   s7Area?: 'DB' | 'I' | 'Q' | 'M' | 'T' | 'C';
   dbNumber?: number;           // e.g. 1 for DB1

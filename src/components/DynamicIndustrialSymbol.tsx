@@ -4,6 +4,7 @@ import { getAnimationSpeedClass } from '../utils/iconAnimator';
 import { isPanelTripped } from '../utils/tripHelper';
 import { getPanelTelemetryStatus } from '../utils/staleHelper';
 import { getJsonValue } from '../utils/mqttHelper';
+import { symbolRegistry } from '../services/symbolRegistryService';
 
 interface DynamicIndustrialSymbolProps {
   symbolId?: string;
@@ -14,7 +15,7 @@ interface DynamicIndustrialSymbolProps {
   activeSubPartId?: string;
 }
 
-export const DynamicIndustrialSymbol: React.FC<DynamicIndustrialSymbolProps> = ({
+const DynamicIndustrialSymbolComponent: React.FC<DynamicIndustrialSymbolProps> = ({
   symbolId,
   panel,
   liveValue,
@@ -866,12 +867,15 @@ export const DynamicIndustrialSymbol: React.FC<DynamicIndustrialSymbolProps> = (
   }
 
 
-  // Fallback default SVG rendering for other symbols
-  if (panel.imageUrl && panel.imageUrl.startsWith('data:image/svg')) {
+  // Standard SVG rendering from staticText, symbolRegistry, or data URI
+  const registeredSvg = (panel.symbolId || symbolId) ? symbolRegistry.getSymbol(panel.symbolId || symbolId)?.svgContent : undefined;
+  const svgMarkup = panel.staticText || registeredSvg || (panel.imageUrl?.startsWith('data:image/svg') ? decodeURIComponent(panel.imageUrl.replace(/^data:image\/svg\+xml;utf8,/, '')) : undefined);
+
+  if (svgMarkup) {
     return (
       <div 
         className={className}
-        dangerouslySetInnerHTML={{ __html: panel.staticText || decodeURIComponent(panel.imageUrl.replace(/^data:image\/svg\+xml;utf8,/, '')) }}
+        dangerouslySetInnerHTML={{ __html: svgMarkup }}
       />
     );
   }
@@ -884,3 +888,6 @@ export const DynamicIndustrialSymbol: React.FC<DynamicIndustrialSymbolProps> = (
     />
   );
 };
+
+export const DynamicIndustrialSymbol = React.memo(DynamicIndustrialSymbolComponent);
+export default DynamicIndustrialSymbol;

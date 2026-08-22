@@ -272,12 +272,65 @@ export const HmiCanvasDynamicsInspector: React.FC<HmiCanvasDynamicsInspectorProp
         {/* Assigned Dynamics List (Scrollable Stack) */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1.5">
           {dynamicsList.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center text-slate-500 py-6 px-4 space-y-2">
+            <div className="flex flex-col items-center justify-center h-full text-center text-slate-500 py-4 px-3 space-y-2.5">
               <i className="fas fa-layer-group text-2xl opacity-30 text-slate-400"></i>
-              <p className="text-[11px] font-medium text-slate-400">No dynamic properties assigned</p>
-              <p className="text-[9px] text-slate-500 max-w-[200px]">
-                Click <strong className="text-amber-300">+ Add Dynamic</strong> to bind Hide/Show, 2-State digital colors, rotation, level fills, or motion.
-              </p>
+              <div>
+                <p className="text-[11px] font-bold text-slate-300">No Dynamic Rules Assigned</p>
+                <p className="text-[9px] text-slate-500 max-w-[200px] mt-0.5">
+                  Pick a 1-click preset below or click <strong className="text-amber-300">+ Add Dynamic</strong>.
+                </p>
+              </div>
+
+              {/* 1-Click Dynamic Presets */}
+              <div className="grid grid-cols-2 gap-1.5 w-full pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleCreateRule('rotation')}
+                  className="p-2 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-sky-500/60 text-left transition-all group flex flex-col gap-1 cursor-pointer"
+                >
+                  <div className="flex items-center gap-1.5 text-sky-400">
+                    <i className="fas fa-rotate text-xs"></i>
+                    <span className="font-bold text-[10px] text-slate-200 group-hover:text-sky-300">Spin when Run</span>
+                  </div>
+                  <span className="text-[8px] text-slate-500 line-clamp-1">Continuous spin on 1/0</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleCreateRule('visibility_blink')}
+                  className="p-2 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-rose-500/60 text-left transition-all group flex flex-col gap-1 cursor-pointer"
+                >
+                  <div className="flex items-center gap-1.5 text-rose-400">
+                    <i className="fas fa-triangle-exclamation text-xs"></i>
+                    <span className="font-bold text-[10px] text-slate-200 group-hover:text-rose-300">Alarm Blink</span>
+                  </div>
+                  <span className="text-[8px] text-slate-500 line-clamp-1">Flashing strobe on alarm</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleCreateRule('level_fill')}
+                  className="p-2 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-emerald-500/60 text-left transition-all group flex flex-col gap-1 cursor-pointer"
+                >
+                  <div className="flex items-center gap-1.5 text-emerald-400">
+                    <i className="fas fa-water text-xs"></i>
+                    <span className="font-bold text-[10px] text-slate-200 group-hover:text-emerald-300">Fluid Level</span>
+                  </div>
+                  <span className="text-[8px] text-slate-500 line-clamp-1">0-100% tank liquid fill</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleCreateRule('color_shift')}
+                  className="p-2 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-amber-500/60 text-left transition-all group flex flex-col gap-1 cursor-pointer"
+                >
+                  <div className="flex items-center gap-1.5 text-amber-400">
+                    <i className="fas fa-palette text-xs"></i>
+                    <span className="font-bold text-[10px] text-slate-200 group-hover:text-amber-300">Color Shift</span>
+                  </div>
+                  <span className="text-[8px] text-slate-500 line-clamp-1">2-state Green/Red</span>
+                </button>
+              </div>
             </div>
           ) : (
             dynamicsList.map((rule, idx) => {

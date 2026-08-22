@@ -20,6 +20,12 @@ import jsmodbus from 'jsmodbus';
 import { Iec61850Driver } from './src/drivers/iec61850/iec61850Driver';
 import { SiemensS7Driver } from './src/drivers/siemens_s7/siemensS7Driver';
 import { MelsecDriver } from './src/drivers/mitsubishi_melsec/melsecDriver';
+import { EthernetIpDriver } from './src/drivers/ethernet_ip/ethernetIpDriver';
+import { EdsParser } from './src/drivers/ethernet_ip/edsParser';
+import { ProfinetDriver } from './src/drivers/profinet/profinetDriver';
+import { ProfibusDriver } from './src/drivers/profibus/profibusDriver';
+import { gsdCatalogService } from './src/drivers/gsd/gsdCatalogService';
+import { scadaSqlRouter } from './src/routes/scadaSqlRoutes';
 
 const PORT = 3000;
 
@@ -114,6 +120,9 @@ async function startServer() {
       timestamp: new Date().toISOString()
     });
   });
+
+  // ─── SCADA SQL Database Server Router (Isolated Data Source & Manipulator) ─────
+  app.use('/api/scada-sql', scadaSqlRouter);
 
   // ─── AI Endpoint Transparent Proxy (CORS / SSE Streaming Passthrough) ─────────
   app.all('/api/ai/proxy', async (req, res) => {
@@ -589,6 +598,80 @@ async function startServer() {
       res.json({ success: true, nodes });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message || 'MELSEC browse failed' });
+    }
+  });
+
+  // ─── Ethernet/IP (CIP) Test, Browse & EDS Parsing Endpoints ─────────────────
+  app.post('/api/ethernetip/test', async (req, res) => {
+    try {
+      const conn = req.body;
+      const result = await EthernetIpDriver.getInstance().testConnection(conn);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message || 'EtherNet/IP connection test failed' });
+    }
+  });
+
+  app.post('/api/ethernetip/browse', async (req, res) => {
+    try {
+      const conn = req.body;
+      const nodes = await EthernetIpDriver.getInstance().browseCipTags(conn);
+      res.json({ success: true, nodes });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'EtherNet/IP browse failed' });
+    }
+  });
+
+  app.post('/api/ethernetip/parse-eds', (req, res) => {
+    try {
+      const { content, fileName } = req.body;
+      if (!content || typeof content !== 'string') {
+        return res.status(400).json({ success: false, error: 'Missing or invalid EDS file content' });
+      }
+      const profile = EdsParser.parse(content, fileName);
+      res.json({ success: true, profile });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'Failed to parse EDS file' });
+    }
+  });
+
+  app.post('/api/profinet/dcp-scan', async (req, res) => {
+    try {
+      const devices = await ProfinetDriver.getInstance().performDcpScan();
+      res.json({ success: true, devices });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'DCP scan failed' });
+    }
+  });
+
+  app.post('/api/profinet/test', async (req, res) => {
+    try {
+      const result = await ProfinetDriver.getInstance().testProfinetConnection(req.body);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'PROFINET test failed' });
+    }
+  });
+
+  app.post('/api/profibus/test', async (req, res) => {
+    try {
+      const result = await ProfibusDriver.getInstance().testProfibusNode(req.body);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'PROFIBUS test failed' });
+    }
+  });
+
+  app.post('/api/gsd/parse', (req, res) => {
+    try {
+      const { content, fileName } = req.body;
+      if (!content || typeof content !== 'string') {
+        return res.status(400).json({ success: false, error: 'Missing GSD/GSDML file content' });
+      }
+      const profile = gsdCatalogService.parseAndRegisterGsdText(content, fileName || 'device.xml');
+      res.json({ success: true, profile });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'Failed to parse GSD/GSDML file' });
     }
   });
 
@@ -1399,7 +1482,7 @@ async function writeOpcUaTag(tag: any, connection: any, value: any): Promise<voi
 
               try {
                 let val: any = null;
-                let quality: 'good' | 'bad' = 'good';
+                let quality: 'good' | 'bad' | 'uncertain' = 'good';
                 let qualityText: string | undefined;
                 const now = new Date().toISOString();
 
@@ -1559,6 +1642,95 @@ async function writeOpcUaTag(tag: any, connection: any, value: any): Promise<voi
                       });
                     }
                   }
+                } else if (protocol === 'ethernet_ip') {
+                  try {
+                    val = await EthernetIpDriver.getInstance().readTag(sub.tag, sub.connection);
+                    quality = 'good';
+                    qualityText = 'Good';
+                    subConsecutiveFailures = 0;
+                    subLastGoodValue = val;
+                    subLastGoodTimestamp = now;
+                    if (connectionId) {
+                      updateConnectionHealth(connectionId, {
+                        connectionState: 'connected',
+                        consecutiveFailureCount: 0,
+                        lastError: undefined
+                      });
+                    }
+                  } catch (err: any) {
+                    subConsecutiveFailures++;
+                    quality = 'bad';
+                    val = null;
+                    qualityText = 'EtherNet/IP read error';
+                    if (subConsecutiveFailures <= 3 || subConsecutiveFailures % 20 === 0) {
+                      console.warn(`[DriverBridge] EtherNet/IP read failed for tag ${sub.tag?.tagName || sub.tagId}:`, err.message);
+                    }
+                    if (connectionId) {
+                      updateConnectionHealth(connectionId, {
+                        connectionState: 'disconnected',
+                        consecutiveFailureCount: subConsecutiveFailures,
+                        lastError: err.message
+                      });
+                    }
+                  }
+                } else if (protocol === 'profinet') {
+                  try {
+                    const tagVal = ProfinetDriver.getInstance().readTag(sub.connection, sub.tag, sub.panelId);
+                    val = tagVal.value;
+                    quality = (tagVal.quality === 'good' || tagVal.quality === 'bad' || tagVal.quality === 'uncertain') ? tagVal.quality : 'uncertain';
+                    qualityText = 'Good';
+                    subConsecutiveFailures = 0;
+                    subLastGoodValue = val;
+                    subLastGoodTimestamp = now;
+                    if (connectionId) {
+                      updateConnectionHealth(connectionId, {
+                        connectionState: 'connected',
+                        consecutiveFailureCount: 0,
+                        lastError: undefined
+                      });
+                    }
+                  } catch (err: any) {
+                    subConsecutiveFailures++;
+                    quality = 'bad';
+                    val = null;
+                    qualityText = 'PROFINET read error';
+                    if (connectionId) {
+                      updateConnectionHealth(connectionId, {
+                        connectionState: 'disconnected',
+                        consecutiveFailureCount: subConsecutiveFailures,
+                        lastError: err.message
+                      });
+                    }
+                  }
+                } else if (protocol === 'profibus') {
+                  try {
+                    const tagVal = ProfibusDriver.getInstance().readTag(sub.connection, sub.tag, sub.panelId);
+                    val = tagVal.value;
+                    quality = (tagVal.quality === 'good' || tagVal.quality === 'bad' || tagVal.quality === 'uncertain') ? tagVal.quality : 'uncertain';
+                    qualityText = 'Good';
+                    subConsecutiveFailures = 0;
+                    subLastGoodValue = val;
+                    subLastGoodTimestamp = now;
+                    if (connectionId) {
+                      updateConnectionHealth(connectionId, {
+                        connectionState: 'connected',
+                        consecutiveFailureCount: 0,
+                        lastError: undefined
+                      });
+                    }
+                  } catch (err: any) {
+                    subConsecutiveFailures++;
+                    quality = 'bad';
+                    val = null;
+                    qualityText = 'PROFIBUS read error';
+                    if (connectionId) {
+                      updateConnectionHealth(connectionId, {
+                        connectionState: 'disconnected',
+                        consecutiveFailureCount: subConsecutiveFailures,
+                        lastError: err.message
+                      });
+                    }
+                  }
                 } else {
                   quality = 'bad';
                   val = null;
@@ -1616,6 +1788,18 @@ async function writeOpcUaTag(tag: any, connection: any, value: any): Promise<voi
             MelsecDriver.getInstance().writeTag(msg.tag, msg.connection, msg.value)
               .then(() => console.log(`[DriverBridge] Mitsubishi MELSEC write success: address=${msg.tag.melsecAddress || msg.tag.address}, value=${msg.value}`))
               .catch((err: any) => console.error(`[DriverBridge] Mitsubishi MELSEC write failed:`, err.message));
+          } else if (msg.tag && msg.connection && protocol === 'ethernet_ip') {
+            EthernetIpDriver.getInstance().writeTag(msg.tag, msg.connection, msg.value)
+              .then(() => console.log(`[DriverBridge] EtherNet/IP write success: tag=${msg.tag.cipTagName || msg.tag.tagName}, value=${msg.value}`))
+              .catch((err: any) => console.error(`[DriverBridge] EtherNet/IP write failed:`, err.message));
+          } else if (msg.tag && msg.connection && protocol === 'profinet') {
+            ProfinetDriver.getInstance().writeTag(msg.connection, msg.tag, msg.value)
+              .then(() => console.log(`[DriverBridge] PROFINET write success: tag=${msg.tag.tagName}, value=${msg.value}`))
+              .catch((err: any) => console.error(`[DriverBridge] PROFINET write failed:`, err.message));
+          } else if (msg.tag && msg.connection && protocol === 'profibus') {
+            ProfibusDriver.getInstance().writeTag(msg.connection, msg.tag, msg.value)
+              .then(() => console.log(`[DriverBridge] PROFIBUS write success: tag=${msg.tag.tagName}, value=${msg.value}`))
+              .catch((err: any) => console.error(`[DriverBridge] PROFIBUS write failed:`, err.message));
           }
         }
 

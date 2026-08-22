@@ -201,4 +201,4 @@ const Gauge: React.FC<GaugeProps> = ({
   );
 };
 
-export default Gauge;
+export default React.memo(Gauge);

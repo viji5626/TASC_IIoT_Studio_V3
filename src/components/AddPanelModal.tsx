@@ -32,6 +32,7 @@ const AddPanelModal: React.FC<AddPanelModalProps> = ({ isOpen, onClose, onSelect
     { id: PanelType.SCREEN_JUMP, label: 'Screen Jump Button', desc: 'HMI button to navigate between different screen pages' },
     { id: PanelType.IMAGE, label: 'Media / Animated Graphic', desc: 'Import JPG, transparent PNG, animated GIF, or SVG' },
     { id: PanelType.ALARM_LOG, label: 'Alarm Historian Log', desc: 'Live & historical industrial alarm log viewer' },
+    { id: PanelType.TASC_GRID, label: 'TASCGrid Table', desc: 'Live SQL Server Data Source grid & Data Manipulator' },
   ];
 
   return (

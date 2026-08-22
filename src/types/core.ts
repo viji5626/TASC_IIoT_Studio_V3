@@ -1,6 +1,7 @@
 import { TrendPen, ArchiveClusterDuration, HistorianConfig, HistorianTag } from './historian';
 import { DynamicBehaviorRule, SvgSubPartConfig } from './dynamics';
 import { DriverConnection, DriverTag } from './driver';
+import type { Scada3dScene } from '../3d/types';
 
 export enum PanelType {
   GAUGE = 'gauge',
@@ -25,12 +26,15 @@ export enum PanelType {
   CLOCK = 'clock',
   PIPE = 'pipe',
   SHAPE = 'shape',
-  ALARM_LOG = 'alarm_log'
+  ALARM_LOG = 'alarm_log',
+  CANVAS_3D = 'canvas_3d',
+  TASC_GRID = 'tasc_grid'
 }
 
 export enum AppView {
   DASHBOARD = 'dashboard',
   WEB_HMI = 'web_hmi',
+  SCADA_3D = 'scada_3d',
   CONNECTIONS = 'connections',
   ADD_CONNECTION = 'add_connection',
   LAYOUT_EDITOR = 'layout_editor',
@@ -46,7 +50,8 @@ export enum AppView {
   DRIVER_DIAGNOSTICS = 'driver_diagnostics',
   AI_ASSISTANT = 'ai_assistant',
   USER_MANUAL = 'user_manual',
-  REPORTING = 'reporting'
+  REPORTING = 'reporting',
+  SQL_STUDIO = 'sql_studio'
 }
 
 export interface MqttConnection {
@@ -231,6 +236,25 @@ export interface Panel {
   pageSize?: number;
   maxDisplayRows?: number;
 
+  // --- 3D Canvas Viewport (CANVAS_3D panel type) ---
+  canvas3dAssemblyId?: string;           // ID reference into Project Library
+  canvas3dCameraPreset?: string;         // 'isometric' | 'top' | 'front' etc.
+  canvas3dBgAlpha?: number;              // 0 = fully transparent (default for runtime)
+  canvas3dShowGrid?: boolean;            // Editor only; hidden in runtime automatically
+  canvas3dShowAxes?: boolean;            // Editor only; hidden in runtime automatically
+
+  // --- SQL Server & TASCGrid Properties (TASC_GRID panel type) ---
+  sqlTabs?: any[];                       // Multi-tab data source configurations
+  sqlDataSourceId?: string;              // Bound SQL Data Source ID
+  sqlDatabase?: string;                  // e.g. 'DAIKIN_EMS'
+  sqlTableName?: string;                 // e.g. 'MeterName'
+  sqlSchema?: string;                    // e.g. 'dbo'
+  sqlCustomQuery?: string;               // Custom SQL SELECT query
+  sqlPollIntervalMs?: number;            // Polling interval in ms (default 3000)
+  sqlThresholdRules?: any[];             // Column alarm threshold highlights
+  sqlColumns?: any[];                    // Visible columns config
+  sqlManipulatorIds?: string[];          // Bound action manipulators
+
   // Driver Tag Source Mode (additive — default 'mqtt' when absent)
   dataSourceMode?: 'mqtt' | 'driver';
   driverTagId?: string;
@@ -348,4 +372,7 @@ export interface AppState {
   // Industrial Driver Support (additive)
   driverConnections?: DriverConnection[];
   driverTags?: DriverTag[];
+
+  // 3D SCADA Visualization Scenes (additive)
+  scenes3d?: Scada3dScene[];
 }

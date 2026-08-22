@@ -156,6 +156,66 @@ export function scanAppTags(appState: AppState): TagSummary {
     }
   });
 
+  // 4. Process Driver Tags from appState.driverTags (Modbus, OPC UA, S7, MELSEC, IEC 61850, etc.)
+  const driverTagsList = appState.driverTags || [];
+  driverTagsList.forEach(dt => {
+    // Determine which widgets are linked to this driver tag
+    const linked = (appState.panels || []).filter(
+      p => p.driverTagId === dt.tagId || p.driverWriteTagId === dt.tagId || (p.pens && p.pens.some(pen => pen.driverTagId === dt.tagId))
+    ).map(p => ({
+      panelId: p.panelId,
+      panelName: p.panelName || 'Widget',
+      dashboardName: dashMap.get(p.dashboardId) || 'Dashboard',
+      field: (p.driverWriteTagId === dt.tagId ? 'publishPattern' : 'jsonPath') as 'jsonPath' | 'publishPattern'
+    }));
+
+    const uniqueDashboards = new Set(linked.map(w => w.dashboardName)).size;
+    const isWriteOnly = dt.accessType === 'write';
+    const isReadWrite = dt.accessType === 'read-write' || !dt.accessType;
+
+    // Add as read tag if applicable
+    if (!isWriteOnly) {
+      const readKey = `read:${dt.tagName}`;
+      if (!processedKeys.has(readKey)) {
+        processedKeys.add(readKey);
+        finalTagsList.push({
+          tagId: dt.tagId,
+          tagName: dt.tagName,
+          tagType: 'read',
+          sourceType: 'imported',
+          parsingDefinition: dt.tagName,
+          description: dt.description || `${dt.protocol.toUpperCase()} Driver Tag (${dt.dataType})`,
+          category: dt.category || `${dt.protocol.toUpperCase()} Drivers`,
+          usageCount: linked.length,
+          widgetsCount: linked.length,
+          dashboardsCount: uniqueDashboards,
+          linkedWidgets: linked
+        });
+      }
+    }
+
+    // Add as write tag if applicable
+    if (isWriteOnly || isReadWrite) {
+      const writeKey = `write:${dt.tagName}`;
+      if (!processedKeys.has(writeKey)) {
+        processedKeys.add(writeKey);
+        finalTagsList.push({
+          tagId: `${dt.tagId}_write`,
+          tagName: dt.tagName,
+          tagType: 'write',
+          sourceType: 'imported',
+          parsingDefinition: dt.tagName,
+          description: dt.description || `${dt.protocol.toUpperCase()} Command Output Tag (${dt.dataType})`,
+          category: dt.category || `${dt.protocol.toUpperCase()} Drivers`,
+          usageCount: linked.length,
+          widgetsCount: linked.length,
+          dashboardsCount: uniqueDashboards,
+          linkedWidgets: linked
+        });
+      }
+    }
+  });
+
   // Summary counts
   const totalReadTags = finalTagsList.filter(t => t.tagType === 'read').length;
   const totalWriteTags = finalTagsList.filter(t => t.tagType === 'write').length;
@@ -177,9 +237,10 @@ export function scanAppTags(appState: AppState): TagSummary {
  */
 export function getTagSuggestions(
   appState: AppState,
-  tagType: TagType
+  tagType?: TagType
 ): TagRegistryEntry[] {
   const summary = scanAppTags(appState);
+  if (!tagType) return summary.tags;
   return summary.tags.filter(t => t.tagType === tagType);
 }
 

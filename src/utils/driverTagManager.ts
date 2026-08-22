@@ -78,6 +78,36 @@ export function validateDriverTag(tag: Partial<DriverTag>): ValidationResult {
     }
   }
 
+  // EtherNet/IP (CIP / Rockwell)
+  if (tag.protocol === 'ethernet_ip') {
+    if (!tag.cipTagName && tag.cipClass === undefined && tag.address === undefined) {
+      errors.push('EtherNet/IP tag requires a Symbolic Tag Name (e.g. "Motor_Speed", "N7:0") or direct CIP Class/Instance.');
+    }
+  }
+
+  // PROFINET IO
+  if (tag.protocol === 'profinet') {
+    if (tag.pnSlot === undefined || tag.pnSlot < 0) {
+      errors.push('PROFINET slot number is required (0 for Head module, >=1 for I/O modules).');
+    }
+    if (tag.pnByteOffset === undefined || tag.pnByteOffset < 0) {
+      errors.push('PROFINET byte offset within slot is required.');
+    }
+  }
+
+  // PROFIBUS DP
+  if (tag.protocol === 'profibus') {
+    if (tag.profibusNodeAddress === undefined || tag.profibusNodeAddress < 1 || tag.profibusNodeAddress > 126) {
+      errors.push('PROFIBUS slave node address must be between 1 and 126.');
+    }
+    if (tag.pnSlot === undefined || tag.pnSlot < 1) {
+      errors.push('PROFIBUS slot number is required (>=1).');
+    }
+    if (tag.pnByteOffset === undefined || tag.pnByteOffset < 0) {
+      errors.push('PROFIBUS byte offset within slot is required.');
+    }
+  }
+
   return { valid: errors.length === 0, errors, warnings };
 }
 
@@ -87,6 +117,10 @@ export function exportDriverTagsCsv(tags: DriverTag[]): string {
   const headers = [
     'tagId', 'tagName', 'protocol', 'connectionId', 'accessType', 'dataType',
     'pollRate', 'address', 'registerType', 'nodeId', 'browsePath',
+    'cipTagName', 'cipClass', 'cipInstance', 'cipAttribute', 'cipByteOffset', 'cipBitOffset',
+    'pnSlot', 'pnSubslot', 'pnIoDirection', 'pnByteOffset', 'pnBitOffset',
+    'profibusNodeAddress',
+    's7Address', 'melsecAddress', 'iecPath',
     'unit', 'description', 'category', 'enabled'
   ];
 
@@ -102,6 +136,21 @@ export function exportDriverTagsCsv(tags: DriverTag[]): string {
     t.registerType ?? '',
     t.nodeId ?? '',
     t.browsePath ?? '',
+    t.cipTagName ?? '',
+    t.cipClass ?? '',
+    t.cipInstance ?? '',
+    t.cipAttribute ?? '',
+    t.cipByteOffset ?? '',
+    t.cipBitOffset ?? '',
+    t.pnSlot ?? '',
+    t.pnSubslot ?? '',
+    t.pnIoDirection ?? '',
+    t.pnByteOffset ?? '',
+    t.pnBitOffset ?? '',
+    t.profibusNodeAddress ?? '',
+    t.s7Address ?? '',
+    t.melsecAddress ?? '',
+    t.iecPath ?? '',
     t.unit ?? '',
     t.description ?? '',
     t.category ?? '',
@@ -149,6 +198,21 @@ export function parseDriverTagsCsv(csv: string): ImportResult {
       registerType: (row.registerType as ModbusRegisterType) || undefined,
       nodeId: row.nodeId || undefined,
       browsePath: row.browsePath || undefined,
+      cipTagName: row.cipTagName || undefined,
+      cipClass: row.cipClass ? parseInt(row.cipClass) : undefined,
+      cipInstance: row.cipInstance ? parseInt(row.cipInstance) : undefined,
+      cipAttribute: row.cipAttribute ? parseInt(row.cipAttribute) : undefined,
+      cipByteOffset: row.cipByteOffset ? parseInt(row.cipByteOffset) : undefined,
+      cipBitOffset: row.cipBitOffset ? parseInt(row.cipBitOffset) : undefined,
+      pnSlot: row.pnSlot !== '' && row.pnSlot !== undefined ? parseInt(row.pnSlot) : (row.pbSlot !== '' && row.pbSlot !== undefined ? parseInt(row.pbSlot) : undefined),
+      pnSubslot: row.pnSubslot !== '' && row.pnSubslot !== undefined ? parseInt(row.pnSubslot) : undefined,
+      pnIoDirection: ((row.pnIoDirection || row.pnDirection || row.pbDirection) as 'input' | 'output') || undefined,
+      pnByteOffset: row.pnByteOffset !== '' && row.pnByteOffset !== undefined ? parseInt(row.pnByteOffset) : (row.pbByteOffset !== '' && row.pbByteOffset !== undefined ? parseInt(row.pbByteOffset) : undefined),
+      pnBitOffset: row.pnBitOffset !== '' && row.pnBitOffset !== undefined ? parseInt(row.pnBitOffset) : (row.pbBitOffset !== '' && row.pbBitOffset !== undefined ? parseInt(row.pbBitOffset) : undefined),
+      profibusNodeAddress: row.profibusNodeAddress !== '' && row.profibusNodeAddress !== undefined ? parseInt(row.profibusNodeAddress) : (row.pbNodeAddress !== '' && row.pbNodeAddress !== undefined ? parseInt(row.pbNodeAddress) : undefined),
+      s7Address: row.s7Address || undefined,
+      melsecAddress: row.melsecAddress || undefined,
+      iecPath: row.iecPath || undefined,
       unit: row.unit || undefined,
       description: row.description || undefined,
       category: row.category || undefined,
