@@ -83,7 +83,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
       onClose();
       return;
     } else if (item.id === 'about') {
-      alert('TASC IIoT Studio\nA modern, real-time Bento Grid dashboard for monitoring and controlling IIoT hardware devices via MQTT WebSockets.');
+      alert('TASC IIoT Studio\nA modern, real-time Industrial Web HMI & 3D SCADA Studio for monitoring and controlling IIoT hardware devices via MQTT WebSockets.');
       onClose();
     } else if (item.id === 'quick_tour') {
       onClose();

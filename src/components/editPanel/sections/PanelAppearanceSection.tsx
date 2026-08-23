@@ -101,7 +101,7 @@ export const PanelAppearanceSection: React.FC<PanelAppearanceSectionProps> = ({
       <div className="space-y-3 pt-4 border-t border-[#262626]">
         <label className="text-xs text-amber-500 font-semibold flex items-center space-x-1.5">
           <i className="fas fa-expand text-xs"></i>
-          <span>Card Layout & Size (Bento Grid)</span>
+          <span>Element Dimensions & Size</span>
         </label>
         <div className="grid grid-cols-2 gap-4">
           <div>

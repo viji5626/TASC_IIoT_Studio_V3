@@ -72,7 +72,7 @@ export const UserManualView: React.FC<UserManualViewProps> = ({
                   <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl">
                     <span className="inline-block w-5 h-5 rounded-full bg-emerald-500 text-slate-950 font-bold mb-1">❹</span>
                     <div className="font-bold text-white">HMI Visualization</div>
-                    <div className="text-[10px] text-slate-400 mt-1">Bento Grid, SCADA Canvas, AI Copilot</div>
+                    <div className="text-[10px] text-slate-400 mt-1">Web HMI Canvas, 3D SCADA, AI Copilot</div>
                   </div>
                 </div>
               </div>
@@ -98,32 +98,32 @@ export const UserManualView: React.FC<UserManualViewProps> = ({
       category: 'HMI & Design',
       icon: 'fa-microchip',
       readTime: '6 min',
-      summary: 'Comprehensive guide to building industrial screens, modular Bento Grid widgets, freeform Web HMI canvases, animated SVG symbols, and multi-screen navigation.',
+      summary: 'Comprehensive guide to building industrial screens, freeform Web HMI canvases, animated SVG symbols, 3D SCADA Studio, and multi-screen navigation.',
       sections: [
         {
-          title: '2.1 Bento Grid vs Absolute SCADA Canvas',
+          title: '2.1 Web HMI Canvas & Visual Architecture',
           content: (
             <div className="space-y-3 text-xs leading-relaxed text-slate-300">
               <p>
-                TASC Studio features two complementary visualization paradigms to suit every operational scenario:
+                TASC Studio delivers high-performance 2D and 3D visualization tailored for real-time automation:
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
                   <div className="font-bold text-white flex items-center space-x-1.5">
-                    <i className="fas fa-table-cells-large text-sky-400"></i>
-                    <span>1. Modular Bento Grid</span>
+                    <i className="fas fa-draw-polygon text-emerald-400"></i>
+                    <span>1. Freeform SCADA Canvas</span>
                   </div>
                   <p className="text-[11px] text-slate-400">
-                    Auto-arranging card layout optimized for clean telemetry overviews, multi-variable dashboards, responsive tablet scaling, and quick drag-and-drop sizing.
+                    Pixel-precise engineering canvas allowing arbitrary widget placement, animated fluid pipes, custom factory floorplans, and industrial symbol graphics.
                   </p>
                 </div>
                 <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
                   <div className="font-bold text-white flex items-center space-x-1.5">
-                    <i className="fas fa-draw-polygon text-emerald-400"></i>
-                    <span>2. Freeform SCADA Canvas</span>
+                    <i className="fas fa-cube text-indigo-400"></i>
+                    <span>2. 3D SCADA Studio</span>
                   </div>
                   <p className="text-[11px] text-slate-400">
-                    Pixel-precise engineering canvas allowing arbitrary widget placement, animated fluid pipes, custom factory floorplans, and industrial symbol graphics.
+                    Full 3D industrial scene editor with Three.js rendering, procedural piping assemblies, dynamic asset generation, and real-time tag telemetry binding.
                   </p>
                 </div>
               </div>

@@ -13,7 +13,7 @@ export interface ClientPackage {
   generatedAt: string;
   expiresAt?: string;
   clearPassword?: string;
-  preferredWorkstationMode?: 'hmi' | 'grid';
+  preferredWorkstationMode?: 'hmi';
   connections: MqttConnection[];
   dashboards: Dashboard[];
   panels: Panel[];
@@ -79,7 +79,7 @@ export async function generateClientPackage(
   clientName: string,
   notes?: string,
   expiresAt?: string,
-  preferredWorkstationMode?: 'hmi' | 'grid',
+  preferredWorkstationMode?: 'hmi',
   clearPassword?: string
 ): Promise<ClientPackage> {
   const generatedAt = new Date().toISOString();
@@ -94,7 +94,7 @@ export async function generateClientPackage(
     generatedAt,
     expiresAt: expiresAt || '',
     clearPassword: clearPassword || '',
-    preferredWorkstationMode: preferredWorkstationMode || 'grid',
+    preferredWorkstationMode: preferredWorkstationMode || 'hmi',
     connections: data.connections,
     dashboards: data.dashboards,
     panels: data.panels,
@@ -115,7 +115,7 @@ export async function verifyClientPackage(pkg: any): Promise<{
   generatedAt?: string;
   expiresAt?: string;
   clearPassword?: string;
-  preferredWorkstationMode?: 'hmi' | 'grid';
+  preferredWorkstationMode?: 'hmi';
 }> {
   if (!pkg || typeof pkg !== 'object') {
     return { isValid: false, error: 'Invalid JSON file structure.' };
@@ -171,7 +171,7 @@ export async function verifyClientPackage(pkg: any): Promise<{
       isValid: true,
       isSignedPackage: false,
       clientName: pkg.clientName || 'Imported Config',
-      preferredWorkstationMode: pkg.preferredWorkstationMode || 'grid',
+      preferredWorkstationMode: pkg.preferredWorkstationMode || 'hmi',
       packageData: {
         connections: pkg.connections,
         dashboards: pkg.dashboards,

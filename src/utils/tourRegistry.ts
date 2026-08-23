@@ -161,15 +161,15 @@ export const ALL_SUBMODULE_TOURS: Record<string, CoachMarkStep[]> = {
       actionLabel: 'Read Manual'
     },
     {
-      id: 'view_switcher',
-      targetSelector: '[data-tour="view-toggle"]',
-      title: 'Bento Grid & SCADA Canvas Switcher',
+      id: 'hmi_screen_nav',
+      targetSelector: '[data-tour="screen-selector"]',
+      title: 'Web HMI Canvas & Screen Navigator',
       category: 'HMI Visualization',
       badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
-      icon: 'fa-table-cells-large',
-      description: 'Switch between the responsive modular Bento Grid layout and the absolute Web HMI Canvas featuring animated fluid pipes, tanks, and rotating pumps.',
+      icon: 'fa-draw-polygon',
+      description: 'Industrial Web HMI Canvas featuring animated fluid pipes, live tanks, rotating pumps, and multi-screen navigation.',
       keyPoints: [
-        'Toggle layout modes on the fly',
+        'Switch between industrial screens seamlessly',
         'Select active HMI screen from the screen dropdown'
       ],
       preferredPlacement: 'bottom'

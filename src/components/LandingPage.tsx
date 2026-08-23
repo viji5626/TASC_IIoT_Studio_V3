@@ -8,7 +8,7 @@ interface LandingPageProps {
   appState: AppState;
   onSelectCommunityMode: () => void;
   onLoginAdmin: () => void;
-  onImportClientPackage: (packageState: AppState, clientName: string, expiresAt?: string, preferredWorkstationMode?: 'hmi' | 'grid') => void;
+  onImportClientPackage: (packageState: AppState, clientName: string, expiresAt?: string, preferredWorkstationMode?: 'hmi') => void;
   onLoadSavedClientSetup?: () => void;
   onLoadSavedCommunitySetup?: (asClientMode?: boolean) => void;
   hasSavedClientSetup?: boolean;
@@ -312,7 +312,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
                 </div>
                 <div className="flex items-start space-x-2 text-slate-300">
                   <i className="fas fa-check text-sky-400 mt-0.5 shrink-0 text-[10px]"></i>
-                  <span>Rearrange & resize grid layouts freely</span>
+                  <span>Inspect & operate Web HMI canvas elements</span>
                 </div>
                 <div className="flex items-start space-x-2 text-sky-300 font-semibold">
                   <i className="fas fa-shield-halved text-sky-400 mt-0.5 shrink-0 text-[10px]"></i>

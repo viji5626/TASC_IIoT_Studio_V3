@@ -5,9 +5,9 @@ A full-stack Industrial Internet of Things (IIoT), SCADA/Web-HMI Canvas, and MQT
 ## 🌟 Key Features
 
 - **24+ Industrial Panel Types**: Radial Gauges, Time-Series Trend Charts, Switches, Push Buttons, Sliders, LEDs, Pipe Flows, Multi-State Indicators, Shape Components, Clocks, Color Pickers, and Text Inputs.
-- **Dual Visual Editors**:
-  - **Bento Grid Layout**: Drag-and-drop responsive grid dashboard.
-  - **Web HMI Canvas**: SCADA-style absolute positioning editor with screen jumps, pipe diagrams, and custom graphics.
+- **Visual Editors**:
+  - **Web HMI Canvas**: SCADA-style absolute positioning editor with screen jumps, dynamic SVG animated symbols, fluid pipe diagrams, and custom graphics.
+  - **3D SCADA Studio**: Three.js viewport for 3D factory visualization, procedural piping assemblies, and real-time 3D telemetry.
 - **Protocol Flexibility**:
   - Direct Browser WebSockets (`ws://`, `wss://`).
   - Integrated Backend TCP-to-WebSocket Bridge (`server.ts` `/api/mqtt-bridge`) enabling direct connections to standard TCP MQTT brokers (`1883`, `8883`).

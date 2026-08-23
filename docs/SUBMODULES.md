@@ -7,7 +7,7 @@ Welcome to **TASC IIoT Studio**, a comprehensive Industrial Internet of Things (
 ## 🏗️ Architecture Overview
 
 The system consists of three main architecture layers:
-1. **Frontend Core (React 19 + TypeScript + Vite + Tailwind CSS)**: Renders drag-and-drop Bento Grids, absolute SCADA Web HMI canvas views, real-time gauges, line graphs, and control components.
+1. **Frontend Core (React 19 + TypeScript + Vite + Tailwind CSS)**: Renders absolute SCADA Web HMI canvas views, 3D SCADA Studio viewports, real-time gauges, line graphs, animated SVG symbols, and control components.
 2. **Backend Server (`server.ts`)**: Express server providing health checks, TCP MQTT test utilities, and a WebSocket-to-TCP bridge (`/api/mqtt-bridge`) allowing browser client applications to communicate directly with native TCP MQTT brokers (`1883`, `8883`).
 3. **Edition & Security Engine (`src/utils/`)**: Product edition management (Community, Engineering, Client Runtime), payload formatting, PIN security, and package encryption.
 
@@ -64,14 +64,8 @@ The system consists of three main architecture layers:
 ### 2. `Sidebar.tsx`
 * **Purpose**: Main navigation sidebar for switching views between Dashboards, Connections, Web HMI Canvas, Topic Manager, Backup & Settings.
 
-### 3. `BentoGrid.tsx`
-* **Purpose**: Drag-and-drop dashboard panel grid container built on `@dnd-kit`. Supports responsive col/row spans and grid reordering.
-
-### 4. `WebHmiCanvasView.tsx`
+### 3. `WebHmiCanvasView.tsx`
 * **Purpose**: Industrial SCADA/HMI canvas view. Enables absolute positioning, pipe rendering, status indicators, screen jumping, and visual diagram building.
-
-### 5. `PanelCard.tsx`
-* **Purpose**: Primary dispatcher component rendering 24+ industrial widget types (Gauges, LEDs, Switches, Sliders, Line Graphs, Clocks, Pipes, Text Inputs, Color Pickers, Combo Boxes, Multi-State indicators, etc.).
 
 ### 6. `Gauge.tsx`
 * **Purpose**: High-precision SVG radial gauge component with dynamic arcs, min/max thresholds, unit formatting, and alarm color shifts.

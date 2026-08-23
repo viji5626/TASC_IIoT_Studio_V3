@@ -36,7 +36,7 @@ export const TOUR_STEPS: TourStep[] = [
     plainEnglishSummary: 'TASC IIoT Studio is an all-in-one software platform for monitoring, controlling, and diagnosing industrial equipment, factories, and machines directly inside your web browser with zero installation.',
     keyCapabilities: [
       'Real-time live telemetry display for plant floors, machines, and energy meters',
-      'Dual viewing modes: Modular Bento Grid and Freeform SCADA HMI Canvas',
+      'Unified Web HMI Canvas with dynamic animated SVG industrial symbols and 3D SCADA Studio',
       'Built-in security, user roles (Admin vs Operator), and client package exporting'
     ],
     quickTip: 'You can navigate to any section using the top-left sidebar menu (☰) at any time.'
@@ -50,11 +50,11 @@ export const TOUR_STEPS: TourStep[] = [
     iconGradient: 'from-emerald-500 to-teal-600',
     plainEnglishSummary: 'Design visual control screens that look like your real-world factory floor. Place interactive gauges, switches, animated fluid pipes, tanks, pumps, and temperature displays.',
     keyCapabilities: [
-      'Switch seamlessly between Bento Grid cards and Absolute Web HMI Canvas',
+      'Pixel-perfect Web HMI Canvas with drag-and-drop placement and snap grid',
       'Animated SVG symbols: Flowing liquid pipes, spinning motors, valves, and boilers',
       'Multi-screen jumping, custom background blueprints, and touchscreen auto-fit'
     ],
-    quickTip: 'Click the "HMI View" toggle in the top bar to switch between standard cards and the visual factory canvas.',
+    quickTip: 'Use the Canvas Toolbar to add elements, configure dynamic tag bindings, and arrange your screen.',
     targetView: AppView.DASHBOARD,
     actionLabel: 'Explore Dashboard'
   },
