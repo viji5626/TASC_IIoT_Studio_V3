@@ -705,11 +705,12 @@ export class PrimitiveFactory {
     const yellowMat = this.materialManager.getMaterial('safety_yellow');
     const darkMat = this.materialManager.getMaterial('dark_slate_skid');
 
-    // 1. Hollow Wafer Body (Annular Ring with Through-Hole Bore along X-axis)
-    const outerRadius = 0.50;
-    const innerRadius = 0.38;
-    const waferDepth = 0.22;
+    const centerY = 0.40;
+    const outerRadius = 0.38;
+    const innerRadius = 0.22;
+    const waferDepth = 0.16;
 
+    // 1. Hollow Wafer Body (Annular Ring with Through-Hole Bore along X-axis)
     const bodyShape = new THREE.Shape();
     bodyShape.absarc(0, 0, outerRadius, 0, Math.PI * 2, false);
     const boreHole = new THREE.Path();
@@ -721,85 +722,84 @@ export class PrimitiveFactory {
       bevelEnabled: true,
       bevelSegments: 2,
       steps: 1,
-      bevelSize: 0.015,
-      bevelThickness: 0.015,
+      bevelSize: 0.012,
+      bevelThickness: 0.012,
       curveSegments: 32
     });
     bodyGeo.center();
 
     const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
     bodyMesh.rotation.y = Math.PI / 2; // Pipe bore runs through X-axis
-    bodyMesh.position.set(0, 0.55, 0);
+    bodyMesh.position.set(0, centerY, 0);
     bodyMesh.castShadow = true;
     group.add(bodyMesh);
 
     // 4 Outer Wafer Alignment Bolt Lugs / Ears
     for (let i = 0; i < 4; i++) {
       const lAngle = (i * Math.PI) / 2 + Math.PI / 4;
-      const lug = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, waferDepth + 0.02, 16), bodyMat);
+      const lug = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, waferDepth + 0.02, 16), bodyMat);
       lug.rotation.z = Math.PI / 2;
-      lug.position.set(0, 0.55 + 0.54 * Math.sin(lAngle), 0.54 * Math.cos(lAngle));
+      lug.position.set(0, centerY + (outerRadius + 0.04) * Math.sin(lAngle), (outerRadius + 0.04) * Math.cos(lAngle));
       group.add(lug);
 
       // Bolt through-hole marker
-      const hole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, waferDepth + 0.03, 12), darkMat);
+      const hole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, waferDepth + 0.03, 12), darkMat);
       hole.rotation.z = Math.PI / 2;
-      hole.position.set(0, 0.55 + 0.54 * Math.sin(lAngle), 0.54 * Math.cos(lAngle));
+      hole.position.set(0, centerY + (outerRadius + 0.04) * Math.sin(lAngle), (outerRadius + 0.04) * Math.cos(lAngle));
       group.add(hole);
     }
 
     // 2. Fixed Vertical Stem / Shaft Sleeve
-    const stemGeo = new THREE.CylinderGeometry(0.035, 0.035, 0.95, 16);
+    const stemGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.85, 16);
     const stemMesh = new THREE.Mesh(stemGeo, stainlessMat);
-    stemMesh.position.set(0, 0.55, 0);
+    stemMesh.position.set(0, centerY, 0);
     group.add(stemMesh);
 
     // 3. Top Actuator Spindle Neck & Mounting Flange
-    const neckGeo = new THREE.CylinderGeometry(0.12, 0.14, 0.35, 20);
+    const neckGeo = new THREE.CylinderGeometry(0.10, 0.12, 0.30, 20);
     const neckMesh = new THREE.Mesh(neckGeo, bodyMat);
-    neckMesh.position.set(0, 0.98, 0);
+    neckMesh.position.set(0, centerY + outerRadius + 0.15, 0);
     group.add(neckMesh);
 
-    const neckFlange = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.06, 20), bodyMat);
-    neckFlange.position.set(0, 1.15, 0);
+    const neckFlange = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.05, 20), bodyMat);
+    neckFlange.position.set(0, centerY + outerRadius + 0.30, 0);
     group.add(neckFlange);
 
     // 4. Pneumatic Double-Acting Cylinder Actuator
-    const actuatorGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.65, 24);
+    const actuatorGeo = new THREE.CylinderGeometry(0.20, 0.20, 0.55, 24);
     const actuatorMesh = new THREE.Mesh(actuatorGeo, actuatorMat);
-    actuatorMesh.position.set(0, 1.5, 0);
+    actuatorMesh.position.set(0, centerY + outerRadius + 0.60, 0);
     actuatorMesh.castShadow = true;
     group.add(actuatorMesh);
 
     // Top Visual Position Beacon / Rotary Dome
-    const beaconBase = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.1, 16), darkMat);
-    beaconBase.position.set(0, 1.87, 0);
+    const beaconBase = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.08, 16), darkMat);
+    beaconBase.position.set(0, centerY + outerRadius + 0.92, 0);
     group.add(beaconBase);
 
-    const beaconDome = new THREE.Mesh(new THREE.SphereGeometry(0.075, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), yellowMat);
-    beaconDome.position.set(0, 1.92, 0);
+    const beaconDome = new THREE.Mesh(new THREE.SphereGeometry(0.065, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), yellowMat);
+    beaconDome.position.set(0, centerY + outerRadius + 0.96, 0);
     group.add(beaconDome);
 
-    // 5. ROTATING BUTTERFLY DISC (Pivot-centered at local origin 0, 0.55, 0)
-    // Rotates around Y-axis: 0° = Closed (perpendicular to bore), 90° = Fully Open (parallel to flow)
+    // 5. ROTATING BUTTERFLY DISC (Pivot-centered at local origin 0, centerY, 0)
     const discGroup = new THREE.Group();
     discGroup.name = 'Valve_Disc';
     discGroup.userData = { subPartId: 'valve_disc', isRotatingSubpart: true, defaultAxis: 'y' };
-    discGroup.position.set(0, 0.55, 0);
+    discGroup.position.set(0, centerY, 0);
 
     // Center Shaft Collar Hub
-    const hubGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.72, 16);
+    const hubGeo = new THREE.CylinderGeometry(0.045, 0.045, 0.44, 16);
     const hubMesh = new THREE.Mesh(hubGeo, stainlessMat);
     discGroup.add(hubMesh);
 
-    // Main Round Butterfly Disc (Fits neatly inside inner bore radius 0.38)
-    const discBladeGeo = new THREE.CylinderGeometry(0.365, 0.365, 0.035, 32);
+    // Main Round Butterfly Disc (Fits neatly inside inner bore radius 0.22)
+    const discBladeGeo = new THREE.CylinderGeometry(0.21, 0.21, 0.025, 32);
     const discBlade = new THREE.Mesh(discBladeGeo, discMat);
     discBlade.rotation.z = Math.PI / 2; // Normal along X-axis when rotation Y = 0 (seals bore)
     discGroup.add(discBlade);
 
     // Contrasting Resilient Sealing Edge Ring (Yellow/Nitrile)
-    const sealRingGeo = new THREE.TorusGeometry(0.363, 0.012, 8, 32);
+    const sealRingGeo = new THREE.TorusGeometry(0.208, 0.010, 8, 32);
     const sealRing = new THREE.Mesh(sealRingGeo, yellowMat);
     sealRing.rotation.y = Math.PI / 2;
     discGroup.add(sealRing);
@@ -823,48 +823,60 @@ export class PrimitiveFactory {
     const positionerMat = this.materialManager.getMaterial('painted_steel_blue');
     const stainlessMat = this.materialManager.getMaterial('stainless_steel');
 
+    const centerY = 0.40;
+    const pipeRadius = 0.22;
+    const flangeRadius = 0.38;
+    const flangeThickness = 0.08;
+
     // Spherical Globe Valve Center Body
-    const sphereBody = new THREE.Mesh(new THREE.SphereGeometry(0.4, 24, 16), bodyMat);
-    sphereBody.position.set(0, 0.4, 0);
+    const sphereBody = new THREE.Mesh(new THREE.SphereGeometry(0.38, 24, 16), bodyMat);
+    sphereBody.position.set(0, centerY, 0);
+    sphereBody.castShadow = true;
     group.add(sphereBody);
 
-    // Left & Right Flanges
-    for (const fx of [-0.45, 0.45]) {
-      const port = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.3, 20), bodyMat);
+    // Left & Right Flanged Ports
+    for (const fx of [-0.55, 0.55]) {
+      const port = new THREE.Mesh(new THREE.CylinderGeometry(pipeRadius, pipeRadius, 0.25, 20), bodyMat);
       port.rotation.z = Math.PI / 2;
-      port.position.set(fx * 0.6, 0.4, 0);
+      port.position.set(fx * 0.5, centerY, 0);
       group.add(port);
 
-      const flange = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.08, 20), steelMat);
-      flange.rotation.z = Math.PI / 2;
-      flange.position.set(fx, 0.4, 0);
-      group.add(flange);
+      const fGroup = this.createWeldNeckFlange({
+        position: new THREE.Vector3(fx, centerY, 0),
+        rotation: new THREE.Euler(0, 0, fx < 0 ? Math.PI / 2 : -Math.PI / 2),
+        pipeRadius,
+        flangeRadius,
+        flangeThickness,
+        numBolts: 8
+      });
+      group.add(fGroup);
     }
 
     // Valve Bonnet & Stem Yoke
     const yoke = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 0.5, 16), bodyMat);
-    yoke.position.set(0, 0.85, 0);
+    yoke.position.set(0, centerY + 0.45, 0);
     group.add(yoke);
 
     // Diaphragm Actuator Dome Housing
-    const dome = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.35, 32), domeMat);
-    dome.position.set(0, 1.45, 0);
+    const dome = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.48, 0.32, 32), domeMat);
+    dome.position.set(0, centerY + 1.05, 0);
+    dome.castShadow = true;
     group.add(dome);
 
-    const domeTop = new THREE.Mesh(new THREE.SphereGeometry(0.5, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2), domeMat);
-    domeTop.position.set(0, 1.62, 0);
+    const domeTop = new THREE.Mesh(new THREE.SphereGeometry(0.48, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2), domeMat);
+    domeTop.position.set(0, centerY + 1.21, 0);
     group.add(domeTop);
 
     // Side Smart Positioner Enclosure
-    const posBox = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.3, 0.2), positionerMat);
-    posBox.position.set(0.22, 1.0, 0);
+    const posBox = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.28, 0.18), positionerMat);
+    posBox.position.set(0.22, centerY + 0.60, 0);
     group.add(posBox);
 
     // Linear Moving Stem Indicator
-    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.4, 12), stainlessMat);
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.4, 12), stainlessMat);
     stem.name = 'Valve_Stem';
     stem.userData = { subPartId: 'valve_stem' };
-    stem.position.set(0, 0.85, 0);
+    stem.position.set(0, centerY + 0.45, 0);
     group.add(stem);
 
     return group;
@@ -883,37 +895,49 @@ export class PrimitiveFactory {
     const castIronMat = this.materialManager.getMaterial('cast_iron');
     const yellowMat = this.materialManager.getMaterial('safety_yellow');
 
-    // Central Ball Valve Body
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.5, 24), bodyMat);
+    const centerY = 0.40;
+    const pipeRadius = 0.22;
+    const flangeRadius = 0.38;
+    const flangeThickness = 0.08;
+
+    // Central Ball Valve Body (Forged 3-piece stainless)
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.45, 24), bodyMat);
     body.rotation.z = Math.PI / 2;
-    body.position.set(0, 0.35, 0);
+    body.position.set(0, centerY, 0);
+    body.castShadow = true;
     group.add(body);
 
-    // Flanges
-    for (const fx of [-0.35, 0.35]) {
-      const flange = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.08, 20), castIronMat);
-      flange.rotation.z = Math.PI / 2;
-      flange.position.set(fx, 0.35, 0);
-      group.add(flange);
+    // Left & Right ANSI Weld-Neck Flanges
+    for (const fx of [-0.45, 0.45]) {
+      const fGroup = this.createWeldNeckFlange({
+        position: new THREE.Vector3(fx, centerY, 0),
+        rotation: new THREE.Euler(0, 0, fx < 0 ? Math.PI / 2 : -Math.PI / 2),
+        pipeRadius,
+        flangeRadius,
+        flangeThickness,
+        numBolts: 8
+      });
+      group.add(fGroup);
     }
 
-    // Mounting Bracket
-    const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), castIronMat);
-    bracket.position.set(0, 0.7, 0);
+    // Actuator ISO 5211 Direct Mounting Bracket
+    const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.22, 0.24), castIronMat);
+    bracket.position.set(0, centerY + 0.38, 0);
     group.add(bracket);
 
     // Electric Rotary Actuator Housing
-    const actBody = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.45, 0.4), actuatorMat);
-    actBody.position.set(0, 1.05, 0);
+    const actBody = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.42, 0.38), actuatorMat);
+    actBody.position.set(0, centerY + 0.70, 0);
+    actBody.castShadow = true;
     group.add(actBody);
 
     // Actuator Position Dome Indicator (Rotatable)
     const indGroup = new THREE.Group();
     indGroup.name = 'Valve_Indicator';
     indGroup.userData = { subPartId: 'indicator' };
-    indGroup.position.set(0, 1.32, 0);
+    indGroup.position.set(0, centerY + 0.95, 0);
 
-    const indDome = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 12), yellowMat);
+    const indDome = new THREE.Mesh(new THREE.SphereGeometry(0.10, 16, 12), yellowMat);
     indGroup.add(indDome);
     group.add(indGroup);
 
@@ -2181,7 +2205,90 @@ export class PrimitiveFactory {
   // =========================================================================
 
   /**
-   * Straight Flanged Pipe Spool (Schedule 40 Carbon Steel)
+   * Helper to create an authentic ANSI B16.5 Weld-Neck Flange Assembly with:
+   * - Flange disc (R=flangeRadius, Thickness=flangeThickness)
+   * - Raised-face sealing gasket land ring (R=rfRadius, Thickness=0.025)
+   * - Tapered welding neck transition hub
+   * - 8 (or specified count) Hex through-bolts with hex nuts and washers
+   */
+  public createWeldNeckFlange(config: {
+    position: THREE.Vector3;
+    rotation?: THREE.Euler;
+    pipeRadius?: number;
+    flangeRadius?: number;
+    flangeThickness?: number;
+    numBolts?: number;
+  }): THREE.Group {
+    const pipeRadius = config.pipeRadius ?? 0.22;
+    const flangeRadius = config.flangeRadius ?? 0.38;
+    const flangeThickness = config.flangeThickness ?? 0.08;
+    const numBolts = config.numBolts ?? 8;
+
+    const flangeMat = this.materialManager.getMaterial('cast_iron');
+    const steelMat = this.materialManager.getMaterial('carbon_steel');
+    const boltMat = this.materialManager.getMaterial('stainless_steel');
+
+    const flangeGroup = new THREE.Group();
+    flangeGroup.position.copy(config.position);
+    if (config.rotation) {
+      flangeGroup.rotation.copy(config.rotation);
+    }
+
+    // 1. Heavy Flange Disc (aligned along local Y axis of the group, thickness along Y)
+    const discGeo = new THREE.CylinderGeometry(flangeRadius, flangeRadius, flangeThickness, 32);
+    const disc = new THREE.Mesh(discGeo, flangeMat);
+    disc.castShadow = true;
+    flangeGroup.add(disc);
+
+    // 2. Raised Face Sealing Land Ring (+Y face)
+    const rfRadius = pipeRadius + (flangeRadius - pipeRadius) * 0.45;
+    const rfGeo = new THREE.CylinderGeometry(rfRadius, rfRadius, 0.025, 32);
+    const rf = new THREE.Mesh(rfGeo, steelMat);
+    rf.position.set(0, flangeThickness / 2 + 0.0125, 0);
+    flangeGroup.add(rf);
+
+    // 3. Tapered Weld Neck Hub on the back (-Y face)
+    const hubLength = 0.12;
+    const hubGeo = new THREE.CylinderGeometry(pipeRadius + 0.05, pipeRadius + 0.01, hubLength, 32);
+    const hub = new THREE.Mesh(hubGeo, steelMat);
+    hub.position.set(0, -flangeThickness / 2 - hubLength / 2, 0);
+    hub.castShadow = true;
+    flangeGroup.add(hub);
+
+    // 4. Heavy Hex Bolts with Washers and Nuts evenly spaced on Bolt Circle
+    const boltCircleRadius = (pipeRadius + flangeRadius) / 2;
+    const boltLen = flangeThickness + 0.06;
+    for (let b = 0; b < numBolts; b++) {
+      const angle = (b * Math.PI * 2) / numBolts;
+      const bx = boltCircleRadius * Math.sin(angle);
+      const bz = boltCircleRadius * Math.cos(angle);
+
+      // Bolt Stud Pin
+      const boltMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.02, 0.02, boltLen, 8),
+        boltMat
+      );
+      boltMesh.position.set(bx, 0, bz);
+      flangeGroup.add(boltMesh);
+
+      // Hex Nut Front
+      const nutGeo = new THREE.CylinderGeometry(0.032, 0.032, 0.025, 6);
+      const nutFront = new THREE.Mesh(nutGeo, boltMat);
+      nutFront.position.set(bx, flangeThickness / 2 + 0.0125, bz);
+      flangeGroup.add(nutFront);
+
+      // Hex Nut Rear
+      const nutRear = new THREE.Mesh(nutGeo, boltMat);
+      nutRear.position.set(bx, -flangeThickness / 2 - 0.0125, bz);
+      flangeGroup.add(nutRear);
+    }
+
+    return flangeGroup;
+  }
+
+  /**
+   * Straight Flanged Pipe Spool (Schedule 40 Carbon Steel, Length 3.0m)
+   * Standard centerline at Y = 0.40 with dual ANSI B16.5 weld-neck bolted flanges.
    */
   public createStraightPipe(): THREE.Group {
     const group = new THREE.Group();
@@ -2189,54 +2296,52 @@ export class PrimitiveFactory {
     group.userData = { isEquipmentRoot: true, assetId: 'pipes.straight_flanged' };
 
     const pipeMat = this.materialManager.getMaterial('carbon_steel');
-    const flangeMat = this.materialManager.getMaterial('cast_iron');
-    const boltMat = this.materialManager.getMaterial('stainless_steel');
 
     const length = 3.0;
     const pipeRadius = 0.22;
-    const flangeRadius = 0.35;
+    const flangeRadius = 0.38;
     const flangeThickness = 0.08;
+    const centerY = 0.40;
 
-    // 1. Hollow Center Pipe Body along X-axis
-    const pipeGeo = new THREE.CylinderGeometry(pipeRadius, pipeRadius, length - flangeThickness * 2, 28);
+    // 1. Center Pipe Cylinder Body along X-axis
+    const pipeBodyLength = length - flangeThickness * 2;
+    const pipeGeo = new THREE.CylinderGeometry(pipeRadius, pipeRadius, pipeBodyLength, 32);
     const pipeMesh = new THREE.Mesh(pipeGeo, pipeMat);
     pipeMesh.rotation.z = Math.PI / 2;
-    pipeMesh.position.set(0, pipeRadius, 0);
+    pipeMesh.position.set(0, centerY, 0);
     pipeMesh.castShadow = true;
     group.add(pipeMesh);
 
-    // 2. Both End Flanges with Bolted Rings
-    for (const fx of [-length / 2 + flangeThickness / 2, length / 2 - flangeThickness / 2]) {
-      const flangeGeo = new THREE.CylinderGeometry(flangeRadius, flangeRadius, flangeThickness, 24);
-      const flange = new THREE.Mesh(flangeGeo, flangeMat);
-      flange.rotation.z = Math.PI / 2;
-      flange.position.set(fx, pipeRadius, 0);
-      flange.castShadow = true;
-      group.add(flange);
+    // 2. Left Flange Port (at X = -length/2, mating face normal pointing -X)
+    const leftFlange = this.createWeldNeckFlange({
+      position: new THREE.Vector3(-length / 2 + flangeThickness / 2, centerY, 0),
+      rotation: new THREE.Euler(0, 0, Math.PI / 2),
+      pipeRadius,
+      flangeRadius,
+      flangeThickness,
+      numBolts: 8
+    });
+    group.add(leftFlange);
 
-      // Raised Face Ring
-      const rfGeo = new THREE.CylinderGeometry(pipeRadius + 0.05, pipeRadius + 0.05, 0.02, 24);
-      const rf = new THREE.Mesh(rfGeo, pipeMat);
-      rf.rotation.z = Math.PI / 2;
-      rf.position.set(fx + (fx < 0 ? -flangeThickness / 2 : flangeThickness / 2), pipeRadius, 0);
-      group.add(rf);
-
-      // 8 Flange Bolts
-      for (let b = 0; b < 8; b++) {
-        const bAngle = (b * Math.PI) / 4;
-        const bRadius = (pipeRadius + flangeRadius) / 2;
-        const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, flangeThickness + 0.04, 8), boltMat);
-        bolt.rotation.z = Math.PI / 2;
-        bolt.position.set(fx, pipeRadius + bRadius * Math.sin(bAngle), bRadius * Math.cos(bAngle));
-        group.add(bolt);
-      }
-    }
+    // 3. Right Flange Port (at X = +length/2, mating face normal pointing +X)
+    const rightFlange = this.createWeldNeckFlange({
+      position: new THREE.Vector3(length / 2 - flangeThickness / 2, centerY, 0),
+      rotation: new THREE.Euler(0, 0, -Math.PI / 2),
+      pipeRadius,
+      flangeRadius,
+      flangeThickness,
+      numBolts: 8
+    });
+    group.add(rightFlange);
 
     return group;
   }
 
   /**
    * 90° Long-Radius Flanged Pipe Elbow Bend
+   * Standard centerline at Y = 0.40 on horizontal XZ plane.
+   * Port 1 at (-0.80, 0.40, 0) facing -X (connects to straight pipe).
+   * Port 2 at (0, 0.40, 0.80) facing +Z (connects to straight pipe).
    */
   public create90PipeElbow(): THREE.Group {
     const group = new THREE.Group();
@@ -2244,30 +2349,48 @@ export class PrimitiveFactory {
     group.userData = { isEquipmentRoot: true, assetId: 'pipes.elbow_90' };
 
     const pipeMat = this.materialManager.getMaterial('carbon_steel');
-    const flangeMat = this.materialManager.getMaterial('cast_iron');
-    const boltMat = this.materialManager.getMaterial('stainless_steel');
 
-    const bendRadius = 0.8;
-    const tubeRadius = 0.22;
-    const flangeRadius = 0.35;
-    const flangeThick = 0.08;
+    const bendRadius = 0.80;
+    const pipeRadius = 0.22;
+    const flangeRadius = 0.38;
+    const flangeThickness = 0.08;
+    const centerY = 0.40;
 
-    // 1. Curved Toroidal Torus 90-degree Quarter Bend
-    const torusGeo = new THREE.TorusGeometry(bendRadius, tubeRadius, 16, 24, Math.PI / 2);
-    const bendMesh = new THREE.Mesh(torusGeo, pipeMat);
-    bendMesh.position.set(0, tubeRadius, 0);
-    bendMesh.castShadow = true;
-    group.add(bendMesh);
+    // 1. Mathematically Exact Smooth 90-Degree Horizontal Curve in XZ plane
+    const curvePoints: THREE.Vector3[] = [];
+    const segments = 32;
+    for (let i = 0; i <= segments; i++) {
+      const theta = (i / segments) * (Math.PI / 2);
+      const x = -bendRadius + bendRadius * Math.sin(theta);
+      const z = bendRadius - bendRadius * Math.cos(theta);
+      curvePoints.push(new THREE.Vector3(x, centerY, z));
+    }
+    const elbowCurve = new THREE.CatmullRomCurve3(curvePoints);
+    const tubeGeo = new THREE.TubeGeometry(elbowCurve, 32, pipeRadius, 28, false);
+    const tubeMesh = new THREE.Mesh(tubeGeo, pipeMat);
+    tubeMesh.castShadow = true;
+    group.add(tubeMesh);
 
-    // 2. Port 1: Bottom / X-End Flange
-    const flange1 = new THREE.Mesh(new THREE.CylinderGeometry(flangeRadius, flangeRadius, flangeThick, 24), flangeMat);
-    flange1.rotation.z = Math.PI / 2;
-    flange1.position.set(bendRadius, tubeRadius, 0);
+    // 2. Port 1: Inflow Flange at (-0.80, 0.40, 0) facing -X
+    const flange1 = this.createWeldNeckFlange({
+      position: new THREE.Vector3(-bendRadius + flangeThickness / 2, centerY, 0),
+      rotation: new THREE.Euler(0, 0, Math.PI / 2),
+      pipeRadius,
+      flangeRadius,
+      flangeThickness,
+      numBolts: 8
+    });
     group.add(flange1);
 
-    // 3. Port 2: Top / Y-End Flange
-    const flange2 = new THREE.Mesh(new THREE.CylinderGeometry(flangeRadius, flangeRadius, flangeThick, 24), flangeMat);
-    flange2.position.set(0, tubeRadius + bendRadius, 0);
+    // 3. Port 2: Outflow Flange at (0, 0.40, 0.80) facing +Z
+    const flange2 = this.createWeldNeckFlange({
+      position: new THREE.Vector3(0, centerY, bendRadius - flangeThickness / 2),
+      rotation: new THREE.Euler(Math.PI / 2, 0, 0),
+      pipeRadius,
+      flangeRadius,
+      flangeThickness,
+      numBolts: 8
+    });
     group.add(flange2);
 
     return group;
@@ -2275,6 +2398,9 @@ export class PrimitiveFactory {
 
   /**
    * 45° Flanged Pipe Elbow Bend
+   * Standard centerline at Y = 0.40 on horizontal XZ plane.
+   * Port 1 at (-0.707, 0.40, 0) facing -X.
+   * Port 2 at (0, 0.40, 0.293) facing angled 45° vector (+X/+Z).
    */
   public create45PipeElbow(): THREE.Group {
     const group = new THREE.Group();
@@ -2282,30 +2408,57 @@ export class PrimitiveFactory {
     group.userData = { isEquipmentRoot: true, assetId: 'pipes.elbow_45' };
 
     const pipeMat = this.materialManager.getMaterial('carbon_steel');
-    const flangeMat = this.materialManager.getMaterial('cast_iron');
 
-    const bendRadius = 0.9;
-    const tubeRadius = 0.22;
-    const flangeRadius = 0.35;
+    const bendRadius = 1.0;
+    const pipeRadius = 0.22;
+    const flangeRadius = 0.38;
+    const flangeThickness = 0.08;
+    const centerY = 0.40;
+    const angle45 = Math.PI / 4;
 
-    const torusGeo = new THREE.TorusGeometry(bendRadius, tubeRadius, 16, 20, Math.PI / 4);
-    const bendMesh = new THREE.Mesh(torusGeo, pipeMat);
-    bendMesh.position.set(0, tubeRadius, 0);
-    bendMesh.castShadow = true;
-    group.add(bendMesh);
+    const startX = -bendRadius * Math.sin(angle45); // -0.707
+    const endZ = bendRadius * (1 - Math.cos(angle45)); // 0.293
 
-    // Flange 1 at base (X=bendRadius)
-    const flange1 = new THREE.Mesh(new THREE.CylinderGeometry(flangeRadius, flangeRadius, 0.08, 20), flangeMat);
-    flange1.rotation.z = Math.PI / 2;
-    flange1.position.set(bendRadius, tubeRadius, 0);
+    // 1. Smooth 45-Degree Horizontal Curve in XZ plane
+    const curvePoints: THREE.Vector3[] = [];
+    const segments = 24;
+    for (let i = 0; i <= segments; i++) {
+      const theta = (i / segments) * angle45;
+      const x = startX + bendRadius * Math.sin(theta);
+      const z = bendRadius * (1 - Math.cos(theta));
+      curvePoints.push(new THREE.Vector3(x, centerY, z));
+    }
+    const elbowCurve = new THREE.CatmullRomCurve3(curvePoints);
+    const tubeGeo = new THREE.TubeGeometry(elbowCurve, 24, pipeRadius, 28, false);
+    const tubeMesh = new THREE.Mesh(tubeGeo, pipeMat);
+    tubeMesh.castShadow = true;
+    group.add(tubeMesh);
+
+    // 2. Port 1: Inflow Flange at (startX, 0.40, 0) facing -X
+    const flange1 = this.createWeldNeckFlange({
+      position: new THREE.Vector3(startX + flangeThickness / 2, centerY, 0),
+      rotation: new THREE.Euler(0, 0, Math.PI / 2),
+      pipeRadius,
+      flangeRadius,
+      flangeThickness,
+      numBolts: 8
+    });
     group.add(flange1);
 
-    // Flange 2 at 45 degree angle
-    const fx = bendRadius * Math.cos(Math.PI / 4);
-    const fy = tubeRadius + bendRadius * Math.sin(Math.PI / 4);
-    const flange2 = new THREE.Mesh(new THREE.CylinderGeometry(flangeRadius, flangeRadius, 0.08, 20), flangeMat);
-    flange2.rotation.z = Math.PI / 4 + Math.PI / 2;
-    flange2.position.set(fx, fy, 0);
+    // 3. Port 2: Outflow Flange at (0, 0.40, endZ) angled at 45°
+    const flange2Pos = new THREE.Vector3(
+      -(flangeThickness / 2) * Math.cos(angle45),
+      centerY,
+      endZ - (flangeThickness / 2) * Math.sin(angle45)
+    );
+    const flange2 = this.createWeldNeckFlange({
+      position: flange2Pos,
+      rotation: new THREE.Euler(0, -angle45, -Math.PI / 2, 'YXZ'),
+      pipeRadius,
+      flangeRadius,
+      flangeThickness,
+      numBolts: 8
+    });
     group.add(flange2);
 
     return group;
@@ -2313,6 +2466,7 @@ export class PrimitiveFactory {
 
   /**
    * 3-Way Equal Flanged Pipe T-Joint Branch
+   * Standard centerline at Y = 0.40 with 3 ANSI weld-neck flanges.
    */
   public createPipeTee(): THREE.Group {
     const group = new THREE.Group();
@@ -2320,41 +2474,75 @@ export class PrimitiveFactory {
     group.userData = { isEquipmentRoot: true, assetId: 'pipes.tee_joint' };
 
     const pipeMat = this.materialManager.getMaterial('carbon_steel');
-    const flangeMat = this.materialManager.getMaterial('cast_iron');
+    const collarMat = this.materialManager.getMaterial('cast_iron');
 
     const pipeRadius = 0.22;
-    const runLength = 2.2;
-    const branchLength = 0.8;
-    const flangeRadius = 0.35;
+    const flangeRadius = 0.38;
+    const flangeThickness = 0.08;
+    const runLength = 2.0;
+    const branchLength = 1.0;
+    const centerY = 0.40;
 
-    // Main Run Pipe along X-axis
-    const runPipe = new THREE.Mesh(new THREE.CylinderGeometry(pipeRadius, pipeRadius, runLength - 0.16, 24), pipeMat);
+    // 1. Main Run Pipe along X-axis
+    const runPipe = new THREE.Mesh(
+      new THREE.CylinderGeometry(pipeRadius, pipeRadius, runLength - flangeThickness * 2, 32),
+      pipeMat
+    );
     runPipe.rotation.z = Math.PI / 2;
-    runPipe.position.set(0, pipeRadius, 0);
+    runPipe.position.set(0, centerY, 0);
     runPipe.castShadow = true;
     group.add(runPipe);
 
-    // Branch Pipe along Y-axis
-    const branchPipe = new THREE.Mesh(new THREE.CylinderGeometry(pipeRadius, pipeRadius, branchLength, 24), pipeMat);
-    branchPipe.position.set(0, pipeRadius + branchLength / 2, 0);
+    // 2. Branch Pipe along Z-axis
+    const branchPipe = new THREE.Mesh(
+      new THREE.CylinderGeometry(pipeRadius, pipeRadius, branchLength - flangeThickness, 32),
+      pipeMat
+    );
+    branchPipe.rotation.x = Math.PI / 2;
+    branchPipe.position.set(0, centerY, (branchLength - flangeThickness) / 2);
     branchPipe.castShadow = true;
     group.add(branchPipe);
 
-    // Welded Branch Saddle Reinforcement Collar
-    const collar = new THREE.Mesh(new THREE.CylinderGeometry(pipeRadius + 0.04, pipeRadius + 0.04, 0.12, 24), flangeMat);
-    collar.position.set(0, pipeRadius + 0.1, 0);
+    // 3. Forged Saddle Reinforcement Collar at Intersection
+    const collar = new THREE.Mesh(
+      new THREE.SphereGeometry(pipeRadius + 0.035, 24, 16),
+      collarMat
+    );
+    collar.position.set(0, centerY, 0);
     group.add(collar);
 
-    // 3 Flanged Connection Ports
-    for (const fx of [-runLength / 2, runLength / 2]) {
-      const f = new THREE.Mesh(new THREE.CylinderGeometry(flangeRadius, flangeRadius, 0.08, 20), flangeMat);
-      f.rotation.z = Math.PI / 2;
-      f.position.set(fx, pipeRadius, 0);
-      group.add(f);
-    }
-    const branchFlange = new THREE.Mesh(new THREE.CylinderGeometry(flangeRadius, flangeRadius, 0.08, 20), flangeMat);
-    branchFlange.position.set(0, pipeRadius + branchLength, 0);
-    group.add(branchFlange);
+    // 4. Port 1: Left Flange (-X)
+    const flange1 = this.createWeldNeckFlange({
+      position: new THREE.Vector3(-runLength / 2 + flangeThickness / 2, centerY, 0),
+      rotation: new THREE.Euler(0, 0, Math.PI / 2),
+      pipeRadius,
+      flangeRadius,
+      flangeThickness,
+      numBolts: 8
+    });
+    group.add(flange1);
+
+    // 5. Port 2: Right Flange (+X)
+    const flange2 = this.createWeldNeckFlange({
+      position: new THREE.Vector3(runLength / 2 - flangeThickness / 2, centerY, 0),
+      rotation: new THREE.Euler(0, 0, -Math.PI / 2),
+      pipeRadius,
+      flangeRadius,
+      flangeThickness,
+      numBolts: 8
+    });
+    group.add(flange2);
+
+    // 6. Port 3: Branch Flange (+Z)
+    const flange3 = this.createWeldNeckFlange({
+      position: new THREE.Vector3(0, centerY, branchLength - flangeThickness / 2),
+      rotation: new THREE.Euler(Math.PI / 2, 0, 0),
+      pipeRadius,
+      flangeRadius,
+      flangeThickness,
+      numBolts: 8
+    });
+    group.add(flange3);
 
     return group;
   }
@@ -2368,37 +2556,60 @@ export class PrimitiveFactory {
     group.userData = { isEquipmentRoot: true, assetId: 'pipes.cross_joint' };
 
     const pipeMat = this.materialManager.getMaterial('carbon_steel');
-    const flangeMat = this.materialManager.getMaterial('cast_iron');
+    const collarMat = this.materialManager.getMaterial('cast_iron');
 
     const pipeRadius = 0.22;
-    const length = 2.2;
-    const flangeRadius = 0.35;
+    const flangeRadius = 0.38;
+    const flangeThickness = 0.08;
+    const length = 2.0;
+    const centerY = 0.40;
 
     // Run 1 along X
-    const runX = new THREE.Mesh(new THREE.CylinderGeometry(pipeRadius, pipeRadius, length - 0.16, 24), pipeMat);
+    const runX = new THREE.Mesh(
+      new THREE.CylinderGeometry(pipeRadius, pipeRadius, length - flangeThickness * 2, 32),
+      pipeMat
+    );
     runX.rotation.z = Math.PI / 2;
-    runX.position.set(0, pipeRadius, 0);
+    runX.position.set(0, centerY, 0);
     runX.castShadow = true;
     group.add(runX);
 
     // Run 2 along Z
-    const runZ = new THREE.Mesh(new THREE.CylinderGeometry(pipeRadius, pipeRadius, length - 0.16, 24), pipeMat);
+    const runZ = new THREE.Mesh(
+      new THREE.CylinderGeometry(pipeRadius, pipeRadius, length - flangeThickness * 2, 32),
+      pipeMat
+    );
     runZ.rotation.x = Math.PI / 2;
-    runZ.position.set(0, pipeRadius, 0);
+    runZ.position.set(0, centerY, 0);
     runZ.castShadow = true;
     group.add(runZ);
 
+    // Center Cross Forging Hub
+    const hub = new THREE.Mesh(new THREE.SphereGeometry(pipeRadius + 0.04, 24, 16), collarMat);
+    hub.position.set(0, centerY, 0);
+    group.add(hub);
+
     // 4 Flanges
     for (const fx of [-length / 2, length / 2]) {
-      const f = new THREE.Mesh(new THREE.CylinderGeometry(flangeRadius, flangeRadius, 0.08, 20), flangeMat);
-      f.rotation.z = Math.PI / 2;
-      f.position.set(fx, pipeRadius, 0);
+      const f = this.createWeldNeckFlange({
+        position: new THREE.Vector3(fx + (fx < 0 ? flangeThickness / 2 : -flangeThickness / 2), centerY, 0),
+        rotation: new THREE.Euler(0, 0, fx < 0 ? Math.PI / 2 : -Math.PI / 2),
+        pipeRadius,
+        flangeRadius,
+        flangeThickness,
+        numBolts: 8
+      });
       group.add(f);
     }
     for (const fz of [-length / 2, length / 2]) {
-      const f = new THREE.Mesh(new THREE.CylinderGeometry(flangeRadius, flangeRadius, 0.08, 20), flangeMat);
-      f.rotation.x = Math.PI / 2;
-      f.position.set(0, pipeRadius, fz);
+      const f = this.createWeldNeckFlange({
+        position: new THREE.Vector3(0, centerY, fz + (fz < 0 ? flangeThickness / 2 : -flangeThickness / 2)),
+        rotation: new THREE.Euler(fz < 0 ? -Math.PI / 2 : Math.PI / 2, 0, 0),
+        pipeRadius,
+        flangeRadius,
+        flangeThickness,
+        numBolts: 8
+      });
       group.add(f);
     }
 
@@ -2414,29 +2625,41 @@ export class PrimitiveFactory {
     group.userData = { isEquipmentRoot: true, assetId: 'pipes.reducer_conical' };
 
     const pipeMat = this.materialManager.getMaterial('carbon_steel');
-    const flangeMat = this.materialManager.getMaterial('cast_iron');
 
-    const largeR = 0.30;
-    const smallR = 0.18;
+    const largeR = 0.22;
+    const smallR = 0.14;
     const length = 1.6;
+    const flangeThickness = 0.08;
+    const centerY = 0.40;
 
     // Conical Taper Body along X
-    const cone = new THREE.Mesh(new THREE.CylinderGeometry(largeR, smallR, length - 0.16, 28), pipeMat);
-    cone.rotation.z = Math.PI / 2;
-    cone.position.set(0, largeR, 0);
+    const coneLen = length - flangeThickness * 2;
+    const cone = new THREE.Mesh(new THREE.CylinderGeometry(smallR, largeR, coneLen, 32), pipeMat);
+    cone.rotation.z = -Math.PI / 2; // Large end at -X, small end at +X
+    cone.position.set(0, centerY, 0);
     cone.castShadow = true;
     group.add(cone);
 
-    // Large End Flange (Left)
-    const largeFlange = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.44, 0.08, 24), flangeMat);
-    largeFlange.rotation.z = Math.PI / 2;
-    largeFlange.position.set(-length / 2, largeR, 0);
+    // Large End Flange (Left at -X)
+    const largeFlange = this.createWeldNeckFlange({
+      position: new THREE.Vector3(-length / 2 + flangeThickness / 2, centerY, 0),
+      rotation: new THREE.Euler(0, 0, Math.PI / 2),
+      pipeRadius: largeR,
+      flangeRadius: 0.38,
+      flangeThickness,
+      numBolts: 8
+    });
     group.add(largeFlange);
 
-    // Small End Flange (Right)
-    const smallFlange = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.30, 0.08, 24), flangeMat);
-    smallFlange.rotation.z = Math.PI / 2;
-    smallFlange.position.set(length / 2, largeR, 0);
+    // Small End Flange (Right at +X)
+    const smallFlange = this.createWeldNeckFlange({
+      position: new THREE.Vector3(length / 2 - flangeThickness / 2, centerY, 0),
+      rotation: new THREE.Euler(0, 0, -Math.PI / 2),
+      pipeRadius: smallR,
+      flangeRadius: 0.26,
+      flangeThickness,
+      numBolts: 6
+    });
     group.add(smallFlange);
 
     return group;
@@ -2451,41 +2674,53 @@ export class PrimitiveFactory {
     group.userData = { isEquipmentRoot: true, assetId: 'pipes.flange_joint' };
 
     const pipeMat = this.materialManager.getMaterial('carbon_steel');
-    const flangeMat = this.materialManager.getMaterial('cast_iron');
     const gasketMat = this.materialManager.getMaterial('safety_yellow');
-    const boltMat = this.materialManager.getMaterial('stainless_steel');
 
-    const flangeR = 0.36;
     const pipeR = 0.22;
+    const flangeR = 0.38;
+    const flangeThick = 0.08;
+    const centerY = 0.40;
 
-    // Dual Mating Flanges
-    for (const fx of [-0.045, 0.045]) {
-      const f = new THREE.Mesh(new THREE.CylinderGeometry(flangeR, flangeR, 0.08, 24), flangeMat);
-      f.rotation.z = Math.PI / 2;
-      f.position.set(fx, flangeR, 0);
-      group.add(f);
+    // Left Flange
+    const flangeL = this.createWeldNeckFlange({
+      position: new THREE.Vector3(-flangeThick / 2, centerY, 0),
+      rotation: new THREE.Euler(0, 0, -Math.PI / 2), // Mating face points +X
+      pipeRadius: pipeR,
+      flangeRadius: flangeR,
+      flangeThickness: flangeThick,
+      numBolts: 8
+    });
+    group.add(flangeL);
 
-      // Pipe Hub Extension
-      const hub = new THREE.Mesh(new THREE.CylinderGeometry(pipeR + 0.03, pipeR, 0.15, 24), pipeMat);
-      hub.rotation.z = Math.PI / 2;
-      hub.position.set(fx + (fx < 0 ? -0.11 : 0.11), flangeR, 0);
-      group.add(hub);
-    }
+    // Right Flange
+    const flangeRGroup = this.createWeldNeckFlange({
+      position: new THREE.Vector3(flangeThick / 2, centerY, 0),
+      rotation: new THREE.Euler(0, 0, Math.PI / 2), // Mating face points -X
+      pipeRadius: pipeR,
+      flangeRadius: flangeR,
+      flangeThickness: flangeThick,
+      numBolts: 8
+    });
+    group.add(flangeRGroup);
 
     // High-Contrast Gasket Ring between flanges
-    const gasket = new THREE.Mesh(new THREE.CylinderGeometry(flangeR - 0.02, flangeR - 0.02, 0.015, 24), gasketMat);
+    const gasket = new THREE.Mesh(
+      new THREE.CylinderGeometry(flangeR - 0.04, flangeR - 0.04, 0.015, 32),
+      gasketMat
+    );
     gasket.rotation.z = Math.PI / 2;
-    gasket.position.set(0, flangeR, 0);
+    gasket.position.set(0, centerY, 0);
     group.add(gasket);
 
-    // 8 Clamping Hex Bolts
-    for (let b = 0; b < 8; b++) {
-      const bAngle = (b * Math.PI) / 4;
-      const bRad = 0.29;
-      const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.24, 8), boltMat);
-      bolt.rotation.z = Math.PI / 2;
-      bolt.position.set(0, flangeR + bRad * Math.sin(bAngle), bRad * Math.cos(bAngle));
-      group.add(bolt);
+    // Connecting Pipe Stubs on both outer ends for easy in-line welding
+    for (const sx of [-0.18, 0.18]) {
+      const stub = new THREE.Mesh(
+        new THREE.CylinderGeometry(pipeR, pipeR, 0.14, 24),
+        pipeMat
+      );
+      stub.rotation.z = Math.PI / 2;
+      stub.position.set(sx, centerY, 0);
+      group.add(stub);
     }
 
     return group;
@@ -2547,34 +2782,39 @@ export class PrimitiveFactory {
     const h = 0.8;
     const radius = 1.1;
 
-    // Extruded curved rectangular sweep
-    const shape = new THREE.Shape();
-    shape.moveTo(0, 0);
-    shape.lineTo(0, h);
-    shape.lineTo(w, h);
-    shape.lineTo(w, 0);
-    shape.closePath();
+    // Curved Elbow Outer Wall & Inner Wall
+    const elbowOuter = new THREE.Mesh(
+      new THREE.CylinderGeometry(radius + w / 2, radius + w / 2, h, 24, 1, true, 0, Math.PI / 2),
+      ductMat
+    );
+    elbowOuter.position.set(-radius - w / 2, h / 2 + 0.1, radius + w / 2);
+    elbowOuter.castShadow = true;
+    group.add(elbowOuter);
 
-    // Curved Elbow Block
-    const elbowMesh = new THREE.Mesh(new THREE.CylinderGeometry(radius + w / 2, radius - w / 2, h, 20, 1, false, 0, Math.PI / 2), ductMat);
-    elbowMesh.position.set(0, h / 2 + 0.1, 0);
-    elbowMesh.castShadow = true;
-    group.add(elbowMesh);
+    const elbowInner = new THREE.Mesh(
+      new THREE.CylinderGeometry(radius - w / 2, radius - w / 2, h, 24, 1, true, 0, Math.PI / 2),
+      ductMat
+    );
+    elbowInner.position.set(-radius - w / 2, h / 2 + 0.1, radius + w / 2);
+    group.add(elbowInner);
 
     // End Connecting Flanges
     const f1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, h + 0.08, w + 0.08), flangeMat);
-    f1.position.set(radius, h / 2 + 0.1, 0);
+    f1.position.set(0, h / 2 + 0.1, 0);
     group.add(f1);
 
     const f2 = new THREE.Mesh(new THREE.BoxGeometry(w + 0.08, h + 0.08, 0.06), flangeMat);
-    f2.position.set(0, h / 2 + 0.1, radius);
+    f2.position.set(-radius - w / 2, h / 2 + 0.1, radius + w / 2);
     group.add(f2);
 
     // 3 Turning Guide Vanes inside elbow
     for (let v = 1; v <= 3; v++) {
       const vRad = radius - w / 2 + (v * w) / 4;
-      const vane = new THREE.Mesh(new THREE.CylinderGeometry(vRad, vRad, h - 0.05, 16, 1, true, 0, Math.PI / 2), vaneMat);
-      vane.position.set(0, h / 2 + 0.1, 0);
+      const vane = new THREE.Mesh(
+        new THREE.CylinderGeometry(vRad, vRad, h - 0.06, 16, 1, true, 0, Math.PI / 2),
+        vaneMat
+      );
+      vane.position.set(-radius - w / 2, h / 2 + 0.1, radius + w / 2);
       group.add(vane);
     }
 
@@ -2597,8 +2837,11 @@ export class PrimitiveFactory {
     const rectH = 0.8;
     const roundR = 0.35;
 
-    // Transition Taper (approximated with smooth segmented geometry)
-    const transitionMesh = new THREE.Mesh(new THREE.CylinderGeometry(roundR, Math.max(rectW, rectH) / 2, length - 0.2, 24), ductMat);
+    // Transition Taper Body
+    const transitionMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(roundR, Math.max(rectW, rectH) / 2, length - 0.2, 24),
+      ductMat
+    );
     transitionMesh.rotation.z = Math.PI / 2;
     transitionMesh.position.set(0, rectH / 2 + 0.1, 0);
     transitionMesh.castShadow = true;
@@ -2664,24 +2907,33 @@ export class PrimitiveFactory {
 
     const radius = 0.35;
     const bendR = 0.9;
+    const centerY = radius + 0.1;
 
-    // Smooth Toroidal Elbow Bend
-    const bendGeo = new THREE.TorusGeometry(bendR, radius, 16, 24, Math.PI / 2);
-    const bendMesh = new THREE.Mesh(bendGeo, ductMat);
-    bendMesh.position.set(0, radius + 0.1, 0);
-    bendMesh.castShadow = true;
-    group.add(bendMesh);
-
-    // Miter Joint Seam Lines
-    for (let s = 1; s <= 4; s++) {
-      const sAngle = (s * Math.PI) / 10;
-      const sx = bendR * Math.cos(sAngle);
-      const sy = radius + 0.1 + bendR * Math.sin(sAngle);
-      const seam = new THREE.Mesh(new THREE.TorusGeometry(radius + 0.006, 0.008, 8, 24), seamMat);
-      seam.position.set(sx, sy, 0);
-      seam.rotation.z = sAngle + Math.PI / 2;
-      group.add(seam);
+    // 5-Segment Mitered Horizontal Curve in XZ plane
+    const curvePoints: THREE.Vector3[] = [];
+    const segments = 24;
+    for (let i = 0; i <= segments; i++) {
+      const theta = (i / segments) * (Math.PI / 2);
+      const x = -bendR + bendR * Math.sin(theta);
+      const z = bendR - bendR * Math.cos(theta);
+      curvePoints.push(new THREE.Vector3(x, centerY, z));
     }
+    const elbowCurve = new THREE.CatmullRomCurve3(curvePoints);
+    const tubeGeo = new THREE.TubeGeometry(elbowCurve, 24, radius, 28, false);
+    const tubeMesh = new THREE.Mesh(tubeGeo, ductMat);
+    tubeMesh.castShadow = true;
+    group.add(tubeMesh);
+
+    // End Connecting Slip Collars
+    const collar1 = new THREE.Mesh(new THREE.CylinderGeometry(radius + 0.02, radius + 0.02, 0.08, 24), seamMat);
+    collar1.rotation.z = Math.PI / 2;
+    collar1.position.set(-bendR + 0.04, centerY, 0);
+    group.add(collar1);
+
+    const collar2 = new THREE.Mesh(new THREE.CylinderGeometry(radius + 0.02, radius + 0.02, 0.08, 24), seamMat);
+    collar2.rotation.x = Math.PI / 2;
+    collar2.position.set(0, centerY, bendR - 0.04);
+    group.add(collar2);
 
     return group;
   }

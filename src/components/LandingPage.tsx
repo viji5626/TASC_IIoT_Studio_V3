@@ -225,7 +225,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
                 </div>
                 <div className="flex items-start space-x-2 text-emerald-300 font-medium">
                   <i className="fas fa-unlock text-emerald-400 mt-0.5 shrink-0 text-[10px]"></i>
-                  <span><strong>Unlocked Grid Studio & HMI Canvas</strong></span>
+                  <span><strong>Unlocked Web HMI Canvas & 3D SCADA Studio</strong></span>
                 </div>
                 <div className="flex items-start space-x-2 text-amber-300 font-medium">
                   <i className="fas fa-circle-exclamation text-amber-400 mt-0.5 shrink-0 text-[10px]"></i>

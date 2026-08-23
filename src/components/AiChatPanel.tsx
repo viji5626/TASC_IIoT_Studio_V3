@@ -2,7 +2,9 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ChatMessage, ImageAttachment } from '../utils/aiProviders/types';
 import { createSpeechDictation, SpeechDictationController } from '../utils/speechFilter';
 import { CommunityAiQuotaStatus } from '../utils/aiQuotaManager';
-import { PendingReportRequest, MultiAgentEvent } from '../types';
+import { PendingReportRequest, MultiAgentEvent, AppView } from '../types';
+import { useAppStore } from '../store/useAppStore';
+import { Ai3dAssetDefinition, Ai3dAssetService } from '../services/Ai3dAssetService';
 
 interface Props {
   messages: ChatMessage[];
@@ -112,6 +114,10 @@ export const AiChatPanel: React.FC<Props> = ({
   const [lightboxImage, setLightboxImage] = useState<{ url: string; alt: string } | null>(null);
   const [agentActivity, setAgentActivity] = useState<MultiAgentEvent | null>(null);
 
+  // 3D AI Asset Generation State
+  const [generated3dAssets, setGenerated3dAssets] = useState<Ai3dAssetDefinition[]>([]);
+  const [pushedAssetIds, setPushedAssetIds] = useState<Set<string>>(new Set());
+
   // Dictation State
   const [isListening, setIsListening] = useState(false);
   const [dictationSupported, setDictationSupported] = useState(true);
@@ -121,6 +127,21 @@ export const AiChatPanel: React.FC<Props> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Subscribe to 3D Asset Generated Events
+  useEffect(() => {
+    const handle3dAsset = (e: any) => {
+      if (e.detail) {
+        setGenerated3dAssets(prev => {
+          if (prev.some(a => a.id === e.detail.id)) return prev;
+          return [...prev, e.detail];
+        });
+        setPushedAssetIds(prev => new Set(prev).add(e.detail.id));
+      }
+    };
+    window.addEventListener('tasc_3d_asset_generated', handle3dAsset);
+    return () => window.removeEventListener('tasc_3d_asset_generated', handle3dAsset);
+  }, []);
 
   // Initialize Speech Dictation
   useEffect(() => {
@@ -593,6 +614,94 @@ export const AiChatPanel: React.FC<Props> = ({
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ── Generated 3D Asset Preview Cards ─────────────────────────────────── */}
+      {generated3dAssets.length > 0 && (
+        <div className="shrink-0 border-t border-sky-700/40 bg-sky-950/30 px-4 py-3 space-y-2">
+          {generated3dAssets.slice(-2).map(asset => {
+            const isPushed = pushedAssetIds.has(asset.id);
+            return (
+              <div 
+                key={asset.id} 
+                className="bg-slate-900/90 border border-sky-500/40 rounded-xl p-3 shadow-lg shadow-sky-950/30 flex flex-col gap-2.5"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-sky-900/40 border border-sky-500/40 flex items-center justify-center text-sky-400 shrink-0">
+                      <i className={`fas ${asset.icon || 'fa-cubes'} text-sm`} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[9px] bg-sky-500/20 text-sky-300 font-bold px-1.5 py-0.5 rounded border border-sky-500/30 uppercase tracking-wider">
+                          🤖 3D Model Generated
+                        </span>
+                        <span className="text-[10px] text-slate-400">{asset.category}</span>
+                      </div>
+                      <h4 className="font-bold text-slate-200 text-xs truncate mt-0.5">{asset.name}</h4>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        Ai3dAssetService.saveAsset(asset);
+                        setPushedAssetIds(prev => new Set(prev).add(asset.id));
+                      }}
+                      className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all flex items-center gap-1.5 ${
+                        isPushed
+                          ? 'bg-emerald-600/30 border border-emerald-500/50 text-emerald-300 cursor-default'
+                          : 'bg-sky-600 hover:bg-sky-500 text-white shadow-md shadow-sky-950/40'
+                      }`}
+                    >
+                      <i className={`fas ${isPushed ? 'fa-check-circle text-emerald-400' : 'fa-box-archive'}`} />
+                      <span>{isPushed ? 'In 3D Library' : 'Push to 3D Library'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        Ai3dAssetService.saveAsset(asset);
+                        window.dispatchEvent(new CustomEvent('tasc_navigate_view', { detail: AppView.SCADA_3D }));
+                      }}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-colors flex items-center gap-1.5 shadow-md shadow-indigo-950/40"
+                      title="Open 3D SCADA Studio and view model"
+                    >
+                      <i className="fas fa-cube" />
+                      <span>Open 3D Studio</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800 text-[11px]">
+                  <div>
+                    <span className="text-slate-500 block text-[9px]">DIMENSIONS</span>
+                    <span className="font-mono text-slate-300 font-semibold">{asset.dimensions.width}m × {asset.dimensions.height}m × {asset.dimensions.depth}m</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[9px]">COMPONENTS</span>
+                    <span className="font-mono text-sky-400 font-semibold">{asset.components.length} Sub-Meshes</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[9px]">TELEMETRY SLOTS</span>
+                    <span className="font-mono text-emerald-400 font-semibold">{asset.telemetryHooks.length} Real-Time Tags</span>
+                  </div>
+                </div>
+
+                {asset.telemetryHooks.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 items-center pt-0.5">
+                    <span className="text-[10px] text-slate-500 font-semibold">Live Hooks:</span>
+                    {asset.telemetryHooks.map(h => (
+                      <span key={h.slotName} className="text-[9px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-md border border-slate-700 font-mono">
+                        {h.displayName} <span className="text-sky-400">({h.channelType})</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

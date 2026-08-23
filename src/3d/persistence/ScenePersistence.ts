@@ -386,6 +386,81 @@ export class ScenePersistence {
               direction: 'cw'
             }
           ]
+        },
+
+        // 7. Straight Process Piping Spool (Connected to Discharge Valve)
+        {
+          id: 'PIPE-101',
+          name: 'Straight Flanged Pipe Spool (Schedule 40)',
+          assetId: 'pipes.straight_flanged',
+          assetType: 'parametric',
+          transform: {
+            position: { x: 1.5, y: 0, z: 0 },
+            rotation: { x: 0, y: 0, z: 0 },
+            scale: { x: 1, y: 1, z: 1 }
+          },
+          materialPreset: 'carbon_steel',
+          equipmentDescription: '3-meter Schedule 40 flanged pipe spool with ANSI weld-neck flanges.'
+        },
+
+        // 8. 90° Long-Radius Flanged Pipe Elbow Bend (Connecting Section A to Section B)
+        {
+          id: 'ELBOW-90-101',
+          name: '90° Long-Radius Flanged Pipe Elbow Bend',
+          assetId: 'pipes.elbow_90',
+          assetType: 'parametric',
+          transform: {
+            position: { x: 3.8, y: 0, z: 0 },
+            rotation: { x: 0, y: 0, z: 0 },
+            scale: { x: 1, y: 1, z: 1 }
+          },
+          materialPreset: 'carbon_steel',
+          equipmentDescription: 'ANSI B16.9 standard 90-degree long-radius flanged elbow bend.'
+        },
+
+        // 9. 3-Way Equal Flanged Pipe Tee Joint
+        {
+          id: 'TEE-101',
+          name: '3-Way Equal Flanged Pipe T-Joint Branch',
+          assetId: 'pipes.tee_joint',
+          assetType: 'parametric',
+          transform: {
+            position: { x: 3.8, y: 0, z: 1.8 },
+            rotation: { x: 0, y: 1.5707963, z: 0 },
+            scale: { x: 1, y: 1, z: 1 }
+          },
+          materialPreset: 'carbon_steel',
+          equipmentDescription: 'Forged equal flanged tee branch with ANSI weld-neck flanges.'
+        },
+
+        // 10. 45° Flanged Pipe Elbow Bend
+        {
+          id: 'ELBOW-45-101',
+          name: '45° Flanged Pipe Elbow Bend',
+          assetId: 'pipes.elbow_45',
+          assetType: 'parametric',
+          transform: {
+            position: { x: 2.1, y: 0, z: 1.8 },
+            rotation: { x: 0, y: 3.1415926, z: 0 },
+            scale: { x: 1, y: 1, z: 1 }
+          },
+          materialPreset: 'carbon_steel',
+          equipmentDescription: '45-degree angled piping elbow with ANSI weld-neck flanges.'
+        },
+
+        // 11. Bolted Weld-Neck Flange Pair Joint with Gasket
+        {
+          id: 'FLANGE-101',
+          name: 'Bolted Weld-Neck Flange Pair Joint with Gasket',
+          assetId: 'pipes.flange_joint',
+          assetType: 'parametric',
+          transform: {
+            position: { x: 3.8, y: 0, z: 3.0 },
+            rotation: { x: 0, y: 1.5707963, z: 0 },
+            scale: { x: 1, y: 1, z: 1 }
+          },
+          materialPreset: 'carbon_steel',
+          equipmentDescription: 'Mated ANSI B16.5 weld-neck flange pair with Teflon gasket and 8 through-bolts.'
         }
       ]
     };

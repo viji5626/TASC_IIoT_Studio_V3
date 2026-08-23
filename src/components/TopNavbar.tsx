@@ -21,11 +21,7 @@ export interface TopNavbarProps {
   activeConnection?: MqttConnection;
   activeDashboardId: string;
   setActiveDashboardId: (id: string) => void;
-  activeMode: 'grid' | 'hmi';
-  setActiveMode: (mode: 'grid' | 'hmi') => void;
   isHmiEditMode?: boolean;
-  isLayoutMode: boolean;
-  setIsLayoutMode: (val: boolean) => void;
   isLocked: boolean;
   handleToggleLock: () => void;
   isFullscreen: boolean;
@@ -42,7 +38,6 @@ export interface TopNavbarProps {
   setIsAlarmModalOpen: (val: boolean) => void;
   setIsAlarmHistorianModalOpen: (val: boolean) => void;
   setIsFddModalOpen: (val: boolean) => void;
-  setIsEngineeringChoiceOpen: (val: boolean) => void;
   setIsCloneModalOpen: (val: boolean) => void;
   setIsDashMenuOpen: (val: boolean) => void;
   handleOpenActiveBrokerSettings: () => void;
@@ -63,11 +58,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
   activeConnection,
   activeDashboardId,
   setActiveDashboardId,
-  activeMode,
-  setActiveMode,
   isHmiEditMode,
-  isLayoutMode,
-  setIsLayoutMode,
   isLocked,
   handleToggleLock,
   isFullscreen,
@@ -84,7 +75,6 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
   setIsAlarmModalOpen,
   setIsAlarmHistorianModalOpen,
   setIsFddModalOpen,
-  setIsEngineeringChoiceOpen,
   setIsCloneModalOpen,
   setIsDashMenuOpen,
   handleOpenActiveBrokerSettings,
@@ -265,6 +255,38 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
                 </button>
               )}
 
+              {/* OEE & Downtime Studio */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsToolsMenuOpen(false);
+                  setCurrentView(AppView.OEE_STUDIO);
+                }}
+                className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-200 hover:bg-emerald-500/20 hover:text-emerald-200 flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center space-x-2">
+                  <i className="fas fa-gauge-high text-emerald-400 w-4 text-center text-xs"></i>
+                  <span>OEE & Downtime Studio</span>
+                </div>
+                <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-mono font-bold">Live APQ</span>
+              </button>
+
+              {/* Batch & Lot Traceability */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsToolsMenuOpen(false);
+                  setCurrentView(AppView.TRACEABILITY_STUDIO);
+                }}
+                className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-200 hover:bg-cyan-500/20 hover:text-cyan-200 flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center space-x-2">
+                  <i className="fas fa-barcode text-cyan-400 w-4 text-center text-xs"></i>
+                  <span>Batch & Lot Traceability</span>
+                </div>
+                <span className="text-[9px] bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 rounded font-mono font-bold">Genealogy</span>
+              </button>
+
               {/* Reports */}
               <button
                 type="button"
@@ -355,46 +377,6 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
           </button>
         ) : null}
 
-        {/* Workstation Mode Switcher Toggle (Grid Studio / HMI Canvas) */}
-        <div data-tour="view-toggle" className="flex items-center p-0.5 bg-slate-950 rounded-lg border border-slate-800 shrink-0 min-h-[30px]">
-          <button
-            type="button"
-            onClick={() => setActiveMode('grid')}
-            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
-              activeMode === 'grid'
-                ? isCommunity ? 'bg-emerald-500 text-slate-950 shadow' : isClient ? 'bg-sky-500 text-slate-950 shadow' : 'bg-amber-500 text-slate-950 shadow'
-                : 'text-slate-400 hover:text-white'
-            }`}
-            title="Switch to IIoT Grid Dashboard Studio"
-          >
-            <i className="fas fa-border-all text-xs"></i>
-            <span className="hidden sm:inline">Grid Studio</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveMode('hmi')}
-            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all flex items-center space-x-1 cursor-pointer ${
-              activeMode === 'hmi'
-                ? 'bg-sky-500 text-slate-950 shadow'
-                : 'text-slate-400 hover:text-white'
-            }`}
-            title="Switch to Absolute Web HMI Canvas Designer"
-          >
-            <i className="fas fa-microchip text-xs"></i>
-            <span className="hidden sm:inline">HMI Canvas</span>
-          </button>
-          {!isClient && (
-            <button
-              type="button"
-              onClick={() => setIsEngineeringChoiceOpen(true)}
-              className="p-1 text-slate-400 hover:text-amber-400 transition-colors"
-              title="Change Engineering Architecture Mode"
-            >
-              <i className="fas fa-sliders text-xs"></i>
-            </button>
-          )}
-        </div>
-
         {/* HMI Screen Switcher Dropdown & Add Screen (+) Button */}
         {appState.dashboards && appState.dashboards.length > 0 && (
           <div className="flex items-center space-x-1 shrink-0">
@@ -411,8 +393,8 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
               ))}
             </select>
 
-            {/* Add Screen (+) Button - Visible in HMI Canvas edit mode */}
-            {activeMode === 'hmi' && !isFullscreen && isHmiEditMode && !isLocked && !isClient && (
+            {/* Add Screen (+) Button */}
+            {!isFullscreen && isHmiEditMode && !isLocked && !isClient && (
               <button
                 type="button"
                 onClick={handleCreateScreenCheck}
@@ -450,79 +432,18 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
         )}
       </div>
 
-      {/* Right Toolbar: Contextual Actions in Grid Dashboard Mode */}
+      {/* Right Toolbar */}
       <div className={`flex items-center gap-1.5 ${isDesktop ? 'flex-wrap' : 'shrink-0'}`}>
-        {currentView === AppView.DASHBOARD && activeMode === 'grid' && (
-          <>
-            {!isFullscreen && !isClient && (
-              <button 
-                type="button"
-                onClick={handleOpenAddPanel}
-                className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold rounded-lg text-xs transition-all flex items-center space-x-1.5 cursor-pointer shrink-0 shadow-md active:scale-95"
-                title="Add Component (TASCGrid, Line Graph, Gauge, etc.)"
-              >
-                <i className="fas fa-plus-circle text-xs"></i>
-                <span>+ Component</span>
-              </button>
-            )}
-
-            {!isFullscreen && !isClient && (
-              <button 
-                type="button"
-                onClick={handleCreateScreenCheck}
-                className="px-2.5 py-1 bg-sky-500 hover:bg-sky-400 text-slate-950 font-extrabold rounded-lg text-xs transition-all flex items-center space-x-1.5 cursor-pointer shrink-0 shadow-md active:scale-95"
-                title="Create New HMI Dashboard Screen Page"
-              >
-                <i className="fas fa-plus text-xs"></i>
-                <span>New Screen</span>
-              </button>
-            )}
-
-            {!isLocked && !isFullscreen && !isClient && (
-              <button 
-                type="button"
-                onClick={() => setIsCloneModalOpen(true)}
-                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                title="Clone Panel"
-              >
-                <i className="fas fa-clone text-sm" style={{ color: activeThemeObj.primary }}></i>
-              </button>
-            )}
-
-            {isLocked && (
-              <button
-                type="button"
-                onClick={handleToggleLock}
-                className="px-2.5 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-semibold flex items-center space-x-1.5 hover:bg-amber-500/30 transition-colors cursor-pointer"
-                title="Panel Edits Locked — Click to unlock"
-              >
-                <i className="fas fa-lock text-[11px]"></i>
-                <span className="hidden sm:inline">Locked</span>
-              </button>
-            )}
-
-            {isLayoutMode && (
-              <button
-                type="button"
-                onClick={() => setIsLayoutMode(false)}
-                className="px-2.5 py-1 bg-sky-500/20 text-sky-400 border border-sky-500/30 rounded-lg text-xs font-semibold flex items-center space-x-1.5 animate-pulse hover:bg-sky-500/30 transition-colors cursor-pointer"
-                title="Layout Editing Active — Click done when finished"
-              >
-                <i className="fas fa-table-cells text-[11px]"></i>
-                <span className="hidden sm:inline">Editing Layout</span>
-              </button>
-            )}
-
-            {/* 3-Dot Dropdown Menu */}
-            <button 
-              type="button"
-              onClick={() => setIsDashMenuOpen(true)}
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-              title="Dashboard Options Menu"
-            >
-              <i className="fas fa-ellipsis-vertical text-sm"></i>
-            </button>
-          </>
+        {isLocked && (
+          <button
+            type="button"
+            onClick={handleToggleLock}
+            className="px-2.5 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-semibold flex items-center space-x-1.5 hover:bg-amber-500/30 transition-colors cursor-pointer"
+            title="Screen Edits Locked — Click to unlock"
+          >
+            <i className="fas fa-lock text-[11px]"></i>
+            <span className="hidden sm:inline">Locked</span>
+          </button>
         )}
       </div>
     </header>

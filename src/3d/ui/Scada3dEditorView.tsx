@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import * as THREE from 'three';
 import { ThreeViewport, ThreeViewportRef } from '../core/ThreeViewport';
 import { ViewportToolbar } from './ViewportToolbar';
@@ -15,8 +16,10 @@ import { Scada3dBinding } from '../types/bindings';
 import { TransformMode, CoordinateSpace, TransformSnapConfig, ObjectTransformData } from '../types/transform';
 import { AssetCatalogItem3D } from '../assets/AssetRegistry';
 import { Dashboard } from '../../types';
+import { Ai3dAssetService } from '../../services/Ai3dAssetService';
 
 interface Scada3dEditorViewProps {
+  onBack?: () => void;
   latestValues?: Record<string, { val: any; time?: string }>;
   dashboards?: Dashboard[];
   onNavigateTo2dDashboard?: (dashboardId: string) => void;
@@ -24,6 +27,7 @@ interface Scada3dEditorViewProps {
 }
 
 export const Scada3dEditorView: React.FC<Scada3dEditorViewProps> = ({
+  onBack,
   latestValues = {},
   dashboards = [],
   onNavigateTo2dDashboard,
@@ -31,10 +35,16 @@ export const Scada3dEditorView: React.FC<Scada3dEditorViewProps> = ({
 }) => {
   const viewportRef = useRef<ThreeViewportRef>(null);
 
+  // Unsaved Changes Tracking & Exit Prompt State
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
+  const [showExitConfirmModal, setShowExitConfirmModal] = useState<boolean>(false);
+  const [saveSuccessToast, setSaveSuccessToast] = useState<boolean>(false);
+
   // Active scene state
   const [currentScene, setCurrentScene] = useState<Scada3dScene>(() => {
+    const activeId = ScenePersistence.getActiveSceneId();
     const scenes = ScenePersistence.loadAllScenes();
-    return scenes[0] || ScenePersistence.createDefaultDemoScene();
+    return scenes.find(s => s.id === activeId) || scenes[0] || ScenePersistence.createDefaultDemoScene();
   });
   const [sceneObjects, setSceneObjects] = useState<Scada3dObject[]>(() => currentScene.objects || []);
 
@@ -65,6 +75,17 @@ export const Scada3dEditorView: React.FC<Scada3dEditorViewProps> = ({
   const [isSaveToLibraryOpen, setIsSaveToLibraryOpen] = useState(false);
   const [isLibraryBrowserOpen, setIsLibraryBrowserOpen] = useState(false);
   const [isCadImportOpen, setIsCadImportOpen] = useState(false);
+
+  // Delete modal state
+  const [delete3dModalConfig, setDelete3dModalConfig] = useState<{
+    isOpen: boolean;
+    objectId: string;
+    objectName: string;
+  }>({
+    isOpen: false,
+    objectId: '',
+    objectName: ''
+  });
 
   // Simulated Telemetry for demo when real PLC tags are offline
   const [simulatedValues, setSimulatedValues] = useState<Record<string, { val: any }>>({});
@@ -133,6 +154,92 @@ export const Scada3dEditorView: React.FC<Scada3dEditorViewProps> = ({
     }
   }, [selectedObjectId, sceneObjects, isRuntimeMode]);
 
+  // Initialize and pre-compile custom AI 3D assets on mount
+  useEffect(() => {
+    Ai3dAssetService.initializeRegistry();
+  }, []);
+
+  // Warn user on browser refresh/close if unsaved changes exist
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  // History Stack for Undo / Redo in 3D Scene Editor
+  const historyRef = useRef<Scada3dObject[][]>([currentScene.objects || []]);
+  const historyIndexRef = useRef<number>(0);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  // Push new state snapshot to 3D undo history
+  const pushHistoryState = useCallback((newObjects: Scada3dObject[]) => {
+    const currentHistory = historyRef.current.slice(0, historyIndexRef.current + 1);
+    currentHistory.push(JSON.parse(JSON.stringify(newObjects)));
+    if (currentHistory.length > 50) currentHistory.shift();
+    historyRef.current = currentHistory;
+    historyIndexRef.current = currentHistory.length - 1;
+    setCanUndo(historyIndexRef.current > 0);
+    setCanRedo(false);
+    setSceneObjects(newObjects);
+    setHasUnsavedChanges(true);
+  }, []);
+
+  // Undo Action
+  const handleUndo = useCallback(() => {
+    if (historyIndexRef.current > 0) {
+      historyIndexRef.current -= 1;
+      const prevObjects: Scada3dObject[] = JSON.parse(JSON.stringify(historyRef.current[historyIndexRef.current]));
+
+      if (viewportRef.current?.object3DManager) {
+        viewportRef.current.object3DManager.syncFromSceneData(prevObjects);
+        // Re-attach selection if previous object still exists
+        if (selectedObjectId) {
+          const matchingThree = viewportRef.current.object3DManager.getThreeObjectByScadaId(selectedObjectId);
+          viewportRef.current.selectionManager?.select(matchingThree || null);
+          const found = prevObjects.find(o => o.id === selectedObjectId);
+          setSelectedObjectData(found || null);
+          if (!found) setSelectedObjectId(null);
+        }
+      }
+
+      setSceneObjects(prevObjects);
+      setCanUndo(historyIndexRef.current > 0);
+      setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
+      setHasUnsavedChanges(true);
+    }
+  }, [selectedObjectId]);
+
+  // Redo Action
+  const handleRedo = useCallback(() => {
+    if (historyIndexRef.current < historyRef.current.length - 1) {
+      historyIndexRef.current += 1;
+      const nextObjects: Scada3dObject[] = JSON.parse(JSON.stringify(historyRef.current[historyIndexRef.current]));
+
+      if (viewportRef.current?.object3DManager) {
+        viewportRef.current.object3DManager.syncFromSceneData(nextObjects);
+        // Re-attach selection if object exists
+        if (selectedObjectId) {
+          const matchingThree = viewportRef.current.object3DManager.getThreeObjectByScadaId(selectedObjectId);
+          viewportRef.current.selectionManager?.select(matchingThree || null);
+          const found = nextObjects.find(o => o.id === selectedObjectId);
+          setSelectedObjectData(found || null);
+          if (!found) setSelectedObjectId(null);
+        }
+      }
+
+      setSceneObjects(nextObjects);
+      setCanUndo(historyIndexRef.current > 0);
+      setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
+      setHasUnsavedChanges(true);
+    }
+  }, [selectedObjectId]);
+
   // Save Scene
   const handleSaveScene = useCallback(() => {
     if (!viewportRef.current) return;
@@ -145,7 +252,47 @@ export const Scada3dEditorView: React.FC<Scada3dEditorViewProps> = ({
     ScenePersistence.saveScene(updatedScene);
     setCurrentScene(updatedScene);
     setSceneObjects(updatedObjects);
+    setHasUnsavedChanges(false);
+    setSaveSuccessToast(true);
+    setTimeout(() => setSaveSuccessToast(false), 2500);
   }, [currentScene]);
+
+  // Back Navigation & Unsaved Exit Logic
+  const handleBackRequest = useCallback(() => {
+    if (hasUnsavedChanges) {
+      setShowExitConfirmModal(true);
+    } else {
+      if (onBack) {
+        onBack();
+      } else if (onNavigateTo2dDashboard && dashboards.length > 0) {
+        onNavigateTo2dDashboard(dashboards[0].dashboardId);
+      }
+    }
+  }, [hasUnsavedChanges, onBack, onNavigateTo2dDashboard, dashboards]);
+
+  const handleSaveAndExit = useCallback(() => {
+    handleSaveScene();
+    setShowExitConfirmModal(false);
+    if (onBack) {
+      onBack();
+    } else if (onNavigateTo2dDashboard && dashboards.length > 0) {
+      onNavigateTo2dDashboard(dashboards[0].dashboardId);
+    }
+  }, [handleSaveScene, onBack, onNavigateTo2dDashboard, dashboards]);
+
+  const handleDiscardAndExit = useCallback(() => {
+    setHasUnsavedChanges(false);
+    setShowExitConfirmModal(false);
+    if (onBack) {
+      onBack();
+    } else if (onNavigateTo2dDashboard && dashboards.length > 0) {
+      onNavigateTo2dDashboard(dashboards[0].dashboardId);
+    }
+  }, [onBack, onNavigateTo2dDashboard, dashboards]);
+
+  const handleCancelExit = useCallback(() => {
+    setShowExitConfirmModal(false);
+  }, []);
 
   // Add Equipment from Library
   const handleAddEquipment = (asset: AssetCatalogItem3D) => {
@@ -170,22 +317,54 @@ export const Scada3dEditorView: React.FC<Scada3dEditorViewProps> = ({
     viewportRef.current.addObject(newObj);
     const updated = viewportRef.current.getSceneData();
     setSceneObjects(updated);
+    pushHistoryState(updated);
     setSelectedObjectId(newId);
     const addedObj = updated.find(o => o.id === newId) || null;
     setSelectedObjectData(addedObj);
   };
 
   // Delete Object
-  const handleDeleteObject = (id: string) => {
+  const handleDeleteObject = useCallback((id: string) => {
     if (!viewportRef.current?.object3DManager) return;
     viewportRef.current.object3DManager.removeObject(id);
     const updated = viewportRef.current.getSceneData();
     setSceneObjects(updated);
+    pushHistoryState(updated);
     if (selectedObjectId === id) {
       setSelectedObjectId(null);
       viewportRef.current.selectionManager?.select(null);
     }
-  };
+  }, [selectedObjectId, pushHistoryState]);
+
+  // Duplicate Object (Ctrl+D)
+  const handleDuplicateObject = useCallback((id: string) => {
+    if (!viewportRef.current?.object3DManager) return;
+    const source = sceneObjects.find(o => o.id === id);
+    if (!source) return;
+
+    const newId = `${source.assetId.split('.').pop()?.toUpperCase() || 'EQUIP'}-${Math.floor(100 + Math.random() * 900)}`;
+    const cloned: Scada3dObject = {
+      ...JSON.parse(JSON.stringify(source)),
+      id: newId,
+      name: `${source.name} (Copy)`,
+      transform: {
+        ...source.transform,
+        position: {
+          x: source.transform.position.x + 1.5,
+          y: source.transform.position.y,
+          z: source.transform.position.z + 1.5
+        }
+      }
+    };
+
+    viewportRef.current.addObject(cloned);
+    const updated = viewportRef.current.getSceneData();
+    setSceneObjects(updated);
+    pushHistoryState(updated);
+    setSelectedObjectId(newId);
+    const addedObj = updated.find(o => o.id === newId) || null;
+    setSelectedObjectData(addedObj);
+  }, [sceneObjects, pushHistoryState]);
 
   // Toggle Visibility
   const handleToggleVisibility = (id: string, visible: boolean) => {
@@ -193,6 +372,7 @@ export const Scada3dEditorView: React.FC<Scada3dEditorViewProps> = ({
     viewportRef.current.object3DManager.updateObjectData(id, { visible });
     const updated = viewportRef.current.getSceneData();
     setSceneObjects(updated);
+    pushHistoryState(updated);
   };
 
   // Toggle Lock
@@ -201,6 +381,7 @@ export const Scada3dEditorView: React.FC<Scada3dEditorViewProps> = ({
     viewportRef.current.object3DManager.updateObjectData(id, { locked });
     const updated = viewportRef.current.getSceneData();
     setSceneObjects(updated);
+    pushHistoryState(updated);
   };
 
   // Rename Object
@@ -209,6 +390,7 @@ export const Scada3dEditorView: React.FC<Scada3dEditorViewProps> = ({
     viewportRef.current.object3DManager.updateObjectData(id, { name: newName });
     const updated = viewportRef.current.getSceneData();
     setSceneObjects(updated);
+    pushHistoryState(updated);
   };
 
   // Update Numeric Transform from Property Panel
@@ -218,6 +400,7 @@ export const Scada3dEditorView: React.FC<Scada3dEditorViewProps> = ({
     viewportRef.current.selectionManager?.updateSelectionBox();
     const updated = viewportRef.current.getSceneData();
     setSceneObjects(updated);
+    pushHistoryState(updated);
   };
 
   // Update Metadata from Property Panel
@@ -226,13 +409,14 @@ export const Scada3dEditorView: React.FC<Scada3dEditorViewProps> = ({
     viewportRef.current.object3DManager.updateObjectData(id, updates);
     const updated = viewportRef.current.getSceneData();
     setSceneObjects(updated);
+    pushHistoryState(updated);
   };
 
   // Transform Toolbar Controls Handlers
-  const handleSetMode = (mode: TransformMode) => {
+  const handleSetMode = useCallback((mode: TransformMode) => {
     setTransformMode(mode);
     viewportRef.current?.setMode(mode);
-  };
+  }, []);
 
   const handleSetSpace = (space: CoordinateSpace) => {
     setCoordSpace(space);
@@ -254,39 +438,80 @@ export const Scada3dEditorView: React.FC<Scada3dEditorViewProps> = ({
     viewportRef.current?.setProjection(proj);
   };
 
-  const [delete3dModalConfig, setDelete3dModalConfig] = useState<{
-    isOpen: boolean;
-    objectId: string;
-    objectName: string;
-  }>({
-    isOpen: false,
-    objectId: '',
-    objectName: ''
-  });
-
-  // Global Delete Key listener for 3D Viewport
+  // Global Keyboard Shortcut Listener for Undo, Redo, Delete, Duplicate, and Tool Switching
   useEffect(() => {
-    const handle3dKeyDown = (e: KeyboardEvent) => {
+    const handleShortcut = (e: KeyboardEvent) => {
       if (isRuntimeMode) return;
       const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || (target as any).isContentEditable)) {
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          (target as any).isContentEditable)
+      ) {
         return;
       }
-      if (e.key === 'Delete' || e.key === 'Backspace' || e.code === 'Delete' || e.code === 'Backspace') {
+
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+      if (isCtrlOrCmd) {
+        if ((e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
+          e.preventDefault();
+          handleUndo();
+        } else if ((e.key === 'z' || e.key === 'Z') && e.shiftKey) {
+          e.preventDefault();
+          handleRedo();
+        } else if (e.key === 'y' || e.key === 'Y') {
+          e.preventDefault();
+          handleRedo();
+        } else if (e.key === 'd' || e.key === 'D') {
+          e.preventDefault();
+          if (selectedObjectId) {
+            handleDuplicateObject(selectedObjectId);
+          }
+        } else if (e.key === 's' || e.key === 'S') {
+          e.preventDefault();
+          handleSaveScene();
+        }
+      } else if (e.key === 'Delete' || e.key === 'Backspace' || e.code === 'Delete' || e.code === 'Backspace') {
         if (selectedObjectId) {
           e.preventDefault();
-          const targetObj = sceneObjects.find(o => o.id === selectedObjectId);
-          setDelete3dModalConfig({
-            isOpen: true,
-            objectId: selectedObjectId,
-            objectName: targetObj?.name || selectedObjectId
-          });
+          handleDeleteObject(selectedObjectId);
+        }
+      } else if (e.key === 'q' || e.key === 'Q') {
+        e.preventDefault();
+        handleSetMode('select');
+      } else if (e.key === 'w' || e.key === 'W') {
+        e.preventDefault();
+        handleSetMode('translate');
+      } else if (e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        handleSetMode('rotate');
+      } else if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        handleSetMode('scale');
+      } else if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        if (selectedObjectId) {
+          viewportRef.current?.frameSelected();
+        } else {
+          viewportRef.current?.frameAll();
         }
       }
     };
-    window.addEventListener('keydown', handle3dKeyDown);
-    return () => window.removeEventListener('keydown', handle3dKeyDown);
-  }, [isRuntimeMode, selectedObjectId, sceneObjects]);
+
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, [
+    isRuntimeMode,
+    handleUndo,
+    handleRedo,
+    selectedObjectId,
+    handleDeleteObject,
+    handleDuplicateObject,
+    handleSaveScene,
+    handleSetMode
+  ]);
 
   const availableDashboardsList = dashboards.map(d => ({
     id: d.dashboardId,
@@ -320,18 +545,25 @@ export const Scada3dEditorView: React.FC<Scada3dEditorViewProps> = ({
     };
 
     const threeObj = viewportRef.current.object3DManager.addObject(newObj, importedGroup);
+    const updated = viewportRef.current.getSceneData();
+    pushHistoryState(updated);
     if (viewportRef.current.selectionManager && threeObj) {
       viewportRef.current.selectionManager.select(threeObj);
     }
     setSelectedObjectId(newId);
     setSelectedObjectData(newObj);
-    setSceneObjects(viewportRef.current.getSceneData());
   };
 
   return (
     <div className="relative w-full h-[calc(100vh-3.5rem)] flex flex-col bg-slate-950 overflow-hidden select-none">
       {/* 1. Top Viewport Toolbar */}
       <ViewportToolbar
+        onBack={handleBackRequest}
+        hasUnsavedChanges={hasUnsavedChanges}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
         mode={transformMode}
         onSetMode={handleSetMode}
         space={coordSpace}
@@ -447,6 +679,13 @@ export const Scada3dEditorView: React.FC<Scada3dEditorViewProps> = ({
               const updated = sceneObjects.map(o => (o.id === data.id ? data : o));
               setSceneObjects(updated);
               setSelectedObjectData(data);
+              setHasUnsavedChanges(true);
+            }}
+            onTransformEnd={data => {
+              if (viewportRef.current) {
+                const updated = viewportRef.current.getSceneData();
+                pushHistoryState(updated);
+              }
             }}
           />
 
@@ -497,6 +736,7 @@ export const Scada3dEditorView: React.FC<Scada3dEditorViewProps> = ({
           if (viewportRef.current?.engine) {
             viewportRef.current.engine.loadScene(assembly.sceneDescriptor);
             setSceneObjects(assembly.sceneDescriptor.objects || []);
+            setHasUnsavedChanges(true);
           }
           setIsLibraryBrowserOpen(false);
         }}
@@ -510,6 +750,80 @@ export const Scada3dEditorView: React.FC<Scada3dEditorViewProps> = ({
           onPlaceOnCanvas={handlePlaceCadOnCanvas}
           materialManager={viewportRef.current.engine.materialManager}
         />
+      )}
+
+      {/* Save Success Floating Toast */}
+      {saveSuccessToast && (
+        <div className="fixed top-16 right-6 z-[120] bg-emerald-950/90 text-emerald-300 border border-emerald-500/50 px-4 py-2.5 rounded-xl shadow-2xl backdrop-blur-md flex items-center space-x-2.5 animate-in slide-in-from-top-2 duration-200">
+          <i className="fas fa-circle-check text-emerald-400 text-base"></i>
+          <div className="text-xs font-bold">3D SCADA Scene Saved Successfully</div>
+        </div>
+      )}
+
+      {/* Unsaved Changes Confirmation Modal before Exiting 3D Studio */}
+      {showExitConfirmModal && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150"
+          onClick={handleCancelExit}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') handleCancelExit();
+          }}
+          tabIndex={-1}
+        >
+          <div 
+            className="bg-[#0f172a] border border-amber-500/50 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start space-x-3.5">
+              <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                <i className="fas fa-triangle-exclamation text-lg animate-bounce"></i>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-bold text-white tracking-wide flex items-center space-x-2">
+                  <span>Unsaved Changes in 3D Scene</span>
+                </h3>
+                <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
+                  You have unsaved changes in your 3D SCADA scene. Would you like to save your current working layout before returning to the dashboard?
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 text-[11px] text-slate-400 space-y-1">
+              <div className="flex items-center space-x-2 text-slate-300 font-medium">
+                <i className="fas fa-circle-info text-sky-400 text-[10px]"></i>
+                <span>Exiting without saving will discard newly positioned equipment.</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={handleCancelExit}
+                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold text-xs transition-all cursor-pointer text-center"
+              >
+                Keep Editing
+              </button>
+              <button
+                type="button"
+                onClick={handleDiscardAndExit}
+                className="px-3.5 py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 rounded-xl font-bold text-xs transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
+              >
+                <i className="fas fa-trash-can text-xs"></i>
+                <span>Discard & Exit</span>
+              </button>
+              <button
+                type="button"
+                autoFocus
+                onClick={handleSaveAndExit}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
+              >
+                <i className="fas fa-floppy-disk text-xs"></i>
+                <span>Save & Exit</span>
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* 3D Object Delete Confirmation Modal */}

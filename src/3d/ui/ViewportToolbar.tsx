@@ -3,6 +3,12 @@ import { TransformMode, CoordinateSpace, TransformSnapConfig } from '../types/tr
 import { CameraPresetView, CameraProjection } from '../types/scene';
 
 interface ViewportToolbarProps {
+  onBack?: () => void;
+  hasUnsavedChanges?: boolean;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
   mode: TransformMode;
   onSetMode: (mode: TransformMode) => void;
   space: CoordinateSpace;
@@ -28,6 +34,12 @@ interface ViewportToolbarProps {
 }
 
 export const ViewportToolbar: React.FC<ViewportToolbarProps> = ({
+  onBack,
+  hasUnsavedChanges = false,
+  canUndo = false,
+  canRedo = false,
+  onUndo,
+  onRedo,
   mode,
   onSetMode,
   space,
@@ -56,10 +68,58 @@ export const ViewportToolbar: React.FC<ViewportToolbarProps> = ({
       className="h-12 bg-slate-900/95 border-b border-slate-800 px-3 flex items-center justify-between gap-2 select-none z-20 shrink-0 text-xs shadow-md"
       onPointerDown={e => e.stopPropagation()}
     >
-      {/* Left Section: Transform Manipulation Tools */}
+      {/* Left Section: Back Button, Undo/Redo & Transform Manipulation Tools */}
       <div className="flex items-center gap-1.5">
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="px-3 py-1.5 bg-slate-800/90 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700/80 hover:border-slate-600 font-bold rounded-lg flex items-center gap-2 transition-all shadow-sm cursor-pointer mr-1 group"
+            title="Return to 2D Dashboard"
+          >
+            <i className="fas fa-arrow-left text-xs text-sky-400 group-hover:-translate-x-0.5 transition-transform"></i>
+            <span>Back</span>
+            {hasUnsavedChanges && (
+              <span 
+                className="w-2 h-2 rounded-full bg-amber-400 animate-pulse ml-0.5" 
+                title="Unsaved changes in scene"
+              ></span>
+            )}
+          </button>
+        )}
+
         {!isRuntimeMode && (
           <>
+            {/* Undo & Redo Quick Buttons (Icon-Only Compact) */}
+            <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 mr-1">
+              <button
+                type="button"
+                onClick={onUndo}
+                disabled={!canUndo}
+                className={`w-7 h-7 rounded flex items-center justify-center transition-all ${
+                  canUndo
+                    ? 'text-slate-300 hover:text-white hover:bg-slate-800 cursor-pointer'
+                    : 'text-slate-600 cursor-not-allowed opacity-30'
+                }`}
+                title="Undo (Ctrl+Z)"
+              >
+                <i className="fas fa-rotate-left text-xs"></i>
+              </button>
+
+              <button
+                type="button"
+                onClick={onRedo}
+                disabled={!canRedo}
+                className={`w-7 h-7 rounded flex items-center justify-center transition-all ${
+                  canRedo
+                    ? 'text-slate-300 hover:text-white hover:bg-slate-800 cursor-pointer'
+                    : 'text-slate-600 cursor-not-allowed opacity-30'
+                }`}
+                title="Redo (Ctrl+Y)"
+              >
+                <i className="fas fa-rotate-right text-xs"></i>
+              </button>
+            </div>
             <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800">
               <button
                 type="button"
@@ -253,7 +313,7 @@ export const ViewportToolbar: React.FC<ViewportToolbarProps> = ({
       </div>
 
       {/* Right Section: Library + Mode Toggle + Save Scene */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         {/* Library Buttons */}
         {!isRuntimeMode && (
           <>
@@ -309,11 +369,18 @@ export const ViewportToolbar: React.FC<ViewportToolbarProps> = ({
           <button
             type="button"
             onClick={onSaveScene}
-            className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded-lg flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
-            title="Save 3D Scene to Project"
+            className={`px-3 py-1.5 font-bold rounded-lg flex items-center gap-1.5 transition-all shadow-sm cursor-pointer ${
+              hasUnsavedChanges
+                ? 'bg-amber-600 hover:bg-amber-500 text-white ring-2 ring-amber-400/40 shadow-amber-900/30'
+                : 'bg-sky-600 hover:bg-sky-500 text-white'
+            }`}
+            title={hasUnsavedChanges ? 'Save unsaved changes to 3D scene' : 'Save 3D Scene to Project'}
           >
-            <i className="fas fa-floppy-disk text-xs"></i>
+            <i className={`fas ${hasUnsavedChanges ? 'fa-floppy-disk animate-bounce text-amber-200' : 'fa-floppy-disk'} text-xs`}></i>
             <span>Save</span>
+            {hasUnsavedChanges && (
+              <span className="text-[10px] bg-amber-950/80 text-amber-200 px-1 rounded text-xs font-mono font-normal">●</span>
+            )}
           </button>
         )}
       </div>

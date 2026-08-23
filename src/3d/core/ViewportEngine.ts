@@ -158,7 +158,11 @@ export class ViewportEngine {
     });
 
     // 2. Render active camera
-    this.renderer.render(this.scene, this.cameraManager.activeCamera);
+    try {
+      this.renderer.render(this.scene, this.cameraManager.activeCamera);
+    } catch (err) {
+      console.error('[ViewportEngine] Error in render:', err);
+    }
 
     // 3. Queue next frame
     this.animationFrameId = requestAnimationFrame(this.render);

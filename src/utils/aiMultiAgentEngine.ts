@@ -17,6 +17,9 @@ import { getAllLearnedAliases, getAllPlantKnowledgeNotes, getPrecomputedChunk } 
 import { resolveValidatedAlias } from './aiAliasValidator';
 import { queryHistoricalRange } from './trendHistorianEngine';
 import { getFddState } from './fddEngine';
+import { OeePersistence } from '../services/OeePersistence';
+import { OeeCalculationEngine } from '../services/OeeCalculationEngine';
+import { TraceabilityService } from '../services/TraceabilityService';
 
 export interface MultiAgentContext {
   appState: AppState;
@@ -222,6 +225,41 @@ export async function gatherMultiAgentEvidence(
     diagEvidence = runDiagnosticSpecialist(ctx.appState);
   }
 
+  // 6. Run OEE Specialist if production, downtime, efficiency, or machine speed is asked
+  let oeeEvidence: string | null = null;
+  if (cleanPrompt.includes('oee') || cleanPrompt.includes('downtime') || cleanPrompt.includes('bottling') || cleanPrompt.includes('cnc') || cleanPrompt.includes('carton') || cleanPrompt.includes('availability') || cleanPrompt.includes('quality') || cleanPrompt.includes('performance') || cleanPrompt.includes('pareto') || cleanPrompt.includes('shift')) {
+    try {
+      const oeeLines = OeePersistence.loadLines();
+      const activeLineId = OeePersistence.getActiveLineId();
+      const activeLine = oeeLines.find(l => l.id === activeLineId) || oeeLines[0];
+      if (activeLine) {
+        const events = OeePersistence.loadEvents(activeLine.id);
+        const tags = activeLine.tags || {};
+        const rawTotal = tags.totalCountTag && ctx.latestValues[tags.totalCountTag] !== undefined
+          ? Number(ctx.latestValues[tags.totalCountTag]?.val || 0)
+          : 0;
+        const rawReject = tags.rejectCountTag && ctx.latestValues[tags.rejectCountTag] !== undefined
+          ? Number(ctx.latestValues[tags.rejectCountTag]?.val || 0)
+          : 0;
+        const metrics = OeeCalculationEngine.calculateOee(activeLine, activeLine.plannedShiftHours * 3600, 0, activeLine.plannedDowntimeSec, 0, rawTotal, rawReject);
+        oeeEvidence = `Line "${activeLine.name}" (Code: ${activeLine.code}): OEE=${metrics.oeePct.toFixed(1)}% (A=${metrics.availabilityPct.toFixed(1)}%, P=${metrics.performancePct.toFixed(1)}%, Q=${metrics.qualityPct.toFixed(1)}%), Produced=${metrics.totalCount} units, Rejects=${metrics.rejectCount}, Ideal Cycle=${activeLine.idealCycleTimeSec}s, Target=${activeLine.targetOeePct}%. Downtime Events: ${events.length}.`;
+      }
+    } catch {}
+  }
+
+  // 7. Run Batch Traceability Specialist if batches, recipes, genealogy, lot, or recall are asked
+  let traceEvidence: string | null = null;
+  if (cleanPrompt.includes('batch') || cleanPrompt.includes('recipe') || cleanPrompt.includes('genealogy') || cleanPrompt.includes('lot') || cleanPrompt.includes('recall') || cleanPrompt.includes('coa') || cleanPrompt.includes('cfr') || cleanPrompt.includes('serial')) {
+    try {
+      const batches = TraceabilityService.loadBatches();
+      const activeBatchId = TraceabilityService.getActiveBatchId();
+      const activeBatch = batches.find(b => b.id === activeBatchId) || batches[0];
+      if (activeBatch) {
+        traceEvidence = `Batch ${activeBatch.batchNumber} (WO: ${activeBatch.workOrderNumber}, Recipe: "${activeBatch.recipeName}"): Status=${activeBatch.status}, Target=${activeBatch.targetQuantity} ${activeBatch.unit}, Actual=${activeBatch.actualQuantity}, Yield=${activeBatch.yieldPercentage}%, Raw Materials Bound=${activeBatch.rawMaterials.length} lots, Monitored CPPs=${activeBatch.parameters.length}, Finished Serials=${activeBatch.finishedSerials.length}. Total Batches in system: ${batches.length}.`;
+      }
+    } catch {}
+  }
+
   emitAgentActivity('supervisor', 'Supervisor Orchestrator', 'completed', 'Evidence compiled for synthesis');
 
   // Format into structured evidence block
@@ -244,6 +282,12 @@ export async function gatherMultiAgentEvidence(
   }
   if (diagEvidence) {
     lines.push(`- PLC Driver Health: ${diagEvidence.connectedDrivers}/${diagEvidence.totalDrivers} Drivers Online, ${diagEvidence.badQualityTagsCount} Bad Quality Tags`);
+  }
+  if (oeeEvidence) {
+    lines.push(`- OEE Production Intelligence: ${oeeEvidence}`);
+  }
+  if (traceEvidence) {
+    lines.push(`- Regulated Batch Traceability: ${traceEvidence}`);
   }
 
   return lines.length > 1 ? lines.join('\n') : '';

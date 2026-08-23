@@ -13,7 +13,6 @@ import { CoachMarkOverlay } from './CoachMarkOverlay';
 import { AiChatFab } from './AiChatFab';
 import { AiChatDrawer } from './AiChatDrawer';
 import ExitSessionModal from './ExitSessionModal';
-import EngineeringChoiceModal from './EngineeringChoiceModal';
 import { ConfirmModal } from './ConfirmModal';
 import { EditionManager } from '../utils/EditionManager';
 import { useDeviceCapability } from '../utils/deviceDetection';
@@ -31,10 +30,7 @@ export interface ModalRegistryProps {
   clientInfo?: { clientName: string; expiresAt?: string; isSignedPackage?: boolean };
   currentView: AppView;
   setCurrentView: (view: AppView) => void;
-  activeMode: 'grid' | 'hmi';
-  setActiveMode: (mode: 'grid' | 'hmi') => void;
   isLocked: boolean;
-  isLayoutMode: boolean;
   editionMgr: EditionManager;
   activeDashboard?: Dashboard;
   activeAlarms: any[];
@@ -91,10 +87,7 @@ export interface ModalRegistryProps {
   setIsAiDrawerOpen: (val: boolean) => void;
   isExitSessionModalOpen: boolean;
   setIsExitSessionModalOpen: (val: boolean) => void;
-  isEngineeringChoiceOpen: boolean;
-  setIsEngineeringChoiceOpen: (val: boolean) => void;
   handleToggleLock: () => void;
-  handleEditLayout: () => void;
   handleAddPanelSelect: (type: any) => void;
   handleClonePanels: (panels: Panel[], targetDashId: string) => void;
   handleConfirmClearAll: () => void;
@@ -111,10 +104,7 @@ export const ModalRegistry: React.FC<ModalRegistryProps> = React.memo(({
   clientInfo,
   currentView,
   setCurrentView,
-  activeMode,
-  setActiveMode,
   isLocked,
-  isLayoutMode,
   editionMgr,
   activeDashboard,
   activeAlarms,
@@ -164,10 +154,7 @@ export const ModalRegistry: React.FC<ModalRegistryProps> = React.memo(({
   setIsAiDrawerOpen,
   isExitSessionModalOpen,
   setIsExitSessionModalOpen,
-  isEngineeringChoiceOpen,
-  setIsEngineeringChoiceOpen,
   handleToggleLock,
-  handleEditLayout,
   handleAddPanelSelect,
   handleClonePanels,
   handleConfirmClearAll,
@@ -187,10 +174,8 @@ export const ModalRegistry: React.FC<ModalRegistryProps> = React.memo(({
         isOpen={isDashMenuOpen} 
         onClose={() => setIsDashMenuOpen(false)} 
         isLocked={isLocked}
-        isLayoutMode={isLayoutMode}
         hasPin={!!appState.editPin}
         onToggleLock={handleToggleLock}
-        onEditLayout={handleEditLayout}
         onAddDashboard={() => {
           const check = editionMgr.CanCreateScreen(appState);
           if (!check.allowed) {
@@ -448,14 +433,6 @@ export const ModalRegistry: React.FC<ModalRegistryProps> = React.memo(({
             ? 'Client Edition'
             : 'Engineering Studio'
         }
-      />
-
-      {/* Engineering Architecture Workstation Choice Modal */}
-      <EngineeringChoiceModal
-        isOpen={isEngineeringChoiceOpen}
-        onClose={() => setIsEngineeringChoiceOpen(false)}
-        onSelectMode={(mode) => setActiveMode(mode)}
-        currentMode={activeMode}
       />
 
       {/* Global Confirmation Modal */}

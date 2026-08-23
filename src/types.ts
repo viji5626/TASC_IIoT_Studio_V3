@@ -6,3 +6,4 @@ export * from './types/reporting';
 export * from './types/ai';
 export * from './types/dynamics';
 export * from './types/sql';
+export * from './types/vpn';

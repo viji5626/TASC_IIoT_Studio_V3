@@ -215,6 +215,74 @@ async function startServer() {
     }
   });
 
+  // ─── Virtual NetBird Management API (Simulation & Testing Endpoint) ─────────
+  app.get('/api/virtual-gateway/peers', (req, res) => {
+    const simulateConflict = req.query.simulate_conflict === 'true';
+    const groupId = (req.query.groupId as string) || 'plant-floor-1';
+
+    const peers: any[] = [
+      {
+        id: 'peer-gw-rpi3-01',
+        name: 'rpi3-plant-floor-gateway',
+        ip: '192.168.1.34',
+        connected: true,
+        last_seen: new Date().toISOString(),
+        os: 'linux',
+        groups: [groupId],
+        extra: { is_gateway: true }
+      }
+    ];
+
+    if (simulateConflict) {
+      peers.push({
+        id: 'peer-browser-station-02',
+        name: 'Operator-Console-Workstation-B',
+        ip: '100.64.0.45',
+        connected: true,
+        last_seen: new Date().toISOString(),
+        os: 'browser',
+        groups: [groupId],
+        extra: { station_session_id: 'conflicting-remote-station-999' }
+      });
+    }
+
+    res.json(peers);
+  });
+
+  // ─── Virtual Plant-Floor Modbus Gateway (192.168.1.34 Simulation) ───────────
+  app.get('/api/virtual-gateway/modbus', (req, res) => {
+    const unitId = parseInt((req.query.unitId as string) || '1', 10);
+    const startAddr = parseInt((req.query.addr as string) || '40001', 10);
+    const count = parseInt((req.query.count as string) || '4', 10);
+
+    const now = Date.now();
+    const voltage = +(230 + Math.sin(now / 5000) * 5 + Math.random()).toFixed(2);
+    const current = +(14.5 + Math.cos(now / 4000) * 1.2 + Math.random() * 0.3).toFixed(2);
+    const powerKw = +((voltage * current * 1.732 * 0.92) / 1000).toFixed(2);
+    const frequency = +(50 + (Math.random() - 0.5) * 0.1).toFixed(2);
+    const motorRpm = Math.round(1450 + Math.sin(now / 3000) * 25 + Math.random() * 5);
+    const bearingTemp = +(65.4 + Math.sin(now / 10000) * 4 + Math.random() * 0.2).toFixed(1);
+
+    const tagValues: Record<string, any> = {
+      '40001_Voltage_RMS': voltage,
+      '40002_Current_RMS': current,
+      '40003_Active_Power_kW': powerKw,
+      '40004_Frequency_Hz': frequency,
+      '40005_Motor_Speed_RPM': motorRpm,
+      '40006_Bearing_Temp_C': bearingTemp
+    };
+
+    res.json({
+      success: true,
+      gateway: 'Raspberry-Pi-3-Plant-Floor (192.168.1.34)',
+      timestamp: new Date().toISOString(),
+      unitId,
+      startAddr,
+      count,
+      data: tagValues
+    });
+  });
+
   // ─── Modbus Diagnostic Test Endpoint ─────────────────────────────────────────
   // Usage: GET /api/modbus/test?host=127.0.0.1&port=502&unitId=1&address=0&registerType=holding_register
   app.get('/api/modbus/test', async (req, res) => {

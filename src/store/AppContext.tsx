@@ -91,12 +91,8 @@ export interface AppContextType {
   setActiveMode: React.Dispatch<React.SetStateAction<'grid' | 'hmi'>>;
   isHmiEditMode: boolean;
   setIsHmiEditMode: React.Dispatch<React.SetStateAction<boolean>>;
-  isLayoutMode: boolean;
-  setIsLayoutMode: React.Dispatch<React.SetStateAction<boolean>>;
   selectedPanelId: string | null;
   setSelectedPanelId: React.Dispatch<React.SetStateAction<string | null>>;
-  isEngineeringChoiceOpen: boolean;
-  setIsEngineeringChoiceOpen: React.Dispatch<React.SetStateAction<boolean>>;
 
   // Derived Objects
   activeConnection: MqttConnection | undefined;
@@ -188,7 +184,6 @@ export interface AppContextType {
   handleShareDashboard: (dash: Dashboard) => void;
   handleSelectDashboard: (dashId: string) => void;
   handleToggleLock: () => void;
-  handleEditLayout: () => void;
   handleOpenAddPanel: () => void;
   handleLoadHatcheryDemo: () => void;
   handleSaveAndExitSession: () => void;
@@ -260,21 +255,31 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
   } = sessionEngine;
 
   // Navigation & View state
-  const [currentView, setCurrentView] = useState<AppView>(AppView.DASHBOARD);
-  const [activeMode, setActiveMode] = useState<'grid' | 'hmi'>('grid');
+  const [currentView, setCurrentView] = useState<AppView>(() => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname.toLowerCase();
+      const hash = window.location.hash.toLowerCase();
+      if (path.includes('traceability_studio') || path.includes('traceability') || hash.includes('traceability_studio') || hash.includes('traceability')) {
+        return AppView.TRACEABILITY_STUDIO;
+      }
+      if (path.includes('production_studio') || path.includes('oee_studio') || hash.includes('production_studio') || hash.includes('oee_studio')) {
+        return AppView.OEE_STUDIO;
+      }
+    }
+    return AppView.DASHBOARD;
+  });
+  const [activeMode, setActiveMode] = useState<'grid' | 'hmi'>('hmi');
   const [activeConnectionId, setActiveConnectionId] = useState<string>(
     appState.connections[0]?.connectionId || ''
   );
   const [activeDashboardId, setActiveDashboardId] = useState<string>(
     appState.dashboards[0]?.dashboardId || ''
   );
-  const [isLayoutMode, setIsLayoutMode] = useState(false);
   const [isHmiEditMode, setIsHmiEditMode] = useState<boolean>(() => {
     const isClient = userRole === 'client' || productEdition === ProductEdition.CLIENT_RUNTIME || !!appState.isLockedPackage;
     return !isClient;
   });
   const [selectedPanelId, setSelectedPanelId] = useState<string | null>(null);
-  const [isEngineeringChoiceOpen, setIsEngineeringChoiceOpen] = useState(false);
 
   // Modals & UI Drawers
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -1002,33 +1007,10 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     } else {
       setIsLocked(true);
       setIsRuntimeUnlocked(false);
-      setIsLayoutMode(false);
       setShowLockedNotice(true);
       setAppState(prev => ({ ...prev, isLocked: true }));
     }
-  }, [isLocked, appState.editPin, setPinModalMode, setPendingAction, setIsLocked, setIsRuntimeUnlocked, setIsPinModalOpen, setAppState, setIsLayoutMode, setShowLockedNotice]);
-
-  const handleEditLayout = useCallback(() => {
-    if (isLocked) {
-      if (appState.editPin) {
-        setPinModalMode('enter');
-        setPendingAction(() => () => {
-          setIsLocked(false);
-          setIsRuntimeUnlocked(true);
-          setIsLayoutMode(true);
-          setAppState(prev => ({ ...prev, isLocked: false }));
-        });
-        setIsPinModalOpen(true);
-      } else {
-        setIsLocked(false);
-        setIsRuntimeUnlocked(true);
-        setIsLayoutMode(true);
-        setAppState(prev => ({ ...prev, isLocked: false }));
-      }
-    } else {
-      setIsLayoutMode(prev => !prev);
-    }
-  }, [isLocked, appState.editPin, setPinModalMode, setPendingAction, setIsLocked, setIsRuntimeUnlocked, setIsLayoutMode, setIsPinModalOpen, setAppState]);
+  }, [isLocked, appState.editPin, setPinModalMode, setPendingAction, setIsLocked, setIsRuntimeUnlocked, setIsPinModalOpen, setAppState, setShowLockedNotice]);
 
   const handleOpenAddPanel = useCallback(() => {
     if (isLocked) {
@@ -1122,12 +1104,8 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     setActiveDashboardId,
     activeMode,
     setActiveMode,
-    isLayoutMode,
-    setIsLayoutMode,
     selectedPanelId,
     setSelectedPanelId,
-    isEngineeringChoiceOpen,
-    setIsEngineeringChoiceOpen,
 
     activeConnection,
     activeDashboard,
@@ -1214,7 +1192,6 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     handleShareDashboard,
     handleSelectDashboard,
     handleToggleLock,
-    handleEditLayout,
     handleOpenAddPanel,
     handleLoadHatcheryDemo,
     handleSaveAndExitSession,
@@ -1278,12 +1255,8 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     setActiveMode,
     isHmiEditMode,
     setIsHmiEditMode,
-    isLayoutMode,
-    setIsLayoutMode,
     selectedPanelId,
     setSelectedPanelId,
-    isEngineeringChoiceOpen,
-    setIsEngineeringChoiceOpen,
     activeConnection,
     activeDashboard,
     activePanels,
@@ -1365,7 +1338,6 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     handleShareDashboard,
     handleSelectDashboard,
     handleToggleLock,
-    handleEditLayout,
     handleOpenAddPanel,
     handleLoadHatcheryDemo,
     handleSaveAndExitSession,

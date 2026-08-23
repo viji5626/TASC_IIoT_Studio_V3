@@ -46,6 +46,8 @@ export const SceneHierarchyTree: React.FC<SceneHierarchyTreeProps> = ({
   };
 
   const getEquipmentIcon = (assetId: string): string => {
+    if (assetId.includes('pipe') || assetId.includes('flange') || assetId.includes('reducer') || assetId.includes('elbow') || assetId.includes('tee')) return 'fa-grip-lines text-cyan-400';
+    if (assetId.includes('duct')) return 'fa-vector-square text-sky-400';
     if (assetId.includes('diesel') || assetId.includes('genset') || assetId.includes('generator')) return 'fa-bolt-lightning text-amber-400';
     if (assetId.includes('gas_turbine') || assetId.includes('turbine')) return 'fa-gauge-high text-cyan-400';
     if (assetId.includes('pump')) return 'fa-gears text-sky-400';

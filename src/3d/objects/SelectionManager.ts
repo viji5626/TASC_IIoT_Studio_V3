@@ -114,8 +114,10 @@ export class SelectionManager {
     }
 
     if (object) {
+      object.updateMatrixWorld(true);
       this.selectionBoxHelper = new THREE.BoxHelper(object, 0x38bdf8); // Sky blue outline
       this.selectionBoxHelper.name = '__SCADA_3D_SELECTION_BOX__';
+      this.selectionBoxHelper.update();
       this.scene.add(this.selectionBoxHelper);
 
       // Attach transform gizmo

@@ -5,6 +5,8 @@ import { APP_THEMES } from '../utils/theme';
 import { CoachMarkOverlay } from './CoachMarkOverlay';
 import { isTourSuppressed } from '../utils/tourRegistry';
 import { useCurrency } from '../utils/currencyManager';
+import { useNetbirdVpn } from '../hooks/useNetbirdVpn';
+import { NetbirdVpnControlWidget } from './vpn/NetbirdVpnControlWidget';
 
 interface SettingsViewProps {
   onBack: () => void;
@@ -59,6 +61,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const [removePinError, setRemovePinError] = useState('');
   const [isSettingsTourOpen, setIsSettingsTourOpen] = useState(false);
   const [currency, setCurrency] = useCurrency();
+  const [showNetbirdVpnModal, setShowNetbirdVpnModal] = useState(false);
+  const { state: vpnState } = useNetbirdVpn();
 
   useEffect(() => {
     if (!isTourSuppressed('settings')) {
@@ -282,6 +286,38 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 className="px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center space-x-1.5 cursor-pointer shrink-0"
               >
                 <span>Open Tag Manager</span>
+                <i className="fas fa-arrow-right text-[10px]"></i>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* NetBird Industrial P2P VPN (WebAssembly WireGuard Tunnel) */}
+        {!editionMgr.IsClient() && (
+          <div className="bg-[#121212] p-5 rounded-2xl border border-cyan-500/30 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <i className="fas fa-shield-halved text-cyan-400 text-base"></i>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-white">NetBird Industrial P2P VPN</h3>
+                    <span className={`text-[9px] font-mono px-2 py-0.5 rounded font-bold uppercase ${
+                      vpnState === 'connected' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' :
+                      vpnState === 'blocked_concurrent_session' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse' :
+                      'bg-slate-800 text-slate-400 border border-slate-700'
+                    }`}>
+                      {vpnState === 'connected' ? 'Connected' : vpnState === 'blocked_concurrent_session' ? 'In Use' : 'Offline'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400">Zero-infrastructure WebAssembly tunnel to remote plant-floor gateways & PLCs (192.168.1.0/24)</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNetbirdVpnModal(true)}
+                className="px-3.5 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center space-x-1.5 cursor-pointer shrink-0"
+              >
+                <span>VPN Control</span>
                 <i className="fas fa-arrow-right text-[10px]"></i>
               </button>
             </div>
@@ -686,6 +722,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         isOpen={isSettingsTourOpen}
         onClose={() => setIsSettingsTourOpen(false)}
       />
+
+      {/* NetBird Industrial P2P VPN Control Modal */}
+      {showNetbirdVpnModal && (
+        <NetbirdVpnControlWidget
+          isOpen={showNetbirdVpnModal}
+          onClose={() => setShowNetbirdVpnModal(false)}
+        />
+      )}
     </div>
   );
 };

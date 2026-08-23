@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { 
   AppView, 
   AppState, 
@@ -8,7 +8,6 @@ import {
   ProductEdition
 } from './types';
 import { AppContextProvider, useAppContext } from './store/AppContext';
-import BentoGrid from './components/BentoGrid';
 import Sidebar from './components/Sidebar';
 import AddConnectionView from './components/AddConnectionView';
 import AddDashboardView from './components/AddDashboardView';
@@ -32,6 +31,8 @@ import { saveCommercialState } from './utils/editionStorage';
 import { AiAssistantView } from './components/AiAssistantView';
 import { AiErrorBoundary } from './components/AiErrorBoundary';
 import { Scada3dEditorView } from './3d/ui/Scada3dEditorView';
+import { OeeStudioView } from './components/oee/OeeStudioView';
+import { TraceabilityStudioView } from './components/traceability/TraceabilityStudioView';
 import { TopNavbar } from './components/TopNavbar';
 import { ModalRegistry } from './components/ModalRegistry';
 
@@ -83,11 +84,7 @@ function AppContent() {
     activeMode,
     setActiveMode,
     isHmiEditMode,
-    isLayoutMode,
-    setIsLayoutMode,
     selectedPanelId,
-    isEngineeringChoiceOpen,
-    setIsEngineeringChoiceOpen,
     activeConnection,
     activeDashboard,
     activePanels,
@@ -159,7 +156,6 @@ function AppContent() {
     handleShareDashboard,
     handleSelectDashboard,
     handleToggleLock,
-    handleEditLayout,
     handleOpenAddPanel,
     handleLoadHatcheryDemo,
     handleSaveAndExitSession,
@@ -210,7 +206,6 @@ function AppContent() {
             panels: []
           }));
           setActiveDashboardId('dash_main');
-          setIsEngineeringChoiceOpen(true);
           setCurrentView(AppView.DASHBOARD);
         }}
         onLoginAdmin={() => {
@@ -233,7 +228,6 @@ function AppContent() {
             panels: []
           }));
           setActiveDashboardId('dash_main');
-          setIsEngineeringChoiceOpen(true);
           setCurrentView(AppView.DASHBOARD);
         }}
         onImportClientPackage={(newAppState, clientName, expiresAt, preferredWorkstationMode) => {
@@ -271,6 +265,17 @@ function AppContent() {
     );
   }
 
+  // Global listener for cross-studio navigation events
+  useEffect(() => {
+    const handleNavEvent = (e: any) => {
+      if (e.detail && Object.values(AppView).includes(e.detail)) {
+        setCurrentView(e.detail as AppView);
+      }
+    };
+    window.addEventListener('tasc_navigate_view', handleNavEvent);
+    return () => window.removeEventListener('tasc_navigate_view', handleNavEvent);
+  }, [setCurrentView]);
+
   const activeMqttConnection = activeConnection;
 
   // Render main screen view
@@ -287,11 +292,7 @@ function AppContent() {
         activeConnection={activeConnection}
         activeDashboardId={activeDashboardId}
         setActiveDashboardId={setActiveDashboardId}
-        activeMode={activeMode}
-        setActiveMode={setActiveMode}
         isHmiEditMode={isHmiEditMode}
-        isLayoutMode={isLayoutMode}
-        setIsLayoutMode={setIsLayoutMode}
         isLocked={isLocked}
         handleToggleLock={handleToggleLock}
         isFullscreen={isFullscreen}
@@ -308,7 +309,6 @@ function AppContent() {
         setIsAlarmModalOpen={setIsAlarmModalOpen}
         setIsAlarmHistorianModalOpen={setIsAlarmHistorianModalOpen}
         setIsFddModalOpen={setIsFddModalOpen}
-        setIsEngineeringChoiceOpen={setIsEngineeringChoiceOpen}
         setIsCloneModalOpen={setIsCloneModalOpen}
         setIsDashMenuOpen={setIsDashMenuOpen}
         handleOpenActiveBrokerSettings={handleOpenActiveBrokerSettings}
@@ -323,7 +323,7 @@ function AppContent() {
       {/* Main Content Area */}
       <main className="flex-grow overflow-hidden flex flex-col relative">
         {currentView === AppView.DASHBOARD && (
-          <div className={`flex-grow ${activeMode === 'hmi' ? 'p-0.5 flex flex-col overflow-hidden h-full' : 'p-2 sm:p-3 overflow-y-auto'}`}>
+          <div className="flex-grow p-0.5 flex flex-col overflow-hidden h-full">
             {communityLimitNotice && (
               <div className="bg-amber-950/80 border border-amber-500/40 rounded-2xl p-3.5 mb-4 flex items-center justify-between text-amber-200 text-xs font-medium shadow-lg animate-in slide-in-from-top duration-200">
                 <div className="flex items-center space-x-3">
@@ -340,21 +340,6 @@ function AppContent() {
                   className="p-1.5 text-amber-400 hover:text-white rounded-lg hover:bg-amber-500/20"
                 >
                   <i className="fas fa-times text-sm"></i>
-                </button>
-              </div>
-            )}
-
-            {isLayoutMode && (
-              <div className="bg-amber-500/15 border border-amber-500/30 rounded-2xl p-3 mb-4 flex items-center justify-between text-amber-300 text-xs font-semibold animate-in fade-in">
-                <div className="flex items-center space-x-2">
-                  <i className="fas fa-hand-pointer text-amber-400 text-sm animate-bounce"></i>
-                  <span>Layout Editing Active — Drag yellow panel handles to reorder cards. Select 1x to 4x column spans in panel edit.</span>
-                </div>
-                <button
-                  onClick={() => setIsLayoutMode(false)}
-                  className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl shadow-lg shadow-amber-500/20 transition-all active:scale-95 text-xs shrink-0 ml-2"
-                >
-                  Done Editing
                 </button>
               </div>
             )}
@@ -383,62 +368,7 @@ function AppContent() {
               </div>
             )}
 
-            {activeMode === 'hmi' ? (
-              <WebHmiCanvasView />
-            ) : activePanels.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-4">
-                <div 
-                  className="w-20 h-20 rounded-2xl border flex items-center justify-center text-3xl"
-                  style={{
-                    backgroundColor: activeThemeObj.accentSoft,
-                    borderColor: activeThemeObj.primary + '40',
-                    color: activeThemeObj.primary
-                  }}
-                >
-                  <i className="fas fa-gauge-high"></i>
-                </div>
-                <h2 className="text-xl font-bold text-white">No Panels Added Yet</h2>
-                <p className="text-xs text-slate-400 max-w-sm">
-                  {editionMgr.IsClient() || userRole === 'client' || appState.isLockedPackage
-                    ? 'No dashboard panels deployed on this screen yet.'
-                    : 'Click the button below to add real-time gauges, switches, line graphs, and controls to this Bento dashboard.'}
-                </p>
-                {!editionMgr.IsClient() && userRole !== 'client' && !appState.isLockedPackage && (
-                  <button 
-                    onClick={handleOpenAddPanel}
-                    className="px-6 py-3 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all active:scale-95 cursor-pointer"
-                    style={{
-                      backgroundColor: activeThemeObj.primary,
-                      boxShadow: `0 10px 25px -5px ${activeThemeObj.primary}40`
-                    }}
-                  >
-                    Create First Panel
-                  </button>
-                )}
-              </div>
-            ) : (
-              <BentoGrid
-                panels={activePanels}
-                latestValues={latestValues}
-                historyValues={historyValues}
-                onEdit={(p) => {
-                  if (userRole === 'client' || appState.isLockedPackage) {
-                    setShowClientReadOnlyNotice(true);
-                    setTimeout(() => setShowClientReadOnlyNotice(false), 4500);
-                    return;
-                  }
-                  setEditingPanel(p);
-                }}
-                onDelete={handleDeletePanel}
-                onClone={handleQuickClonePanel}
-                onQuickResize={handleQuickResizePanel}
-                onPublish={handlePublish}
-                onReorderPanels={handleReorderPanels}
-                isLayoutMode={isLayoutMode}
-                isLocked={isLocked}
-                selectedPanelId={selectedPanelId}
-              />
-            )}
+            <WebHmiCanvasView />
           </div>
         )}
 
@@ -650,6 +580,7 @@ function AppContent() {
             </div>
           ) : (
             <Scada3dEditorView
+              onBack={() => setCurrentView(AppView.DASHBOARD)}
               latestValues={latestValues}
               dashboards={appState.dashboards}
               onNavigateTo2dDashboard={(dashId) => {
@@ -751,6 +682,25 @@ function AppContent() {
           />
         )}
 
+        {currentView === AppView.OEE_STUDIO && (
+          <OeeStudioView
+            onBack={() => setCurrentView(AppView.DASHBOARD)}
+            latestValues={latestValues}
+            onNavigateTo2dDashboard={(dashId) => {
+              setActiveDashboardId(dashId);
+              setActiveMode('hmi');
+              setCurrentView(AppView.DASHBOARD);
+            }}
+          />
+        )}
+
+        {currentView === AppView.TRACEABILITY_STUDIO && (
+          <TraceabilityStudioView
+            onBack={() => setCurrentView(AppView.DASHBOARD)}
+            latestValues={latestValues}
+          />
+        )}
+
       </main>
 
       {/* Modals and Drawers */}
@@ -783,10 +733,7 @@ function AppContent() {
         clientInfo={clientInfo}
         currentView={currentView}
         setCurrentView={setCurrentView}
-        activeMode={activeMode}
-        setActiveMode={setActiveMode}
         isLocked={isLocked}
-        isLayoutMode={isLayoutMode}
         editionMgr={editionMgr}
         activeDashboard={activeDashboard}
         activeAlarms={activeAlarms}
@@ -836,10 +783,7 @@ function AppContent() {
         setIsAiDrawerOpen={setIsAiDrawerOpen}
         isExitSessionModalOpen={isExitSessionModalOpen}
         setIsExitSessionModalOpen={setIsExitSessionModalOpen}
-        isEngineeringChoiceOpen={isEngineeringChoiceOpen}
-        setIsEngineeringChoiceOpen={setIsEngineeringChoiceOpen}
         handleToggleLock={handleToggleLock}
-        handleEditLayout={handleEditLayout}
         handleAddPanelSelect={handleAddPanelSelect}
         handleClonePanels={handleClonePanels}
         handleConfirmClearAll={handleConfirmClearAll}

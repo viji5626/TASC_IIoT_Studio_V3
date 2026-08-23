@@ -37,10 +37,14 @@ export class TransformControlsManager {
     this.controls.addEventListener('dragging-changed', (event: any) => {
       const isDragging = !!event.value;
       this.onDraggingChangeCallbacks.forEach(cb => cb(isDragging));
+      if (!isDragging && this.attachedObject) {
+        const transform = this.getCurrentTransform();
+        this.onTransformChangeCallbacks.forEach(cb => cb(transform));
+      }
     });
 
     this.controls.addEventListener('change', () => {
-      if (this.attachedObject) {
+      if (this.attachedObject && this.controls.dragging) {
         const transform = this.getCurrentTransform();
         this.onTransformChangeCallbacks.forEach(cb => cb(transform));
       }
@@ -60,6 +64,21 @@ export class TransformControlsManager {
    * Attaches gizmo to a target 3D Object.
    */
   public attach(object: THREE.Object3D): void {
+    if (
+      !object ||
+      object === this.controls.getHelper() ||
+      (object as any).isTransformControlsRoot ||
+      (object as any).isTransformControls ||
+      (object as any).isGizmo ||
+      object.name.startsWith('__SCADA_3D_TRANSFORM_GIZMO') ||
+      object.name.startsWith('__SCADA_3D_ENVIRONMENT') ||
+      object.name.startsWith('__SCADA_3D_LIGHTS')
+    ) {
+      console.warn('[TransformControlsManager] Refusing to attach to invalid object:', object);
+      this.detach();
+      return;
+    }
+
     this.attachedObject = object;
     this.controls.attach(object);
     this.controls.getHelper().visible = true;

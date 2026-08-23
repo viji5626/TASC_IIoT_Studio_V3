@@ -475,6 +475,185 @@ export const UserManualView: React.FC<UserManualViewProps> = ({
           )
         }
       ]
+    },
+    {
+      id: 'ch12',
+      number: 12,
+      title: 'OEE & Downtime Intelligence Studio Operating Manual',
+      category: 'Production Analytics',
+      icon: 'fa-gauge-high',
+      readTime: '8 min',
+      summary: 'Mathematical formulation of Availability, Performance, Quality, connecting Real PLC/Driver tags, shift modeling, anti-chatter debounce filters, and Pareto 80/20 root cause tagging.',
+      sections: [
+        {
+          title: '12.1 Mathematical Formulas & TPM Definitions',
+          content: (
+            <div className="space-y-3 text-xs leading-relaxed text-slate-300">
+              <p>
+                Overall Equipment Effectiveness (OEE) is the global gold standard for measuring manufacturing productivity:
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px]">
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl">
+                  <span className="text-emerald-400 font-bold block mb-1">Availability (A)</span>
+                  <div className="text-[10px] text-slate-400">
+                    (Operating Time / Planned Time) × 100
+                  </div>
+                  <div className="text-[9px] text-slate-500 mt-1">Accounts for Breakdowns & Setup</div>
+                </div>
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl">
+                  <span className="text-sky-400 font-bold block mb-1">Performance (P)</span>
+                  <div className="text-[10px] text-slate-400">
+                    (Ideal Cycle Time × Total Parts) / Operating Time × 100
+                  </div>
+                  <div className="text-[9px] text-slate-500 mt-1">Accounts for Speed Losses & Micro-Stops</div>
+                </div>
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl">
+                  <span className="text-amber-400 font-bold block mb-1">Quality (Q)</span>
+                  <div className="text-[10px] text-slate-400">
+                    (Good Parts / Total Parts) × 100
+                  </div>
+                  <div className="text-[9px] text-slate-500 mt-1">Accounts for Scrap & Startup Rejects</div>
+                </div>
+              </div>
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl font-mono text-center text-xs">
+                <span className="text-slate-400">Overall OEE % = </span>
+                <span className="text-emerald-400 font-bold">(Availability × Performance × Quality) / 10,000</span>
+                <span className="text-sky-400 text-[10px] block mt-1">World-Class Target Benchmark: &gt; 85.0%</span>
+              </div>
+            </div>
+          )
+        },
+        {
+          title: '12.2 How to Bind Real PLC & MQTT Raw Tags to an OEE Line',
+          content: (
+            <div className="space-y-3 text-xs leading-relaxed text-slate-300">
+              <p>
+                To calculate real-time OEE from physical factory equipment, open <strong>Line Settings</strong> (gear icon in the top right of OEE Studio) and assign your live driver tag addresses:
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border border-slate-800 font-mono text-[11px]">
+                  <thead className="bg-slate-950 text-slate-400 uppercase text-[10px]">
+                    <tr>
+                      <th className="p-2">OEE Field</th>
+                      <th className="p-2">Expected Data Type</th>
+                      <th className="p-2">Modbus / Siemens / AB Example</th>
+                      <th className="p-2">MQTT Topic Example</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                    <tr>
+                      <td className="p-2 font-bold text-white">Machine Running Bit (Status)</td>
+                      <td className="p-2">Boolean / Int (1 = Run, 0 = Stop)</td>
+                      <td className="p-2 text-cyan-300">DB1.DBX0.0 / Coil 00001</td>
+                      <td className="p-2 text-slate-400">factory/line1/running</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 font-bold text-white">Total Parts Infeed Counter</td>
+                      <td className="p-2">UInt32 / Float (Cumulative Totalizer)</td>
+                      <td className="p-2 text-cyan-300">DB1.DBD4 / Register 40010</td>
+                      <td className="p-2 text-slate-400">factory/line1/total_count</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 font-bold text-white">Reject / Scrap Part Counter</td>
+                      <td className="p-2">UInt16 / UInt32 (Defect Count)</td>
+                      <td className="p-2 text-cyan-300">DB1.DBD8 / Register 40012</td>
+                      <td className="p-2 text-slate-400">factory/line1/reject_count</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 font-bold text-white">Live Speed (Run Rate)</td>
+                      <td className="p-2">Float (Parts / Min or Units / Hr)</td>
+                      <td className="p-2 text-cyan-300">DB1.DBD12 / Register 40014</td>
+                      <td className="p-2 text-slate-400">factory/line1/speed_ppm</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div className="p-3 bg-emerald-950/40 border-l-4 border-emerald-500 rounded-r-xl space-y-1">
+                <span className="font-bold text-emerald-300 block text-xs">Rollover & Counter Reset Protection</span>
+                <p className="text-[11px] text-slate-300">
+                  TASC Studio includes an automatic <code>CumulativeDeltaTracker</code>. When shift counters or PLC totalizers reset from 65535 to 0, TASC Studio safely accumulates the delta without causing negative rate spikes.
+                </p>
+              </div>
+            </div>
+          )
+        },
+        {
+          title: '12.3 Pareto 80/20 Downtime Categorization SOP',
+          content: (
+            <div className="space-y-3 text-xs leading-relaxed text-slate-300">
+              <p>
+                When a line stops for longer than the micro-stop threshold (5 minutes), the machine state timeline creates an <strong>Unplanned Breakdown</strong> event. Line operators or supervisors can click on the red segment to open the <strong>Downtime Tagging Modal</strong> and select a standardized root-cause reason code (e.g. Mechanical Jam, Electrical Drive Fault, Material Starvation). The Pareto chart instantly updates to highlight the top causes of lost production.
+              </p>
+            </div>
+          )
+        }
+      ]
+    },
+    {
+      id: 'ch13',
+      number: 13,
+      title: 'Batch & Lot Traceability Studio Operating Manual',
+      category: 'Quality & Traceability',
+      icon: 'fa-barcode',
+      readTime: '8 min',
+      summary: 'Step-by-step guide for creating Work Orders, mapping Critical Process Parameter (CPP) tags, navigating 4-Stage Material Genealogy, executing bi-directional recalls, and generating 21 CFR Part 11 Certificates of Analysis (CoA).',
+      sections: [
+        {
+          title: '13.1 Creating a Work Order & Binding Field Sensor Tags',
+          content: (
+            <div className="space-y-3 text-xs leading-relaxed text-slate-300">
+              <p>
+                To initiate a traceable production batch, click <strong>+ New Batch</strong> in the Traceability Studio header:
+              </p>
+              <ol className="list-decimal list-inside space-y-1.5 text-slate-300 pl-1">
+                <li><strong>Identity</strong>: Enter the Batch Number (e.g. <code>BATCH-2026-089</code>), Work Order #, Recipe Name, and Target Quantity.</li>
+                <li><strong>Inward Raw Materials</strong>: Click <em>+ Add Raw Lot</em> to record supplier lot numbers, quantities consumed, and incoming QA inspection grades.</li>
+                <li><strong>Critical Process Parameters (CPPs)</strong>: Click <em>+ Add Parameter</em> to specify monitored variables (e.g. Reactor Temperature, Agitator RPM, Seal Pressure, Brix). Assign each parameter its physical PLC Tag Address / MQTT Topic and configure the Setpoint, Lower Specification Limit (LSL), and Upper Specification Limit (USL).</li>
+              </ol>
+            </div>
+          )
+        },
+        {
+          title: '13.2 Bi-Directional Recall & Blast Radius Operations',
+          content: (
+            <div className="space-y-3 text-xs leading-relaxed text-slate-300">
+              <p>
+                In the event of a customer quality inquiry or supplier raw material contamination notice, use the <strong>Recall Explorer</strong> tool:
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
+                  <div className="font-bold text-rose-300 flex items-center gap-1.5">
+                    <i className="fas fa-arrow-right-from-bracket"></i>
+                    <span>Forward Recall (Contaminated Supplier Lot)</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Input a raw material lot # (e.g. <code>LOT-API-9941</code>). TASC Studio searches all historical batches and calculates the customer blast radius, outputting the exact list of finished serialized goods that must be quarantined.
+                  </p>
+                </div>
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
+                  <div className="font-bold text-sky-300 flex items-center gap-1.5">
+                    <i className="fas fa-arrow-left-to-bracket"></i>
+                    <span>Backward Trace (Customer Serial / QR Code)</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Input a customer bottle/part serial (e.g. <code>SN-B088-1004</code>). TASC Studio instantly resolves the exact manufacturing line, lead operator, process parameter temperature/pressure history, and supplier ingredient lots.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )
+        },
+        {
+          title: '13.3 1-Click FDA 21 CFR Part 11 Certificate of Analysis (CoA)',
+          content: (
+            <div className="space-y-3 text-xs leading-relaxed text-slate-300">
+              <p>
+                Click <strong>Generate CoA</strong> to create a compliant quality release certificate. The system formats observed analytical assay results with <code>PASSED</code> disposition tags, embeds complete raw material lot genealogy, and records cryptographic SHA-256 validated electronic signatures for immediate PDF export and customer delivery.
+              </p>
+            </div>
+          )
+        }
+      ]
     }
   ], []);
 

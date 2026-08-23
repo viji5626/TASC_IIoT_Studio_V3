@@ -51,7 +51,9 @@ export enum AppView {
   AI_ASSISTANT = 'ai_assistant',
   USER_MANUAL = 'user_manual',
   REPORTING = 'reporting',
-  SQL_STUDIO = 'sql_studio'
+  SQL_STUDIO = 'sql_studio',
+  OEE_STUDIO = 'oee_studio',
+  TRACEABILITY_STUDIO = 'traceability_studio'
 }
 
 export interface MqttConnection {

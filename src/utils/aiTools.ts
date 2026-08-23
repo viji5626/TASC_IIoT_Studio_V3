@@ -13,6 +13,10 @@ import {
   getPrecomputedChunk
 } from './aiMemoryStore';
 import { validateTagAlias } from './aiAliasValidator';
+import { OeePersistence } from '../services/OeePersistence';
+import { OeeCalculationEngine } from '../services/OeeCalculationEngine';
+import { TraceabilityService } from '../services/TraceabilityService';
+import { Ai3dAssetService, Ai3dAssetDefinition } from '../services/Ai3dAssetService';
 
 export interface AiToolsContext {
   latestValues: Record<string, { val: any; time: string; timestampMs?: number; quality?: string }>;
@@ -60,6 +64,25 @@ export function getLiveContextSnapshot(): string {
     ? `${fddState.activeFaults.length} Active Faults (${fddState.kpis.criticalCount} Critical, Waste Rate: $${fddState.kpis.totalCostPerHour}/hr, ${fddState.kpis.totalEnergyWasteKw} kW excess)`
     : 'All equipment operating normally (Zero active faults)';
 
+  // OEE & Traceability Runtime Context
+  let oeeSummary = 'OEE Studio: Ready';
+  let traceSummary = 'Batch Traceability: Ready';
+  try {
+    const lines = OeePersistence.loadLines();
+    const activeLineId = OeePersistence.getActiveLineId();
+    const activeLine = lines.find(l => l.id === activeLineId) || lines[0];
+    if (activeLine) {
+      oeeSummary = `Active Line: "${activeLine.name}" (Code: ${activeLine.code}, Target OEE: ${activeLine.targetOeePct}%, Ideal Cycle: ${activeLine.idealCycleTimeSec}s). Total Lines: ${lines.length}.`;
+    }
+
+    const batches = TraceabilityService.loadBatches();
+    const activeBatchId = TraceabilityService.getActiveBatchId();
+    const activeBatch = batches.find(b => b.id === activeBatchId) || batches[0];
+    if (activeBatch) {
+      traceSummary = `Active Batch: ${activeBatch.batchNumber} (Recipe: "${activeBatch.recipeName}", Status: ${activeBatch.status}, Target: ${activeBatch.targetQuantity} ${activeBatch.unit}, Produced: ${activeBatch.actualQuantity}, Yield: ${activeBatch.yieldPercentage}%). Total Batches: ${batches.length}.`;
+    }
+  } catch {}
+
   return `
 [LIVE PROJECT SNAPSHOT - CURRENT RUNTIME STATE]
 - Dashboards (${dashboards.length}): ${dashboards.map(db => `"${db.dashboardName}" (${db.dashboardId})`).join(', ') || 'None'}
@@ -70,6 +93,9 @@ ${driverSummary || '  No drivers configured'}
 - Driver Tags (${driverTags.length} registered): ${goodTagsCount} Good Quality, ${badTagsCount} Bad/Offline
 - Active Real-Time Alarms (${activeAlarms.length}): ${activeAlarms.map(a => `[${a.zone}] ${a.panelName}: ${a.message} (val=${a.value})`).join(', ') || 'No active alarms (Normal)'}
 - FDD & Predictive Health: ${fddSummary} (Plant Avg Health: ${fddState.kpis.avgHealthIndex}%, Open Work Orders: ${fddState.kpis.openWorkOrdersCount})
+- OEE Studio State: ${oeeSummary}
+- Batch & Lot Traceability: ${traceSummary}
+- 3D SCADA Twin: Active (ASME B16.5 Piping & Live Telemetry Meshes)
 - User Role / Mode: ${appState.userRole || 'admin'} (${appState.productEdition || 'engineering'})
 `.trim();
 }
@@ -505,6 +531,155 @@ export const AI_TOOL_DEFINITIONS: ToolDefinition[] = [
         }
       },
       required: ['tagId']
+    }
+  },
+  {
+    name: 'get_oee_studio_metrics',
+    description: 'Query live OEE Studio metrics for machines/production lines, including Availability, Performance, Quality, Overall OEE %, total parts produced, scrap rates, downtime events, and Pareto root-cause losses.',
+    parameters: {
+      type: 'object',
+      properties: {
+        lineId: {
+          type: 'string',
+          description: 'Optional line ID (e.g. line_bottling_1, line_cnc_milling_2, line_cartoning_3). If omitted, returns active line.'
+        }
+      }
+    }
+  },
+  {
+    name: 'get_batch_traceability_detail',
+    description: 'Query FDA 21 CFR Part 11 Batch & Lot Traceability records, Critical Process Parameters (CPPs), raw material lots genealogy, or run forward/backward recall traces.',
+    parameters: {
+      type: 'object',
+      properties: {
+        batchId: {
+          type: 'string',
+          description: 'Optional batch ID or batch number. If omitted, returns active batch.'
+        },
+        recallQuery: {
+          type: 'string',
+          description: 'Optional lot number or serial number to execute an instant forward or backward recall trace.'
+        },
+        recallMode: {
+          type: 'string',
+          description: 'FORWARD (from raw material lot) or BACKWARD (from customer serial / QR).'
+        }
+      }
+    }
+  },
+  {
+    name: 'generate_3d_asset',
+    description: 'Procedurally create an interactive 3D SCADA equipment/asset (e.g. pumps, extruders, bioreactors, distillation columns, robotic arms, conveyors, tanks) with PBR materials, ASME flanged nozzles, dimensions, and real-time PLC/MQTT telemetry binding hooks for the 3D SCADA Studio.',
+    parameters: {
+      type: 'object',
+      properties: {
+        assetName: {
+          type: 'string',
+          description: 'Descriptive title of the 3D equipment (e.g. "Tri-Blender High-Shear Mixing Skid", "Continuous Distillation Column").'
+        },
+        sector: {
+          type: 'string',
+          description: 'Industrial sector: e.g. "AI Generated Assets", "Process Equipment", "Material Handling", "Power & Utilities".'
+        },
+        category: {
+          type: 'string',
+          description: 'Specific equipment category: e.g. "Mixing & Blending", "Thermal Exchange", "Piping & Valves", "Robotics".'
+        },
+        description: {
+          type: 'string',
+          description: 'Technical engineering summary detailing components, nozzles, drive motors, and operating capabilities.'
+        },
+        icon: {
+          type: 'string',
+          description: 'FontAwesome icon string (e.g. "fa-gears", "fa-flask-vial", "fa-fire-flame-curved", "fa-robot", "fa-industry", "fa-cubes").'
+        },
+        dimensions: {
+          type: 'object',
+          properties: {
+            width: { type: 'number', description: 'Overall width (X-axis) in meters.' },
+            height: { type: 'number', description: 'Overall height (Y-axis) in meters.' },
+            depth: { type: 'number', description: 'Overall depth (Z-axis) in meters.' }
+          },
+          required: ['width', 'height', 'depth']
+        },
+        components: {
+          type: 'array',
+          description: 'Array of procedural 3D geometric sub-meshes that assemble the complete equipment structure.',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              name: { type: 'string' },
+              type: {
+                type: 'string',
+                description: 'Primitive type: box | cylinder | sphere | cone | flanged_nozzle | motor_housing | hopper | skid_base'
+              },
+              position: {
+                type: 'object',
+                properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } },
+                required: ['x', 'y', 'z']
+              },
+              rotation: {
+                type: 'object',
+                properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } }
+              },
+              scale: {
+                type: 'object',
+                properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } }
+              },
+              dimensions: {
+                type: 'object',
+                properties: {
+                  width: { type: 'number' },
+                  height: { type: 'number' },
+                  depth: { type: 'number' },
+                  radius: { type: 'number' },
+                  radiusTop: { type: 'number' },
+                  radiusBottom: { type: 'number' }
+                }
+              },
+              material: {
+                type: 'object',
+                properties: {
+                  color: { type: 'string' },
+                  metalness: { type: 'number' },
+                  roughness: { type: 'number' },
+                  emissive: { type: 'string' },
+                  emissiveIntensity: { type: 'number' },
+                  opacity: { type: 'number' },
+                  transparent: { type: 'boolean' }
+                },
+                required: ['color']
+              },
+              animationHook: {
+                type: 'string',
+                description: 'Optional animation: spin_shaft | level_indicator | thermal_glow | status_beacon'
+              }
+            },
+            required: ['id', 'name', 'type', 'position', 'dimensions', 'material']
+          }
+        },
+        telemetryHooks: {
+          type: 'array',
+          description: 'SCADA tag connection points for real-time telemetry animation (e.g. Speed RPM, Fill Level %, Core Temp °C, Pressure Bar, Run Status Bit).',
+          items: {
+            type: 'object',
+            properties: {
+              slotName: { type: 'string' },
+              displayName: { type: 'string' },
+              channelType: { type: 'string', description: 'speed_rpm | level_pct | temperature_c | pressure_bar | status_alarm | count_total' },
+              defaultTag: { type: 'string' },
+              description: { type: 'string' }
+            },
+            required: ['slotName', 'displayName', 'channelType', 'description']
+          }
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' }
+        }
+      },
+      required: ['assetName', 'category', 'description', 'dimensions', 'components', 'telemetryHooks']
     }
   }
 ];
@@ -1163,6 +1338,240 @@ ${connections.map(c => `- **${c.connectionName}** (${c.brokerAddress}:${c.port})
           tagId: chunk.tagId,
           stats: chunk.stats,
           generatedAt: chunk.generatedAt
+        });
+      }
+
+      case 'get_oee_studio_metrics': {
+        const lines = OeePersistence.loadLines();
+        const lineId = args.lineId ? String(args.lineId) : OeePersistence.getActiveLineId();
+        const line = lines.find(l => l.id === lineId) || lines[0];
+
+        if (!line) {
+          return JSON.stringify({ error: 'No production lines found in OEE Studio.' });
+        }
+
+        const events = OeePersistence.loadEvents(line.id);
+        const tags = line.tags || {};
+        const rawTotal = tags.totalCountTag && ctx.latestValues[tags.totalCountTag] !== undefined
+          ? Number(ctx.latestValues[tags.totalCountTag]?.val || 0)
+          : 0;
+        const rawReject = tags.rejectCountTag && ctx.latestValues[tags.rejectCountTag] !== undefined
+          ? Number(ctx.latestValues[tags.rejectCountTag]?.val || 0)
+          : 0;
+
+        const plannedShiftSec = line.plannedShiftHours * 3600;
+        const unplannedDowntimeSec = events.filter(e => !e.isPlanned).reduce((s, e) => s + e.durationSec, 0);
+        const microStopsSec = events.filter(e => e.state === 'IDLE_MICRO_STOP').reduce((s, e) => s + e.durationSec, 0);
+
+        const metrics = OeeCalculationEngine.calculateOee(
+          line,
+          plannedShiftSec,
+          unplannedDowntimeSec,
+          line.plannedDowntimeSec,
+          microStopsSec,
+          rawTotal,
+          rawReject
+        );
+
+        const pareto = OeeCalculationEngine.getParetoLosses(events);
+        const sixBigLosses = OeeCalculationEngine.calculateSixBigLosses(events, metrics, line.idealCycleTimeSec);
+
+        return JSON.stringify({
+          lineName: line.name,
+          lineCode: line.code,
+          department: line.department,
+          idealCycleTimeSec: line.idealCycleTimeSec,
+          targetOeePct: line.targetOeePct,
+          activeShift: 'Shift A',
+          metrics: {
+            oeePct: metrics.oeePct,
+            availabilityPct: metrics.availabilityPct,
+            performancePct: metrics.performancePct,
+            qualityPct: metrics.qualityPct,
+            totalProduced: metrics.totalCount,
+            goodCount: metrics.goodCount,
+            rejectCount: metrics.rejectCount,
+            scrapRatePct: metrics.scrapRatePct,
+            actualRunRatePpm: metrics.actualRunRatePpm,
+            targetRunRatePpm: metrics.targetRunRatePpm,
+            unplannedDowntimeMinutes: Math.round(unplannedDowntimeSec / 60),
+            operatingHours: Number((metrics.operatingTimeSec / 3600).toFixed(2))
+          },
+          topLosses: pareto.slice(0, 5),
+          sixBigLossesSummary: {
+            unplannedBreakdownsMin: Math.round(sixBigLosses.unplannedBreakdownsSec / 60),
+            setupAdjustmentsMin: Math.round(sixBigLosses.setupAndAdjustmentsSec / 60),
+            smallStopsMin: Math.round(sixBigLosses.smallStopsAndIdlingSec / 60),
+            reducedSpeedLossMin: Math.round(sixBigLosses.reducedSpeedLossSec / 60),
+            productionRejectsCount: sixBigLosses.productionRejectsCount,
+            totalLostHours: sixBigLosses.totalLostHours
+          }
+        });
+      }
+
+      case 'get_batch_traceability_detail': {
+        const batches = TraceabilityService.loadBatches();
+        const batchId = args.batchId ? String(args.batchId) : TraceabilityService.getActiveBatchId();
+        const batch = batches.find(b => b.id === batchId || b.batchNumber === batchId) || batches[0];
+
+        if (args.recallQuery) {
+          const mode = (String(args.recallMode || 'FORWARD').toUpperCase()) as 'FORWARD' | 'BACKWARD';
+          const forwardResults = mode === 'FORWARD'
+            ? TraceabilityService.forwardRecall(String(args.recallQuery))
+            : [];
+          const backwardResult = mode === 'BACKWARD'
+            ? TraceabilityService.backwardRecall(String(args.recallQuery))
+            : null;
+
+          return JSON.stringify({
+            recallMode: mode,
+            query: args.recallQuery,
+            forwardMatchesCount: forwardResults.length,
+            forwardResults,
+            backwardResult
+          });
+        }
+
+        if (!batch) {
+          return JSON.stringify({ error: 'No batch records found in Traceability Studio.' });
+        }
+
+        return JSON.stringify({
+          batchNumber: batch.batchNumber,
+          workOrderNumber: batch.workOrderNumber,
+          recipeName: batch.recipeName,
+          recipeVersion: batch.recipeVersion,
+          lineName: batch.lineName,
+          status: batch.status,
+          targetQuantity: batch.targetQuantity,
+          actualQuantity: batch.actualQuantity,
+          scrapQuantity: batch.scrapQuantity,
+          yieldPercentage: batch.yieldPercentage,
+          unit: batch.unit,
+          leadOperator: batch.leadOperator,
+          supervisorName: batch.supervisorName,
+          rawMaterialsCount: batch.rawMaterials.length,
+          rawMaterials: batch.rawMaterials.map(r => ({
+            materialName: r.materialName,
+            lotNumber: r.lotNumber,
+            supplierName: r.supplierName,
+            quantityUsed: r.quantityUsed,
+            grade: r.qualityGrade,
+            passedInspection: r.passedInspection
+          })),
+          parametersCount: batch.parameters.length,
+          parameters: batch.parameters.map(p => ({
+            name: p.name,
+            currentValue: p.currentValue,
+            unit: p.unit,
+            setpoint: p.setpoint,
+            limits: `${p.minLimit} - ${p.maxLimit}`,
+            oosViolationCount: p.oosViolationCount
+          })),
+          auditTrailCount: batch.auditTrail.length,
+          finishedSerialsCount: batch.finishedSerials.length
+        });
+      }
+
+      case 'generate_3d_asset': {
+        const assetName = String(args.assetName || 'Custom 3D Industrial Asset').trim();
+        const sector = String(args.sector || 'AI Generated Assets').trim();
+        const category = String(args.category || 'Process Equipment').trim();
+        const description = String(args.description || 'Procedurally generated 3D equipment asset with PBR materials and live telemetry hooks.').trim();
+        const icon = String(args.icon || 'fa-cubes').trim();
+
+        const rawDim = (args.dimensions as any) || {};
+        const dimensions = {
+          width: Math.max(0.2, Math.min(50, Number(rawDim.width || 2.0))),
+          height: Math.max(0.2, Math.min(50, Number(rawDim.height || 2.0))),
+          depth: Math.max(0.2, Math.min(50, Number(rawDim.depth || 2.0)))
+        };
+
+        const rawComps = Array.isArray(args.components) ? args.components : [];
+        const components = rawComps.map((c: any, idx: number) => ({
+          id: String(c.id || `comp_${idx + 1}`),
+          name: String(c.name || `Part ${idx + 1}`),
+          type: c.type || 'box',
+          position: {
+            x: Number(c.position?.x || 0),
+            y: Number(c.position?.y || 0),
+            z: Number(c.position?.z || 0)
+          },
+          rotation: c.rotation ? {
+            x: Number(c.rotation?.x || 0),
+            y: Number(c.rotation?.y || 0),
+            z: Number(c.rotation?.z || 0)
+          } : undefined,
+          scale: c.scale ? {
+            x: Number(c.scale?.x || 1),
+            y: Number(c.scale?.y || 1),
+            z: Number(c.scale?.z || 1)
+          } : undefined,
+          dimensions: {
+            width: c.dimensions?.width ? Number(c.dimensions.width) : undefined,
+            height: c.dimensions?.height ? Number(c.dimensions.height) : undefined,
+            depth: c.dimensions?.depth ? Number(c.dimensions.depth) : undefined,
+            radius: c.dimensions?.radius ? Number(c.dimensions.radius) : undefined,
+            radiusTop: c.dimensions?.radiusTop ? Number(c.dimensions.radiusTop) : undefined,
+            radiusBottom: c.dimensions?.radiusBottom ? Number(c.dimensions.radiusBottom) : undefined
+          },
+          material: {
+            color: c.material?.color || '#64748b',
+            metalness: c.material?.metalness !== undefined ? Number(c.material.metalness) : 0.7,
+            roughness: c.material?.roughness !== undefined ? Number(c.material.roughness) : 0.3,
+            emissive: c.material?.emissive || undefined,
+            emissiveIntensity: c.material?.emissiveIntensity !== undefined ? Number(c.material.emissiveIntensity) : undefined,
+            opacity: c.material?.opacity !== undefined ? Number(c.material.opacity) : 1,
+            transparent: !!c.material?.transparent
+          },
+          animationHook: c.animationHook
+        }));
+
+        const rawHooks = Array.isArray(args.telemetryHooks) ? args.telemetryHooks : [];
+        const telemetryHooks = rawHooks.map((h: any) => ({
+          slotName: String(h.slotName || 'status'),
+          displayName: String(h.displayName || 'Telemetry Point'),
+          channelType: h.channelType || 'status_alarm',
+          defaultTag: h.defaultTag ? String(h.defaultTag) : undefined,
+          description: String(h.description || '')
+        }));
+
+        const assetId = `ai_asset_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
+        const assetDef: Ai3dAssetDefinition = {
+          id: assetId,
+          name: assetName,
+          sector,
+          category,
+          description,
+          version: '1.0.0',
+          createdAt: Date.now(),
+          dimensions,
+          components,
+          telemetryHooks,
+          icon,
+          tags: (args.tags as string[]) || [category.toLowerCase(), 'ai-generated', '3d'],
+          author: 'AI Copilot'
+        };
+
+        // Save and compile into 3D system
+        Ai3dAssetService.saveAsset(assetDef);
+
+        // Dispatch in-app event for instant chat preview card
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tasc_3d_asset_generated', { detail: assetDef }));
+        }
+
+        return JSON.stringify({
+          success: true,
+          assetId: assetDef.id,
+          assetName: assetDef.name,
+          category: assetDef.category,
+          dimensions: `${dimensions.width}m (W) × ${dimensions.height}m (H) × ${dimensions.depth}m (D)`,
+          componentsCount: components.length,
+          telemetrySlotsCount: telemetryHooks.length,
+          telemetryHooks: telemetryHooks.map(h => `${h.displayName} [${h.channelType}]`),
+          status: 'READY_IN_LIBRARY',
+          message: `3D Asset "${assetName}" has been successfully generated and compiled into the 3D SCADA Asset Library under "🤖 AI Assets".`
         });
       }
 

@@ -3,6 +3,8 @@ import { AppView, Dashboard } from '../types';
 import { getAppTheme } from '../utils/theme';
 import AppLogo from './AppLogo';
 import { useDeviceCapability } from '../utils/deviceDetection';
+import { useNetbirdVpn } from '../hooks/useNetbirdVpn';
+import { NetbirdVpnControlWidget } from './vpn/NetbirdVpnControlWidget';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -55,6 +57,8 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
 }) => {
   const { isDesktop, isMobile } = useDeviceCapability();
   const [activeDashMenuId, setActiveDashMenuId] = useState<string | null>(null);
+  const [showVpnModal, setShowVpnModal] = useState(false);
+  const { state: vpnState } = useNetbirdVpn();
 
   // Accordion section open/collapse states
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -74,7 +78,11 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   const activeThemeObj = getAppTheme(currentTheme);
 
   const handleItemClick = (item: MenuItemDef) => {
-    if (item.id === 'about') {
+    if (item.id === 'netbird_vpn') {
+      setShowVpnModal(true);
+      onClose();
+      return;
+    } else if (item.id === 'about') {
       alert('TASC IIoT Studio\nA modern, real-time Bento Grid dashboard for monitoring and controlling IIoT hardware devices via MQTT WebSockets.');
       onClose();
     } else if (item.id === 'quick_tour') {
@@ -92,7 +100,14 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   ] : [];
 
   const dataItems: MenuItemDef[] = isClient ? [
-    { id: AppView.CONNECTIONS, icon: 'fa-network-wired', label: 'All Connections' }
+    { id: AppView.CONNECTIONS, icon: 'fa-network-wired', label: 'All Connections' },
+    { 
+      id: 'netbird_vpn', 
+      icon: 'fa-shield-halved', 
+      label: 'NetBird P2P VPN', 
+      badge: vpnState === 'connected' ? 'ACTIVE' : vpnState === 'blocked_concurrent_session' ? 'IN USE' : 'WASM', 
+      badgeColor: vpnState === 'connected' ? 'bg-emerald-500/20 text-emerald-300' : vpnState === 'blocked_concurrent_session' ? 'bg-rose-500/20 text-rose-300' : 'bg-cyan-500/20 text-cyan-300' 
+    }
   ] : isDesktop ? [
     { id: AppView.CONNECTIONS, icon: 'fa-network-wired', label: 'All Connections' },
     { id: AppView.ADD_CONNECTION, icon: 'fa-server', label: 'MQTT Broker Settings' },
@@ -100,6 +115,13 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
     { id: AppView.TAG_MANAGER, icon: 'fa-tags', label: 'MQTT Tag Manager' },
     { id: AppView.DRIVER_CONNECTIONS, icon: 'fa-plug-circle-bolt', label: 'Driver Connections', badge: '12 Drivers', badgeColor: 'bg-violet-500/20 text-violet-300' },
     { id: AppView.DRIVER_TAG_MANAGER, icon: 'fa-database', label: 'Driver Tag Manager' },
+    { 
+      id: 'netbird_vpn', 
+      icon: 'fa-shield-halved', 
+      label: 'NetBird P2P VPN', 
+      badge: vpnState === 'connected' ? 'ACTIVE' : vpnState === 'blocked_concurrent_session' ? 'IN USE' : 'WASM', 
+      badgeColor: vpnState === 'connected' ? 'bg-emerald-500/20 text-emerald-300' : vpnState === 'blocked_concurrent_session' ? 'bg-rose-500/20 text-rose-300' : 'bg-cyan-500/20 text-cyan-300' 
+    },
     { id: AppView.SQL_STUDIO, icon: 'fa-table-columns', label: 'SQL Server & TASCGrid', badge: 'SQL', badgeColor: 'bg-cyan-500/20 text-cyan-300' },
     { id: AppView.OPC_UA_BROWSER, icon: 'fa-sitemap', label: 'OPC UA Browser' },
     { id: AppView.DRIVER_DIAGNOSTICS, icon: 'fa-stethoscope', label: 'Driver Diagnostics' }
@@ -108,17 +130,30 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
     { id: AppView.CONNECTIONS, icon: 'fa-network-wired', label: 'All Connections' },
     { id: AppView.ADD_CONNECTION, icon: 'fa-server', label: 'MQTT Broker Settings' },
     { id: AppView.TOPIC_MANAGER, icon: 'fa-sitemap', label: 'MQTT Topic Manager' },
-    { id: AppView.TAG_MANAGER, icon: 'fa-tags', label: 'MQTT Tag Manager' }
+    { id: AppView.TAG_MANAGER, icon: 'fa-tags', label: 'MQTT Tag Manager' },
+    { 
+      id: 'netbird_vpn', 
+      icon: 'fa-shield-halved', 
+      label: 'NetBird P2P VPN', 
+      badge: vpnState === 'connected' ? 'ACTIVE' : vpnState === 'blocked_concurrent_session' ? 'IN USE' : 'WASM', 
+      badgeColor: vpnState === 'connected' ? 'bg-emerald-500/20 text-emerald-300' : vpnState === 'blocked_concurrent_session' ? 'bg-rose-500/20 text-rose-300' : 'bg-cyan-500/20 text-cyan-300' 
+    }
   ];
 
   const analysisItems: MenuItemDef[] = isClient ? [
+    { id: AppView.OEE_STUDIO, icon: 'fa-gauge-high', label: 'OEE & Downtime Studio', badge: 'OEE', badgeColor: 'bg-emerald-500/20 text-emerald-300' },
+    { id: AppView.TRACEABILITY_STUDIO, icon: 'fa-barcode', label: 'Batch & Lot Traceability', badge: 'Trace', badgeColor: 'bg-cyan-500/20 text-cyan-300' },
     { id: AppView.HISTORIAN_TREND, icon: 'fa-chart-line', label: 'Historian & Trends' },
     { id: AppView.REPORTING, icon: 'fa-chart-bar', label: 'Reports' }
   ] : isDesktop ? [
+    { id: AppView.OEE_STUDIO, icon: 'fa-gauge-high', label: 'OEE & Downtime Studio', badge: 'OEE', badgeColor: 'bg-emerald-500/20 text-emerald-300' },
+    { id: AppView.TRACEABILITY_STUDIO, icon: 'fa-barcode', label: 'Batch & Lot Traceability', badge: 'Trace', badgeColor: 'bg-cyan-500/20 text-cyan-300' },
     { id: AppView.HISTORIAN_TREND, icon: 'fa-chart-line', label: 'Historian & Trends' },
     { id: AppView.REPORTING, icon: 'fa-chart-bar', label: 'Reports (Template & AI)' },
     { id: AppView.AI_ASSISTANT, icon: 'fa-wand-magic-sparkles', label: 'AI Copilot Assistant', badge: 'AI', badgeColor: 'bg-sky-500/20 text-sky-300' }
   ] : [
+    { id: AppView.OEE_STUDIO, icon: 'fa-gauge-high', label: 'OEE & Downtime Studio', badge: 'OEE', badgeColor: 'bg-emerald-500/20 text-emerald-300' },
+    { id: AppView.TRACEABILITY_STUDIO, icon: 'fa-barcode', label: 'Batch & Lot Traceability', badge: 'Trace', badgeColor: 'bg-cyan-500/20 text-cyan-300' },
     { id: AppView.HISTORIAN_TREND, icon: 'fa-chart-line', label: 'Historian & Trends' },
     { id: AppView.REPORTING, icon: 'fa-chart-bar', label: 'Reports' }
   ];
@@ -440,6 +475,14 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
           </div>
         )}
       </aside>
+
+      {/* NetBird Industrial P2P VPN Control Modal */}
+      {showVpnModal && (
+        <NetbirdVpnControlWidget
+          isOpen={showVpnModal}
+          onClose={() => setShowVpnModal(false)}
+        />
+      )}
     </>
   );
 });
