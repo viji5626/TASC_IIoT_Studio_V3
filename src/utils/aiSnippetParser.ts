@@ -10,6 +10,9 @@ export interface ParsedSnippet {
   maxTokens?: number;
   temperature?: number;
   topP?: number;
+  contextLength?: number;
+  gpuOffload?: string | number;
+  cpuThreads?: number;
   stream?: boolean;
   extraBodyJson?: string;
   warnings: string[];

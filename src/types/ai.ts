@@ -84,4 +84,5 @@ export interface MultiAgentEvent {
   status: 'starting' | 'running' | 'completed' | 'error';
   actionDescription: string;
   timestamp: number;
+  activeAgentCount?: number;
 }

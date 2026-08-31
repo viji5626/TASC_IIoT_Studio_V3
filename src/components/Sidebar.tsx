@@ -112,7 +112,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
     { id: AppView.CONNECTIONS, icon: 'fa-network-wired', label: 'All Connections' },
     { id: AppView.ADD_CONNECTION, icon: 'fa-server', label: 'MQTT Broker Settings' },
     { id: AppView.TOPIC_MANAGER, icon: 'fa-sitemap', label: 'MQTT Topic Manager' },
-    { id: AppView.TAG_MANAGER, icon: 'fa-tags', label: 'MQTT Tag Manager' },
+    { id: AppView.TAG_MANAGER, icon: 'fa-sitemap', label: 'Asset & Tag Management', badge: 'ISA-95', badgeColor: 'bg-sky-500/20 text-sky-300' },
     { id: AppView.DRIVER_CONNECTIONS, icon: 'fa-plug-circle-bolt', label: 'Driver Connections', badge: '12 Drivers', badgeColor: 'bg-violet-500/20 text-violet-300' },
     { id: AppView.DRIVER_TAG_MANAGER, icon: 'fa-database', label: 'Driver Tag Manager' },
     { 
@@ -130,7 +130,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
     { id: AppView.CONNECTIONS, icon: 'fa-network-wired', label: 'All Connections' },
     { id: AppView.ADD_CONNECTION, icon: 'fa-server', label: 'MQTT Broker Settings' },
     { id: AppView.TOPIC_MANAGER, icon: 'fa-sitemap', label: 'MQTT Topic Manager' },
-    { id: AppView.TAG_MANAGER, icon: 'fa-tags', label: 'MQTT Tag Manager' },
+    { id: AppView.TAG_MANAGER, icon: 'fa-sitemap', label: 'Asset & Tag Management', badge: 'ISA-95', badgeColor: 'bg-sky-500/20 text-sky-300' },
     { 
       id: 'netbird_vpn', 
       icon: 'fa-shield-halved', 
@@ -144,25 +144,30 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
     { id: AppView.OEE_STUDIO, icon: 'fa-gauge-high', label: 'OEE & Downtime Studio', badge: 'OEE', badgeColor: 'bg-emerald-500/20 text-emerald-300' },
     { id: AppView.TRACEABILITY_STUDIO, icon: 'fa-barcode', label: 'Batch & Lot Traceability', badge: 'Trace', badgeColor: 'bg-cyan-500/20 text-cyan-300' },
     { id: AppView.HISTORIAN_TREND, icon: 'fa-chart-line', label: 'Historian & Trends' },
-    { id: AppView.REPORTING, icon: 'fa-chart-bar', label: 'Reports' }
+    { id: AppView.REPORTING, icon: 'fa-chart-bar', label: 'Reports' },
+    { id: AppView.AI_WORKBENCH, icon: 'fa-microchip', label: 'AI Code Workbench', badge: 'RAD', badgeColor: 'bg-indigo-500/20 text-indigo-300' }
   ] : isDesktop ? [
     { id: AppView.OEE_STUDIO, icon: 'fa-gauge-high', label: 'OEE & Downtime Studio', badge: 'OEE', badgeColor: 'bg-emerald-500/20 text-emerald-300' },
     { id: AppView.TRACEABILITY_STUDIO, icon: 'fa-barcode', label: 'Batch & Lot Traceability', badge: 'Trace', badgeColor: 'bg-cyan-500/20 text-cyan-300' },
     { id: AppView.HISTORIAN_TREND, icon: 'fa-chart-line', label: 'Historian & Trends' },
     { id: AppView.REPORTING, icon: 'fa-chart-bar', label: 'Reports (Template & AI)' },
-    { id: AppView.AI_ASSISTANT, icon: 'fa-wand-magic-sparkles', label: 'AI Copilot Assistant', badge: 'AI', badgeColor: 'bg-sky-500/20 text-sky-300' }
+    { id: AppView.AI_ASSISTANT, icon: 'fa-wand-magic-sparkles', label: 'AI Copilot Assistant', badge: 'AI', badgeColor: 'bg-sky-500/20 text-sky-300' },
+    { id: AppView.AI_WORKBENCH, icon: 'fa-microchip', label: 'AI Code Workbench', badge: 'RAD', badgeColor: 'bg-indigo-500/20 text-indigo-300' }
   ] : [
     { id: AppView.OEE_STUDIO, icon: 'fa-gauge-high', label: 'OEE & Downtime Studio', badge: 'OEE', badgeColor: 'bg-emerald-500/20 text-emerald-300' },
     { id: AppView.TRACEABILITY_STUDIO, icon: 'fa-barcode', label: 'Batch & Lot Traceability', badge: 'Trace', badgeColor: 'bg-cyan-500/20 text-cyan-300' },
     { id: AppView.HISTORIAN_TREND, icon: 'fa-chart-line', label: 'Historian & Trends' },
-    { id: AppView.REPORTING, icon: 'fa-chart-bar', label: 'Reports' }
+    { id: AppView.REPORTING, icon: 'fa-chart-bar', label: 'Reports' },
+    { id: AppView.AI_WORKBENCH, icon: 'fa-microchip', label: 'AI Code Workbench', badge: 'RAD', badgeColor: 'bg-indigo-500/20 text-indigo-300' }
   ];
 
   const systemItems: MenuItemDef[] = isClient ? [
-    { id: AppView.SETTINGS, icon: 'fa-gear', label: 'App Settings' }
+    { id: AppView.SETTINGS, icon: 'fa-gear', label: 'App Settings' },
+    { id: AppView.CREDENTIALS, icon: 'fa-shield-halved', label: 'Credential Management' }
   ] : [
     { id: AppView.SETTINGS, icon: 'fa-gear', label: 'App Settings' },
-    { id: AppView.BACKUP, icon: 'fa-cloud-arrow-up', label: 'Backup & Restore', isLocked: isCommunity }
+    { id: AppView.BACKUP, icon: 'fa-cloud-arrow-up', label: 'Backup & Restore', isLocked: isCommunity },
+    { id: AppView.CREDENTIALS, icon: 'fa-shield-halved', label: 'Credential Management' }
   ];
 
   const helpItems: MenuItemDef[] = [
@@ -247,12 +252,12 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   return (
     <>
       {isOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[100] transition-opacity" onClick={onClose} />
+        <div className="fixed inset-0 bg-slate-950/85 z-[100] transition-opacity duration-200" onClick={onClose} />
       )}
-      <aside className={`theme-sidebar fixed inset-y-0 left-0 w-72 sm:w-80 max-w-[88vw] bg-slate-900/98 border-r border-slate-800 z-[110] transform transition-transform duration-300 ease-in-out h-[100dvh] max-h-[100dvh] overflow-y-auto overscroll-contain touch-scroll flex flex-col ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`theme-sidebar fixed inset-y-0 left-0 w-72 sm:w-80 max-w-[88vw] bg-[#0b1329] border-r border-slate-800 z-[110] gpu-accelerated scroll-optimized no-composite-thrash transform transition-transform duration-200 ease-out h-[100dvh] max-h-[100dvh] overflow-y-auto overscroll-contain touch-scroll flex flex-col ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         
         {/* Brand Header */}
-        <div className="p-3.5 sm:p-5 flex flex-col items-center border-b border-slate-800/80 bg-slate-900/60 shrink-0 relative">
+        <div className="p-3.5 sm:p-5 flex flex-col items-center border-b border-slate-800/80 bg-slate-900/90 shrink-0 relative">
           <button
             type="button"
             onClick={onClose}

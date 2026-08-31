@@ -1,0 +1,96 @@
+[
+  {
+    "model": "gemma4:12b",
+    "status": "PASS",
+    "elapsed_sec": 11.72,
+    "tok_per_sec": 30.23,
+    "eval_tokens": 40,
+    "prompt_tokens": 34,
+    "vram_gb": 7.51,
+    "total_gb": 7.51,
+    "offload_category": "Full GPU (100% VRAM)",
+    "sample_output": ""
+  },
+  {
+    "model": "gemma4:e4b",
+    "status": "FAIL",
+    "error": "HTTP 500: {\"error\":\"llama-server startup failed before projector CPU offload retry: llama-server reported out-of-memory during startup: CUDA error: out of memory; error stopping failed process: TerminateProcess"
+  },
+  {
+    "model": "qwen3.5:9b",
+    "status": "PASS",
+    "elapsed_sec": 9.52,
+    "tok_per_sec": 42.19,
+    "eval_tokens": 40,
+    "prompt_tokens": 28,
+    "vram_gb": 5.11,
+    "total_gb": 5.11,
+    "offload_category": "Full GPU (100% VRAM)",
+    "sample_output": ""
+  },
+  {
+    "model": "phi3:mini",
+    "status": "PASS",
+    "elapsed_sec": 18.03,
+    "tok_per_sec": 99.89,
+    "eval_tokens": 15,
+    "prompt_tokens": 32,
+    "vram_gb": 3.54,
+    "total_gb": 3.54,
+    "offload_category": "Full GPU (100% VRAM)",
+    "sample_output": "The SCADA system is fully operational and ready for deployment."
+  },
+  {
+    "model": "mistral:latest",
+    "status": "PASS",
+    "elapsed_sec": 10.22,
+    "tok_per_sec": 55.21,
+    "eval_tokens": 7,
+    "prompt_tokens": 26,
+    "vram_gb": 4.61,
+    "total_gb": 4.61,
+    "offload_category": "Full GPU (100% VRAM)",
+    "sample_output": "System is ready for operation."
+  },
+  {
+    "model": "llama3.1:8b",
+    "status": "PASS",
+    "elapsed_sec": 6.7,
+    "tok_per_sec": 51.9,
+    "eval_tokens": 9,
+    "prompt_tokens": 28,
+    "vram_gb": 4.91,
+    "total_gb": 4.91,
+    "offload_category": "Full GPU (100% VRAM)",
+    "sample_output": "\"All systems online, nominal operation confirmed.\""
+  },
+  {
+    "model": "kimi-k3:cloud",
+    "status": "FAIL",
+    "error": "HTTP 402: {\"error\":\"this model requires a subscription or extra usage, upgrade for access at https://ollama.com/upgrade or add extra usage at https://ollama.com/settings (ref: df70b709-3d64-4256-84bb-aef3a32ed3"
+  },
+  {
+    "model": "gemma4:31b-cloud",
+    "status": "PASS",
+    "elapsed_sec": 0.86,
+    "tok_per_sec": 15000000000.0,
+    "eval_tokens": 15,
+    "prompt_tokens": 31,
+    "vram_gb": 0.0,
+    "total_gb": 0.0,
+    "offload_category": "Cloud API (Zero Local VRAM)",
+    "sample_output": "All systems nominal; SCADA interface is online and ready for operation."
+  },
+  {
+    "model": "gpt-oss:120b-cloud",
+    "status": "PASS",
+    "elapsed_sec": 2.01,
+    "tok_per_sec": 40000000000.0,
+    "eval_tokens": 40,
+    "prompt_tokens": 85,
+    "vram_gb": 0.0,
+    "total_gb": 0.0,
+    "offload_category": "Cloud API (Zero Local VRAM)",
+    "sample_output": ""
+  }
+]

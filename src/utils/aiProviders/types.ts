@@ -18,6 +18,7 @@ export interface ChatMessage {
 
 export interface ChatChunk {
   delta?: string;
+  textDelta?: string;      // Alias for delta — used by some local model adapters (LM Studio, Ollama)
   reasoningDelta?: string;
   toolCalls?: Array<{ id: string; name: string; arguments: string }>;
   done: boolean;
@@ -36,6 +37,7 @@ export interface ToolDefinition {
 export interface AiProviderAdapter {
   id: string;
   label: string;
+  model?: string;
   sendStream(
     messages: ChatMessage[],
     tools: ToolDefinition[],
@@ -44,3 +46,16 @@ export interface AiProviderAdapter {
   listModels?(): Promise<string[]>;
   testConnection?(): Promise<{ ok: boolean; error?: string }>;
 }
+
+/**
+ * Provider type identifier used throughout the application.
+ */
+export type AiProviderType =
+  | 'google_gemini'
+  | 'openai'
+  | 'groq'
+  | 'ollama'
+  | 'lmstudio'
+  | 'embedded_gguf'
+  | 'nvidia_nim'
+  | 'custom';

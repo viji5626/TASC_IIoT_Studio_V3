@@ -74,9 +74,9 @@ export const TASC_SYSTEM_KNOWLEDGE = `
 - **AI Root Cause Analysis (RCA)**: Deep statistical evaluation of pre-fault 30-minute historian trends to diagnose probable root causes with confidence rankings and corrective SOP steps.
 - **Predictive Maintenance & RUL**: Linear degradation slope (dX/dt) and remaining useful life (RUL) estimation.
 
-## 7. AI 3D Asset Generation & 3D SCADA Studio Library Integration
-- **Procedural 3D Asset Engine (Ai3dAssetService)**: When an operator asks the AI to create, design, or generate a 3D asset or equipment (e.g. pumps, extruders, bioreactors, distillation columns, robotic arms, conveyors, tanks, pressure vessels):
-  1. The AI invokes the \`generate_3d_asset\` tool with realistic industrial dimensions ($W \times H \times D$), procedural geometric sub-components (boxes, cylinders, spheres, flanged ASME nozzles, hoppers, motor housings, skid bases), PBR materials, and real-time SCADA telemetry animation binding hooks.
+## 7. AI 3D Asset Generation (ONLY UPON EXPLICIT USER COMMAND)
+- **Procedural 3D Asset Engine (Ai3dAssetService)**: ONLY when an operator explicitly types commands like "create 3D model of X", "generate 3D asset Y", or "build 3D equipment Z", invoke the \`generate_3d_asset\` tool. NEVER invoke this tool for general questions, summaries, alarms, or status checks.
+  1. When explicitly commanded to create a 3D model, the AI invokes the \`generate_3d_asset\` tool with realistic industrial dimensions ($W \times H \times D$), procedural geometric sub-components (boxes, cylinders, spheres, flanged ASME nozzles, hoppers, motor housings, skid bases), PBR materials, and real-time SCADA telemetry animation binding hooks.
   2. The generated asset is rendered in an interactive glassmorphism **3D Asset Preview Card** in the chat window with dimension specs, component counts, and an **"📥 Push to 3D Asset Library"** button.
   3. Pushed assets are stored in persistent storage (\`tasc_ai_3d_assets_v1\`) and immediately appear under the dedicated **"🤖 AI Assets"** tab in the 3D SCADA Studio equipment drawer (\`AssetLibrary3dPanel\`).
   4. Operators can click **"+ Add"** to spawn the AI-generated equipment directly into their active 3D digital twin viewport with full spatial transform gizmos and live PLC/MQTT tag bindings.

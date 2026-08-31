@@ -35,6 +35,12 @@ import { OeeStudioView } from './components/oee/OeeStudioView';
 import { TraceabilityStudioView } from './components/traceability/TraceabilityStudioView';
 import { TopNavbar } from './components/TopNavbar';
 import { ModalRegistry } from './components/ModalRegistry';
+import { OperatorAuthProvider, useOperatorAuth } from './store/OperatorAuthContext';
+import { OperatorFirstGoModal } from './components/auth/OperatorFirstGoModal';
+import { OperatorLoginModal } from './components/auth/OperatorLoginModal';
+import { CredentialManagementView } from './components/auth/CredentialManagementView';
+import { PermissionDeniedToast } from './components/auth/PermissionDeniedToast';
+import { AiAutomationWorkbenchView } from './components/AiAutomationWorkbenchView';
 
 function AppContent() {
   const {
@@ -169,6 +175,18 @@ function AppContent() {
   } = useAppContext();
 
   const { isDesktop, isMobile } = useDeviceCapability();
+  const operatorAuth = useOperatorAuth();
+
+  // Global listener for cross-studio navigation events
+  useEffect(() => {
+    const handleNavEvent = (e: any) => {
+      if (e.detail && Object.values(AppView).includes(e.detail)) {
+        setCurrentView(e.detail as AppView);
+      }
+    };
+    window.addEventListener('tasc_navigate_view', handleNavEvent);
+    return () => window.removeEventListener('tasc_navigate_view', handleNavEvent);
+  }, [setCurrentView]);
 
   // Render Landing Page view when on startup gate
   if (userRole === 'gate' || productEdition === ProductEdition.LANDING) {
@@ -265,16 +283,18 @@ function AppContent() {
     );
   }
 
-  // Global listener for cross-studio navigation events
-  useEffect(() => {
-    const handleNavEvent = (e: any) => {
-      if (e.detail && Object.values(AppView).includes(e.detail)) {
-        setCurrentView(e.detail as AppView);
-      }
-    };
-    window.addEventListener('tasc_navigate_view', handleNavEvent);
-    return () => window.removeEventListener('tasc_navigate_view', handleNavEvent);
-  }, [setCurrentView]);
+  // ── Operator Auth Gate (Client Edition only) ──────────────────────────────────
+  // Engineering Edition (userRole === 'admin') bypasses this entire block.
+  if (userRole === 'client' && !operatorAuth.isLoading) {
+    // First-boot: no admin created yet — force setup before anything else
+    if (operatorAuth.requireSetup) {
+      return <OperatorFirstGoModal />;
+    }
+    // Initialized but no active session — show login gate
+    if (!operatorAuth.isAuthenticated) {
+      return <OperatorLoginModal />;
+    }
+  }
 
   const activeMqttConnection = activeConnection;
 
@@ -661,9 +681,18 @@ function AppContent() {
           />
         )}
 
+        {currentView === AppView.CREDENTIALS && (
+          <CredentialManagementView />
+        )}
+
         {currentView === AppView.AI_ASSISTANT && (
           <AiErrorBoundary>
-            <AiAssistantView />
+            <AiAssistantView
+              onBack={() => setCurrentView(AppView.DASHBOARD)}
+              latestValues={latestValues}
+              appState={appState}
+              activeAlarms={activeAlarms}
+            />
           </AiErrorBoundary>
         )}
 
@@ -698,6 +727,12 @@ function AppContent() {
           <TraceabilityStudioView
             onBack={() => setCurrentView(AppView.DASHBOARD)}
             latestValues={latestValues}
+          />
+        )}
+
+        {currentView === AppView.AI_WORKBENCH && (
+          <AiAutomationWorkbenchView
+            onBack={() => setCurrentView(AppView.DASHBOARD)}
           />
         )}
 
@@ -792,6 +827,7 @@ function AppContent() {
         setCommunityLimitNotice={setCommunityLimitNotice}
       />
 
+      <PermissionDeniedToast />
     </div>
   );
 }
@@ -799,7 +835,9 @@ function AppContent() {
 export function App() {
   return (
     <AppContextProvider>
-      <AppContent />
+      <OperatorAuthProvider>
+        <AppContent />
+      </OperatorAuthProvider>
     </AppContextProvider>
   );
 }

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { AppState, ProductEdition } from '../types';
 import { verifyClientPackage, DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_PASSWORD } from '../utils/clientSecurity';
 import { getCommercialSavedPackage, getCommunitySavedPackage, SavedPackageInfo } from '../utils/editionStorage';
+import { operatorAuthClient } from '../services/operatorAuthClientService';
 import AppLogo from './AppLogo';
 
 interface LandingPageProps {
@@ -102,6 +103,18 @@ const LandingPage: React.FC<LandingPageProps> = ({
         };
 
         onImportClientPackage(newAppState, clientName, verification.expiresAt, verification.preferredWorkstationMode);
+
+        // If the package contains pre-configured operator credentials, push them to the server
+        // This replaces any existing credential store (Engineering Edition bundled it intentionally)
+        if (verification.operatorCredentials) {
+          operatorAuthClient.importFromPackage(
+            verification.operatorCredentials,
+            true, // auto-confirm overwrite — this is an intentional package import
+            clientName
+          ).catch(err =>
+            console.warn('[TASC] Operator credential import from package failed:', err)
+          );
+        }
       }
     } catch {
       setImportError('Invalid project file format. Unable to parse payload.');

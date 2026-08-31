@@ -1,0 +1,197 @@
+[
+  {
+    "id": "sentie1.0-3b-claude-fable-5-gpt5.2-sol-kimi-k3-glm-5.2",
+    "name": "Sentie 3.9B Llama",
+    "size_gb": 2.44,
+    "params": "3.9B",
+    "arch": "Llama",
+    "category": "FULL GPU OFFLOAD (100%)",
+    "tier": "Tier 1: Ultra Fast (40-90 tok/s)",
+    "fit_desc": "Fits completely in 8GB VRAM (2.44GB / ~6.8GB Usable VRAM)",
+    "benchmark": {
+      "loaded": true,
+      "load_time": "3.02s",
+      "chat_latency": "2.78s",
+      "tokens_generated": 50,
+      "speed_tps": "18.0 tok/s",
+      "reply": "The cooling pump's pressure drop is urgent. Check for air leaks, inspect the differential pressure sensor at the high-side of the compressor inlet, and verify that the relief valve isn\u2019t compensating by venting to atmosphere \u2014 all within 1"
+    }
+  },
+  {
+    "id": "google/gemma-4-e4b",
+    "name": "Google Gemma 4 E4B",
+    "size_gb": 6.33,
+    "params": "7.5B",
+    "arch": "gemma4",
+    "category": "FULL GPU OFFLOAD (100%)",
+    "tier": "Tier 1: Ultra Fast (40-90 tok/s)",
+    "fit_desc": "Fits completely in 8GB VRAM (6.33GB / ~6.8GB Usable VRAM)",
+    "benchmark": {
+      "loaded": true,
+      "load_time": "7.67s",
+      "chat_latency": "3.69s",
+      "tokens_generated": 50,
+      "speed_tps": "13.6 tok/s",
+      "reply": ""
+    }
+  },
+  {
+    "id": "gemma-4-e4b-it-ultra-uncensored-heretic",
+    "name": "Gemma 4 E4B Heretic",
+    "size_gb": 6.33,
+    "params": "7.5B",
+    "arch": "gemma4",
+    "category": "FULL GPU OFFLOAD (100%)",
+    "tier": "Tier 1: Ultra Fast (40-90 tok/s)",
+    "fit_desc": "Fits completely in 8GB VRAM (6.33GB / ~6.8GB Usable VRAM)",
+    "benchmark": {
+      "loaded": true,
+      "load_time": "6.55s",
+      "chat_latency": "2.77s",
+      "tokens_generated": 20,
+      "speed_tps": "7.2 tok/s",
+      "reply": "**Immediately check Pump 2 seals and suction line for leaks. Isolate if leak persists.**"
+    }
+  },
+  {
+    "id": "gemma-4-e4b-uncensored-hauhaucs-aggressive",
+    "name": "Gemma 4 E4B HauhauCS",
+    "size_gb": 6.33,
+    "params": "7.5B",
+    "arch": "gemma4",
+    "category": "FULL GPU OFFLOAD (100%)",
+    "tier": "Tier 1: Ultra Fast (40-90 tok/s)",
+    "fit_desc": "Fits completely in 8GB VRAM (6.33GB / ~6.8GB Usable VRAM)",
+    "benchmark": {
+      "loaded": true,
+      "load_time": "6.36s",
+      "chat_latency": "2.93s",
+      "tokens_generated": 26,
+      "speed_tps": "8.9 tok/s",
+      "reply": "**Immediate Action:** Investigate Pump 2 immediately. Check suction/discharge lines, motor status, and cooling fluid level."
+    }
+  },
+  {
+    "id": "qwen3.8-27b-uncensored-hauhaucs-aggressive-mtp",
+    "name": "Qwen 3.8 27B MTP (Extreme Quant)",
+    "size_gb": 1.83,
+    "params": "27B",
+    "arch": "qwen35",
+    "category": "FULL GPU OFFLOAD (100%)",
+    "tier": "Tier 1: Ultra Fast (40-90 tok/s)",
+    "fit_desc": "Fits completely in 8GB VRAM (1.83GB / ~6.8GB Usable VRAM)",
+    "benchmark": {
+      "loaded": false,
+      "reason": "Error: Failed to load model. \n\n\n   (X) CAUSE  \n\nFailed to load model\n"
+    }
+  },
+  {
+    "id": "prism-ml/bonsai-27b",
+    "name": "Bonsai 27B Q1_0",
+    "size_gb": 4.73,
+    "params": "27B",
+    "arch": "qwen35",
+    "category": "FULL GPU OFFLOAD (100%)",
+    "tier": "Tier 1: Ultra Fast (40-90 tok/s)",
+    "fit_desc": "Fits completely in 8GB VRAM (4.73GB / ~6.8GB Usable VRAM)",
+    "benchmark": {
+      "loaded": true,
+      "load_time": "9.36s",
+      "chat_latency": "37.52s",
+      "tokens_generated": 50,
+      "speed_tps": "1.3 tok/s",
+      "reply": ""
+    }
+  },
+  {
+    "id": "qwen/qwen3.5-9b",
+    "name": "Qwen 3.5 9B",
+    "size_gb": 6.55,
+    "params": "9B",
+    "arch": "qwen35",
+    "category": "FULL GPU OFFLOAD (100%)",
+    "tier": "Tier 1: Ultra Fast (40-90 tok/s)",
+    "fit_desc": "Fits completely in 8GB VRAM (6.55GB / ~6.8GB Usable VRAM)",
+    "benchmark": {
+      "loaded": true,
+      "load_time": "8.32s",
+      "chat_latency": "5.81s",
+      "tokens_generated": 50,
+      "speed_tps": "8.6 tok/s",
+      "reply": ""
+    }
+  },
+  {
+    "id": "zai-org/glm-4.6v-flash",
+    "name": "GLM 4.6V Flash",
+    "size_gb": 7.95,
+    "params": "9.4B",
+    "arch": "glm4",
+    "category": "PARTIAL GPU OFFLOAD (~83%)",
+    "tier": "Tier 2: Balanced Hybrid (12-30 tok/s)",
+    "fit_desc": "Spans 6.6GB VRAM + 1.3GB System RAM",
+    "benchmark": {
+      "loaded": true,
+      "load_time": "13.48s",
+      "chat_latency": "5.13s",
+      "tokens_generated": 50,
+      "speed_tps": "9.7 tok/s",
+      "reply": ""
+    }
+  },
+  {
+    "id": "flux2-klein-9b-uncensored-text-encoder",
+    "name": "Flux2 Klein 9B Text Encoder",
+    "size_gb": 8.71,
+    "params": "9B",
+    "arch": "qwen3",
+    "category": "INCOMPATIBLE / SPECIALIZED",
+    "tier": "N/A",
+    "fit_desc": "Model is a non-chat encoder, draft model, or missing weights.",
+    "benchmark": {}
+  },
+  {
+    "id": "qwen/qwen3.8-27b",
+    "name": "Qwen 3.8 27B Q4",
+    "size_gb": 17.74,
+    "params": "27B",
+    "arch": "qwen35",
+    "category": "LIKELY TOO LARGE / CPU HEAVY",
+    "tier": "Tier 3: Slow CPU Bottleneck (<8 tok/s)",
+    "fit_desc": "Exceeds safe VRAM+RAM capacity (17.74GB vs 8GB VRAM / 16GB RAM)",
+    "benchmark": {}
+  },
+  {
+    "id": "nvidia-nemotron-3.5-lightning-30b-a3b",
+    "name": "Nemotron 3.5 30B MoE",
+    "size_gb": 24.52,
+    "params": "30B",
+    "arch": "nemotron_h_moe",
+    "category": "LIKELY TOO LARGE / CPU HEAVY",
+    "tier": "Tier 3: Slow CPU Bottleneck (<8 tok/s)",
+    "fit_desc": "Exceeds safe VRAM+RAM capacity (24.52GB vs 8GB VRAM / 16GB RAM)",
+    "benchmark": {}
+  },
+  {
+    "id": "glm-5.3-flash",
+    "name": "GLM 5.3 Flash",
+    "size_gb": 2.77,
+    "params": "Unknown",
+    "arch": "Unknown",
+    "category": "INCOMPATIBLE / SPECIALIZED",
+    "tier": "N/A",
+    "fit_desc": "Model is a non-chat encoder, draft model, or missing weights.",
+    "benchmark": {}
+  },
+  {
+    "id": "muse-glimmer-30b",
+    "name": "Muse Glimmer 30B",
+    "size_gb": 3.03,
+    "params": "2.6B",
+    "arch": "dflash",
+    "category": "INCOMPATIBLE / SPECIALIZED",
+    "tier": "N/A",
+    "fit_desc": "Model is a non-chat encoder, draft model, or missing weights.",
+    "benchmark": {}
+  }
+]

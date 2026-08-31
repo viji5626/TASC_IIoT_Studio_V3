@@ -1,4 +1,5 @@
 import { MqttConnection, Dashboard, Panel } from '../types';
+import type { PackagedOperatorCredentials } from '../types/auth';
 
 export interface ClientPackageData {
   connections: MqttConnection[];
@@ -19,6 +20,8 @@ export interface ClientPackage {
   panels: Panel[];
   signature: string;
   version: string;
+  /** Optional operator credentials block — independently signed. Client Edition imports this on package load. */
+  operatorCredentials?: PackagedOperatorCredentials;
 }
 
 // Master secret salt used for HMAC/SHA-256 integrity verification
@@ -80,13 +83,14 @@ export async function generateClientPackage(
   notes?: string,
   expiresAt?: string,
   preferredWorkstationMode?: 'hmi',
-  clearPassword?: string
+  clearPassword?: string,
+  operatorCredentials?: PackagedOperatorCredentials | null
 ): Promise<ClientPackage> {
   const generatedAt = new Date().toISOString();
   const canonicalStr = getCanonicalString(data, clientName, generatedAt, expiresAt, clearPassword);
   const signature = await computeSHA256(canonicalStr);
 
-  return {
+  const pkg: ClientPackage = {
     packageType: 'TASC_CLIENT_PACKAGE_V1',
     version: '2.4.0',
     clientName: clientName.trim() || 'Enterprise Client',
@@ -100,6 +104,12 @@ export async function generateClientPackage(
     panels: data.panels,
     signature
   };
+
+  if (operatorCredentials) {
+    pkg.operatorCredentials = operatorCredentials;
+  }
+
+  return pkg;
 }
 
 /**
@@ -116,6 +126,8 @@ export async function verifyClientPackage(pkg: any): Promise<{
   expiresAt?: string;
   clearPassword?: string;
   preferredWorkstationMode?: 'hmi';
+  /** Operator credentials block extracted from package — verified independently server-side on import */
+  operatorCredentials?: PackagedOperatorCredentials;
 }> {
   if (!pkg || typeof pkg !== 'object') {
     return { isValid: false, error: 'Invalid JSON file structure.' };
@@ -161,7 +173,8 @@ export async function verifyClientPackage(pkg: any): Promise<{
       expiresAt: pkg.expiresAt,
       clearPassword: pkg.clearPassword,
       preferredWorkstationMode: pkg.preferredWorkstationMode || 'hmi',
-      packageData
+      packageData,
+      operatorCredentials: pkg.operatorCredentials ?? undefined
     };
   }
 

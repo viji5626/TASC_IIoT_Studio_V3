@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { AppView } from '../types';
+import { hybridRagEngine } from '../services/ai/hybridRagEngine';
 
 interface UserManualViewProps {
   onBack: () => void;
@@ -15,6 +16,7 @@ interface Chapter {
   icon: string;
   summary: string;
   readTime: string;
+  semanticMatchPercent?: number;
   sections: {
     title: string;
     content: React.ReactNode;
@@ -657,15 +659,36 @@ export const UserManualView: React.FC<UserManualViewProps> = ({
     }
   ], []);
 
-  // Filtered chapters based on search query
+  // Hybrid RAG Filtered chapters based on search query
   const filteredChapters = useMemo(() => {
     if (!searchQuery.trim()) return chapters;
     const query = searchQuery.toLowerCase();
-    return chapters.filter(c =>
-      c.title.toLowerCase().includes(query) ||
-      c.summary.toLowerCase().includes(query) ||
-      c.category.toLowerCase().includes(query)
-    );
+    
+    // 1. Run hybrid RAG search (vector + BM25)
+    const ragResults = hybridRagEngine.search(searchQuery, 10);
+    const ragScoresByChapter: Record<number, number> = {};
+    for (const res of ragResults) {
+      if (res.chunk.chapter) {
+        ragScoresByChapter[res.chunk.chapter] = Math.round(res.score * 100);
+      }
+    }
+
+    return chapters
+      .map(c => {
+        const ragMatch = ragScoresByChapter[c.number];
+        const textMatch = (
+          c.title.toLowerCase().includes(query) ||
+          c.summary.toLowerCase().includes(query) ||
+          c.category.toLowerCase().includes(query)
+        );
+        const matchPercent = ragMatch || (textMatch ? 85 : 0);
+        return {
+          ...c,
+          semanticMatchPercent: matchPercent > 0 ? matchPercent : undefined
+        };
+      })
+      .filter(c => (c.semanticMatchPercent && c.semanticMatchPercent > 15) || c.title.toLowerCase().includes(query))
+      .sort((a, b) => (b.semanticMatchPercent || 0) - (a.semanticMatchPercent || 0));
   }, [chapters, searchQuery]);
 
   const activeChapter = chapters.find(c => c.id === selectedChapterId) || chapters[0];
@@ -738,10 +761,16 @@ export const UserManualView: React.FC<UserManualViewProps> = ({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search manual topics, protocols..."
+                placeholder="Search topics, protocols, error codes (Semantic RAG)..."
                 className="w-full bg-slate-950 border border-slate-750 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500"
               />
             </div>
+            {searchQuery.trim() && (
+              <div className="mt-2 text-[10px] text-sky-400 font-mono flex items-center justify-between">
+                <span>⚡ Hybrid Semantic RAG Active</span>
+                <span>{filteredChapters.length} matches</span>
+              </div>
+            )}
           </div>
 
           {/* Chapter Links */}
@@ -767,7 +796,13 @@ export const UserManualView: React.FC<UserManualViewProps> = ({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between text-[10px] font-mono mb-0.5">
                       <span className={isSelected ? 'text-sky-300 font-bold' : 'text-slate-500'}>Chapter {ch.number}</span>
-                      <span className="text-slate-500">{ch.readTime}</span>
+                      {ch.semanticMatchPercent ? (
+                        <span className="px-1.5 py-0.2 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 rounded text-[9px] font-bold">
+                          {ch.semanticMatchPercent}% Match
+                        </span>
+                      ) : (
+                        <span className="text-slate-500">{ch.readTime}</span>
+                      )}
                     </div>
                     <h4 className="text-xs font-semibold text-slate-200 truncate">{ch.title}</h4>
                   </div>

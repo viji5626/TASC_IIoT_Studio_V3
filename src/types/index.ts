@@ -7,4 +7,5 @@ export * from './ai';
 export * from './dynamics';
 export * from './symbol';
 export * from './sql';
+export * from './auth';
 export * from '../3d/types';

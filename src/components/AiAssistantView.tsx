@@ -15,6 +15,7 @@ import { AiChatPanel } from './AiChatPanel';
 import { PasteApiSnippet } from './PasteApiSnippet';
 import { ParsedSnippet } from '../utils/aiSnippetParser';
 import { LocalAiServerControl } from './LocalAiServerControl';
+import { EmbeddedGgufControl } from './EmbeddedGgufControl';
 import { CoachMarkOverlay } from './CoachMarkOverlay';
 import { isTourSuppressed } from '../utils/tourRegistry';
 import { AiMemoryStudioTab } from './AiMemoryStudioTab';
@@ -44,12 +45,16 @@ interface Props {
 }
 
 
-export type AiProviderType = 'google_gemini' | 'openai' | 'groq' | 'ollama' | 'lmstudio' | 'custom';
+export type AiProviderType = 'google_gemini' | 'openai' | 'groq' | 'ollama' | 'lmstudio' | 'embedded_gguf' | 'custom';
 
 interface ProviderConfig {
   model: string;
   baseUrl: string;
   temperature: number;
+  contextLength?: number;
+  gpuOffload?: string | number;
+  cpuThreads?: number;
+  maxTokens?: number;
   extraBodyJson: string;
 }
 
@@ -58,36 +63,62 @@ const DEFAULT_PROVIDER_CONFIGS: Record<AiProviderType, ProviderConfig> = {
     model: 'gemini-2.0-flash',
     baseUrl: '',
     temperature: 0.3,
+    contextLength: 8192,
+    maxTokens: 4096,
     extraBodyJson: ''
   },
   openai: {
     model: 'gpt-4o-mini',
     baseUrl: 'https://api.openai.com/v1',
     temperature: 0.3,
+    contextLength: 8192,
+    maxTokens: 4096,
     extraBodyJson: ''
   },
   groq: {
     model: 'llama-3.3-70b-versatile',
     baseUrl: 'https://api.groq.com/openai/v1',
     temperature: 0.3,
+    contextLength: 8192,
+    maxTokens: 4096,
     extraBodyJson: ''
   },
   ollama: {
     model: 'llama3.2',
     baseUrl: 'http://localhost:11434',
     temperature: 0.3,
+    contextLength: 8192,
+    gpuOffload: 'max',
+    cpuThreads: 16,
+    maxTokens: 4096,
     extraBodyJson: ''
   },
   lmstudio: {
-    model: 'local-model',
-    baseUrl: 'http://localhost:1234',
+    model: 'qwen/qwen3.5-9b',
+    baseUrl: 'http://localhost:1234/v1',
     temperature: 0.3,
+    contextLength: 8192,
+    gpuOffload: 'max',
+    cpuThreads: 16,
+    maxTokens: 4096,
     extraBodyJson: ''
+  },
+  embedded_gguf: {
+    model: 'D:\\models\\Qwen2.5-3B-Instruct.gguf',
+    baseUrl: '',
+    temperature: 0.1,
+    contextLength: 2048,
+    gpuOffload: 0,
+    cpuThreads: 4,
+    maxTokens: 2048,
+    extraBodyJson: '{"n_ctx":2048,"n_threads":4,"gpu_layers":0,"gbnf_grammar":true}'
   },
   custom: {
     model: 'nvidia/nemotron-3.5-lightning-30b-a3b',
     baseUrl: 'https://integrate.api.nvidia.com/v1',
     temperature: 0.1,
+    contextLength: 16384,
+    maxTokens: 4096,
     extraBodyJson: '{"chat_template_kwargs":{"enable_thinking":true},"reasoning_budget":16384}'
   }
 };
@@ -136,8 +167,12 @@ export const AiAssistantView: React.FC<Props> = ({
   const [apiKey, setApiKey] = useState<string>('');
   const [model, setModel] = useState<string>(initialConfig.model);
   const [baseUrl, setBaseUrl] = useState<string>(initialConfig.baseUrl);
-  const [temperature, setTemperature] = useState<number>(initialConfig.temperature);
-  const [extraBodyJson, setExtraBodyJson] = useState<string>(initialConfig.extraBodyJson);
+  const [temperature, setTemperature] = useState<number>(initialConfig.temperature ?? 0.3);
+  const [contextLength, setContextLength] = useState<number>(initialConfig.contextLength ?? 4096);
+  const [gpuOffload, setGpuOffload] = useState<string | number>(initialConfig.gpuOffload ?? 'max');
+  const [cpuThreads, setCpuThreads] = useState<number>(initialConfig.cpuThreads ?? 8);
+  const [maxTokens, setMaxTokens] = useState<number>(initialConfig.maxTokens ?? 4096);
+  const [extraBodyJson, setExtraBodyJson] = useState<string>(initialConfig.extraBodyJson ?? '');
 
   // Vision capability detection: auto-identify if current model can understand images
   const supportsVision = React.useMemo(() => {
@@ -377,6 +412,10 @@ export const AiAssistantView: React.FC<Props> = ({
       model,
       baseUrl,
       temperature,
+      contextLength,
+      gpuOffload,
+      cpuThreads,
+      maxTokens,
       extraBodyJson
     });
 
@@ -388,28 +427,52 @@ export const AiAssistantView: React.FC<Props> = ({
     const cfg = getProviderConfig(newProvider);
     setModel(cfg.model);
     setBaseUrl(cfg.baseUrl);
-    setTemperature(cfg.temperature);
-    setExtraBodyJson(cfg.extraBodyJson);
+    setTemperature(cfg.temperature ?? 0.3);
+    setContextLength(cfg.contextLength ?? 4096);
+    setGpuOffload(cfg.gpuOffload ?? 'max');
+    setCpuThreads(cfg.cpuThreads ?? 8);
+    setMaxTokens(cfg.maxTokens ?? 4096);
+    setExtraBodyJson(cfg.extraBodyJson ?? '');
     setTestResult(null);
   };
 
   // Create Provider Adapter Instance
-  const getAdapter = useCallback((): AiProviderAdapter => {
+  const getAdapter = useCallback((overrideModel?: string, tierConfig?: { temperature: number; contextLength: number }): AiProviderAdapter => {
+    const activeModel = overrideModel || model;
+    const activeTemp = tierConfig?.temperature !== undefined ? tierConfig.temperature : temperature;
+    const activeCtx = tierConfig?.contextLength !== undefined ? tierConfig.contextLength : contextLength;
+
     switch (provider) {
       case 'google_gemini':
-        return createGeminiAdapter(apiKey, model || 'gemini-2.0-flash');
+        return createGeminiAdapter(apiKey, activeModel || 'gemini-2.0-flash');
       case 'groq':
-        return createGroqAdapter(apiKey, model || 'llama-3.3-70b-versatile');
+        return createGroqAdapter(apiKey, activeModel || 'llama-3.3-70b-versatile');
       case 'ollama':
-        return createOllamaAdapter(baseUrl || 'http://localhost:11434', model || 'llama3.2');
+        return createOllamaAdapter({
+          baseUrl: baseUrl || 'http://localhost:11434',
+          model: activeModel || 'llama3.2',
+          temperature: activeTemp,
+          contextLength: activeCtx,
+          cpuThreads,
+          gpuOffload,
+          maxTokens
+        });
       case 'lmstudio':
-        return createLmStudioAdapter(baseUrl || 'http://localhost:1234', model || 'local-model');
+        return createLmStudioAdapter({
+          baseUrl: baseUrl || 'http://localhost:1234',
+          model: activeModel || 'local-model',
+          temperature: activeTemp,
+          contextLength: activeCtx,
+          gpuOffload,
+          cpuThreads,
+          maxTokens
+        });
       case 'custom':
         return createCustomAdapter({
           baseUrl,
           apiKey,
-          model: model || 'default',
-          temperature,
+          model: activeModel || 'default',
+          temperature: activeTemp,
           extraBodyJson
         });
       case 'openai':
@@ -425,13 +488,17 @@ export const AiAssistantView: React.FC<Props> = ({
           label: baseUrl.includes('nvidia') ? 'NVIDIA NIM' : 'OpenAI Compatible',
           baseUrl: baseUrl || 'https://api.openai.com/v1',
           apiKey,
-          model: model || 'gpt-4o-mini',
-          temperature,
+          model: activeModel || 'gpt-4o-mini',
+          temperature: activeTemp,
+          contextLength: activeCtx,
+          cpuThreads,
+          gpuOffload,
+          maxTokens,
           extraBody: parsedExtraBody
         });
       }
     }
-  }, [provider, apiKey, model, baseUrl, temperature, extraBodyJson]);
+  }, [provider, apiKey, model, baseUrl, temperature, contextLength, gpuOffload, cpuThreads, maxTokens, extraBodyJson]);
 
   // Fetch Available Models when provider or key changes
   useEffect(() => {
@@ -451,6 +518,10 @@ export const AiAssistantView: React.FC<Props> = ({
       model,
       baseUrl,
       temperature,
+      contextLength,
+      gpuOffload,
+      cpuThreads,
+      maxTokens,
       extraBodyJson
     };
     saveProviderConfig(provider, currentConfig);
@@ -462,6 +533,10 @@ export const AiAssistantView: React.FC<Props> = ({
     localStorage.setItem('tasc_ai_model', model);
     localStorage.setItem('tasc_ai_base_url', baseUrl);
     localStorage.setItem('tasc_ai_temp', temperature.toString());
+    localStorage.setItem('tasc_ai_context_length', contextLength.toString());
+    localStorage.setItem('tasc_ai_gpu_offload', String(gpuOffload));
+    localStorage.setItem('tasc_ai_cpu_threads', cpuThreads.toString());
+    localStorage.setItem('tasc_ai_max_tokens', maxTokens.toString());
     localStorage.setItem('tasc_ai_extra_body', extraBodyJson);
 
     // 4. Save API Key securely
@@ -476,6 +551,7 @@ export const AiAssistantView: React.FC<Props> = ({
       groq: 'Groq Cloud',
       ollama: 'Ollama (Local)',
       lmstudio: 'LM Studio (Local)',
+      embedded_gguf: 'Local GGUF (llama-cpp)',
       custom: 'Custom Endpoint (NVIDIA NIM)'
     };
     const name = providerNames[provider] || provider;
@@ -496,6 +572,37 @@ export const AiAssistantView: React.FC<Props> = ({
     setIsTesting(true);
     setTestResult(null);
     try {
+      if (provider === 'embedded_gguf') {
+        const verifyRes = await fetch(`/api/local-ai/verify-model?path=${encodeURIComponent(model || '')}`);
+        const verifyData = await verifyRes.json();
+
+        if (verifyData.ok && verifyData.exists) {
+          const { pythonBridge } = await import('../services/ai/pythonBridgeClient');
+          const health = await pythonBridge.checkHealth();
+          
+          if (!health.isAvailable) {
+            setTestResult({
+              ok: false,
+              message: `Python local AI runtime daemon is offline. Attempting auto-restart...`
+            });
+            fetch('/api/ai/daemon/start', { method: 'POST' }).catch(() => {});
+          } else {
+            // Trigger auto-start of daemon
+            fetch('/api/ai/daemon/start', { method: 'POST' }).catch(() => {});
+            setTestResult({
+              ok: true,
+              message: `✅ Model Verified: "${verifyData.filename}" (${verifyData.sizeFormatted}) ready on disk. Python IPC Daemon online (${health.latencyMs}ms).`
+            });
+          }
+        } else {
+          setTestResult({
+            ok: false,
+            message: verifyData.error || `Model file not found at: ${model}`
+          });
+        }
+        return;
+      }
+
       const adapter = getAdapter();
       if (adapter.testConnection) {
         const res = await adapter.testConnection();
@@ -524,6 +631,10 @@ export const AiAssistantView: React.FC<Props> = ({
     let targetBaseUrl = baseUrl;
     let targetModel = model;
     let targetTemp = temperature;
+    let targetContextLength = contextLength;
+    let targetGpuOffload = gpuOffload;
+    let targetCpuThreads = cpuThreads;
+    let targetMaxTokens = maxTokens;
     let targetExtraBody = extraBodyJson;
 
     if (parsed.baseUrl) {
@@ -543,6 +654,22 @@ export const AiAssistantView: React.FC<Props> = ({
       setTemperature(parsed.temperature);
       targetTemp = parsed.temperature;
     }
+    if (parsed.contextLength !== undefined) {
+      setContextLength(parsed.contextLength);
+      targetContextLength = parsed.contextLength;
+    }
+    if (parsed.gpuOffload !== undefined) {
+      setGpuOffload(parsed.gpuOffload);
+      targetGpuOffload = parsed.gpuOffload;
+    }
+    if (parsed.cpuThreads !== undefined) {
+      setCpuThreads(parsed.cpuThreads);
+      targetCpuThreads = parsed.cpuThreads;
+    }
+    if (parsed.maxTokens !== undefined) {
+      setMaxTokens(parsed.maxTokens);
+      targetMaxTokens = parsed.maxTokens;
+    }
     if (parsed.extraBodyJson) {
       setExtraBodyJson(parsed.extraBodyJson);
       targetExtraBody = parsed.extraBodyJson;
@@ -553,6 +680,10 @@ export const AiAssistantView: React.FC<Props> = ({
       baseUrl: targetBaseUrl,
       model: targetModel,
       temperature: targetTemp,
+      contextLength: targetContextLength,
+      gpuOffload: targetGpuOffload,
+      cpuThreads: targetCpuThreads,
+      maxTokens: targetMaxTokens,
       extraBodyJson: targetExtraBody
     });
 
@@ -562,6 +693,7 @@ export const AiAssistantView: React.FC<Props> = ({
       groq: 'Groq Cloud',
       ollama: 'Ollama (Local)',
       lmstudio: 'LM Studio (Local)',
+      embedded_gguf: 'Local GGUF (llama-cpp)',
       custom: 'Custom Endpoint (NVIDIA NIM)'
     };
     const name = providerNames[activeTargetProvider] || activeTargetProvider;
@@ -620,7 +752,26 @@ export const AiAssistantView: React.FC<Props> = ({
     abortControllerRef.current = controller;
 
     try {
+      // Ensure tools context is fresh with current live snapshot
+      setAiToolsContext({
+        latestValues: latestValues || store.latestValues || {},
+        appState: appState || store.appState,
+        activeAlarms: activeAlarms || store.activeAlarms || []
+      });
+
       const adapter = getAdapter();
+
+      let candidateModels = availableModels;
+      if (candidateModels.length === 0 && adapter.listModels) {
+        try {
+          const fetched = await adapter.listModels();
+          if (fetched && fetched.length > 0) {
+            candidateModels = fetched;
+            setAvailableModels(fetched);
+          }
+        } catch {}
+      }
+
       await runAiTurn(
         text,
         adapter,
@@ -631,7 +782,12 @@ export const AiAssistantView: React.FC<Props> = ({
           setActiveToolName(toolName);
         },
         controller.signal,
-        images
+        images,
+        {
+          availableModels: candidateModels,
+          isAutoAdaptive: model === 'auto' || model === 'auto-adaptive',
+          adapterFactory: (targetModel, tierConfig) => getAdapter(targetModel, tierConfig)
+        }
       );
     } catch (err: any) {
       if (err.name !== 'AbortError') {
@@ -842,7 +998,8 @@ export const AiAssistantView: React.FC<Props> = ({
       <div className="flex-1 min-h-0 overflow-hidden">
         {(isDrawer || activeTab === 'chat') && (
           <AiChatPanel
-            messages={chatSession}
+            key={`chat-panel-${sessionRevision}`}
+            messages={[...chatSession]}
             isLoading={isLoading}
             activeToolName={activeToolName}
             errorMessage={errorMessage}
@@ -853,6 +1010,7 @@ export const AiAssistantView: React.FC<Props> = ({
             supportsVision={supportsVision}
             isCommunity={isCommunity}
             quotaStatus={quotaStatus}
+            activeModel={availableModels.length > 0 ? (availableModels.find(m => m === model) || availableModels[0]) : model}
             pendingReport={pendingReport}
             reportDownloads={reportDownloads}
             onReportSuggestionSelected={handleReportSuggestionSelected}
@@ -887,13 +1045,14 @@ export const AiAssistantView: React.FC<Props> = ({
                 <label className="text-xs font-semibold uppercase tracking-wider text-slate-300 block mb-2">
                   Select Provider:
                 </label>
-                <div data-tour="ai-provider-tabs" className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                <div data-tour="ai-provider-tabs" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
                   {[
                     { id: 'google_gemini', label: 'Google Gemini', desc: 'Flash 2.0 / Pro', icon: 'fa-google' },
                     { id: 'openai', label: 'OpenAI', desc: 'GPT-4o / Mini', icon: 'fa-cube' },
                     { id: 'groq', label: 'Groq Cloud', desc: 'Llama 3.3 Ultra Fast', icon: 'fa-bolt' },
                     { id: 'ollama', label: 'Ollama (Local)', desc: 'Edge localhost:11434', icon: 'fa-server' },
                     { id: 'lmstudio', label: 'LM Studio (Local)', desc: 'Edge localhost:1234', icon: 'fa-laptop-code' },
+                    { id: 'embedded_gguf', label: 'Local GGUF (llama-cpp)', desc: 'Point-to-.gguf models', icon: 'fa-microchip' },
                     { id: 'custom', label: 'Custom Endpoint', desc: 'NVIDIA NIM / vLLM / etc.', icon: 'fa-network-wired' }
                   ].map((p) => {
                     const isSelected = provider === p.id;
@@ -919,13 +1078,34 @@ export const AiAssistantView: React.FC<Props> = ({
                 </div>
               </div>
 
+              {/* Embedded Local GGUF Model Selector (llama-cpp-python) */}
+              {provider === 'embedded_gguf' && (
+                <EmbeddedGgufControl
+                  currentModelPath={model}
+                  onSelectModelPath={(selectedPath) => setModel(selectedPath)}
+                  onConfigChange={(newExtraJson) => setExtraBodyJson(newExtraJson)}
+                />
+              )}
+
               {/* Local AI Server Controller (Start/Stop Server with CMD & Live Status LED) */}
               {(provider === 'ollama' || provider === 'lmstudio') && (
                 <LocalAiServerControl
                   provider={provider}
                   baseUrl={baseUrl}
                   currentModel={model}
+                  contextLength={contextLength}
+                  gpuOffload={gpuOffload}
+                  cpuThreads={cpuThreads}
+                  temperature={temperature}
+                  maxTokens={maxTokens}
                   onSelectModel={(selected) => setModel(selected)}
+                  onChangeSettings={(newSettings) => {
+                    if (newSettings.contextLength !== undefined) setContextLength(newSettings.contextLength);
+                    if (newSettings.gpuOffload !== undefined) setGpuOffload(newSettings.gpuOffload);
+                    if (newSettings.cpuThreads !== undefined) setCpuThreads(newSettings.cpuThreads);
+                    if (newSettings.temperature !== undefined) setTemperature(newSettings.temperature);
+                    if (newSettings.maxTokens !== undefined) setMaxTokens(newSettings.maxTokens);
+                  }}
                 />
               )}
 
@@ -946,7 +1126,7 @@ export const AiAssistantView: React.FC<Props> = ({
               )}
 
               {/* API Key Input */}
-              {provider !== 'ollama' && provider !== 'lmstudio' && (
+              {provider !== 'ollama' && provider !== 'lmstudio' && provider !== 'embedded_gguf' && (
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
@@ -1009,21 +1189,142 @@ export const AiAssistantView: React.FC<Props> = ({
                 </div>
               </div>
 
-              {/* Temperature Slider */}
-              <div>
-                <div className="flex items-center justify-between text-xs mb-1.5">
-                  <span className="font-semibold uppercase tracking-wider text-slate-300">Temperature (Creativity):</span>
-                  <span className="font-mono text-indigo-400">{temperature}</span>
+              {/* Inference Parameters (Temperature, Context Length, Max Tokens) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-900/40 border border-slate-800 rounded-xl p-3.5">
+                {/* Temperature Slider */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-300 flex items-center space-x-1.5">
+                      <i className="fas fa-fire text-amber-400 text-xs"></i>
+                      <span>Temperature (Sampling):</span>
+                    </span>
+                    <span className="font-mono text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                      {temperature.toFixed(2)}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.0"
+                    max="1.0"
+                    step="0.01"
+                    value={temperature}
+                    onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                    className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                  />
+                  <div className="flex flex-wrap gap-1 pt-0.5">
+                    {[
+                      { label: '0.10 Precise', val: 0.1 },
+                      { label: '0.30 SCADA', val: 0.3 },
+                      { label: '0.70 Balanced', val: 0.7 },
+                      { label: '0.90 Creative', val: 0.9 }
+                    ].map(t => (
+                      <button
+                        key={t.val}
+                        type="button"
+                        onClick={() => setTemperature(t.val)}
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-mono transition-colors cursor-pointer border ${
+                          Math.abs(temperature - t.val) < 0.02
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-400 font-bold'
+                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-600'
+                        }`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <input
-                  type="range"
-                  min="0.0"
-                  max="1.0"
-                  step="0.05"
-                  value={temperature}
-                  onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                  className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                />
+
+                {/* Context Length (Tokens) */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-300 flex items-center space-x-1.5">
+                      <i className="fas fa-brain text-indigo-400 text-xs"></i>
+                      <span>Context Window (Tokens):</span>
+                    </span>
+                    <span className="font-mono text-indigo-400 font-bold bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                      {contextLength.toLocaleString()}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="2048"
+                    max="65536"
+                    step="2048"
+                    value={contextLength}
+                    onChange={(e) => setContextLength(parseInt(e.target.value, 10))}
+                    className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                  />
+                  <div className="flex flex-wrap gap-1 pt-0.5">
+                    {[2048, 4096, 8192, 16384, 32768, 65536].map(c => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setContextLength(c)}
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-mono transition-colors cursor-pointer border ${
+                          contextLength === c
+                            ? 'bg-indigo-600 text-white border-indigo-400 font-bold'
+                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-600'
+                        }`}
+                      >
+                        {c >= 1024 ? `${c / 1024}K` : c}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Limit Max Response Length */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-300 flex items-center space-x-1.5">
+                      <i className="fas fa-comment-dots text-emerald-400 text-xs"></i>
+                      <span>Max Response Length:</span>
+                    </span>
+                    <span className="font-mono text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                      {maxTokens} Tokens
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="256"
+                    max="8192"
+                    step="256"
+                    value={maxTokens}
+                    onChange={(e) => setMaxTokens(parseInt(e.target.value, 10))}
+                    className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                  />
+                  <div className="flex justify-between text-[9px] text-slate-500 font-mono">
+                    <span>256 (Concise)</span>
+                    <span>2048 (Standard)</span>
+                    <span>8192 (Detailed Report)</span>
+                  </div>
+                </div>
+
+                {/* CPU Threads Pool Size */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-300 flex items-center space-x-1.5">
+                      <i className="fas fa-layer-group text-sky-400 text-xs"></i>
+                      <span>CPU Threads (Inference):</span>
+                    </span>
+                    <span className="font-mono text-sky-400 font-bold bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20">
+                      {cpuThreads} Threads
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="16"
+                    step="1"
+                    value={cpuThreads}
+                    onChange={(e) => setCpuThreads(parseInt(e.target.value, 10))}
+                    className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                  />
+                  <div className="flex justify-between text-[9px] text-slate-500 font-mono">
+                    <span>1 Thread</span>
+                    <span>8 Threads (Optimal)</span>
+                    <span>16 Threads</span>
+                  </div>
+                </div>
               </div>
 
               {/* Extra Body / Payload Parameters for Custom or OpenAI Compatible models */}
@@ -1080,7 +1381,9 @@ export const AiAssistantView: React.FC<Props> = ({
                   <i className="fas fa-floppy-disk"></i>
                   <span>
                     Save {
-                      provider === 'custom'
+                      provider === 'embedded_gguf'
+                        ? 'Local GGUF'
+                        : provider === 'custom'
                         ? 'NVIDIA NIM / Custom'
                         : provider === 'lmstudio'
                         ? 'LM Studio'

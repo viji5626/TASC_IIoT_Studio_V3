@@ -159,7 +159,7 @@ export const PanelAppearanceSection: React.FC<PanelAppearanceSectionProps> = ({
                 value={formData.jsonPath || ''}
                 onChange={(val) => setFormData((prev: any) => ({ ...prev, jsonPath: val, isJSONPayload: true }))}
                 appState={appState}
-                placeholder="e.g. $.d.data_vijay[0] or $.temperature"
+                placeholder="e.g. $.d.sensor_val[0] or $.temperature"
               />
               <div className="text-[11px] text-gray-400 bg-gray-900/90 p-3 rounded-lg border border-gray-800/80 space-y-1">
                 <p className="font-semibold text-amber-400 flex items-center space-x-1">
@@ -167,11 +167,11 @@ export const PanelAppearanceSection: React.FC<PanelAppearanceSectionProps> = ({
                   <span>JSONPath Guidance for incoming JSON:</span>
                 </p>
                 <p className="text-gray-300 font-mono text-[10px] bg-black/40 px-2 py-1 rounded">
-                  {`{"ID":"...", "d":{"data_vijay":[65]}}`}
+                  {`{"ID":"...", "d":{"sensor_val":[65]}}`}
                 </p>
                 <ul className="list-disc list-inside space-y-0.5 text-gray-300 text-[11px]">
-                  <li>Array value: <code className="text-amber-300 font-mono">$.d.data_vijay[0]</code> → extracts <code className="text-emerald-400 font-bold">65</code></li>
-                  <li>Nested property: <code className="text-amber-300 font-mono">$.d.data_vijay</code> → auto-unpacks <code className="text-emerald-400 font-bold">65</code></li>
+                  <li>Array value: <code className="text-amber-300 font-mono">$.d.sensor_val[0]</code> → extracts <code className="text-emerald-400 font-bold">65</code></li>
+                  <li>Nested property: <code className="text-amber-300 font-mono">$.d.sensor_val</code> → auto-unpacks <code className="text-emerald-400 font-bold">65</code></li>
                 </ul>
               </div>
             </div>
@@ -187,7 +187,7 @@ export const PanelAppearanceSection: React.FC<PanelAppearanceSectionProps> = ({
                 value={formData.publishPattern || ''}
                 onChange={(val) => setFormData((prev: any) => ({ ...prev, publishPattern: val }))}
                 appState={appState}
-                placeholder='e.g. { "d": { "data_vijay": [<payload>] } }'
+                placeholder='e.g. { "d": { "sensor_val": [<payload>] } }'
               />
 
               {/* Quick Template Preset Buttons */}
@@ -195,10 +195,10 @@ export const PanelAppearanceSection: React.FC<PanelAppearanceSectionProps> = ({
                 <span className="text-[10px] text-gray-400 font-medium mr-1">Quick Presets:</span>
                 <button
                   type="button"
-                  onClick={() => setFormData((prev: any) => ({ ...prev, publishPattern: '{ "d": { "data_vijay": [<payload>] } }' }))}
+                  onClick={() => setFormData((prev: any) => ({ ...prev, publishPattern: '{ "d": { "sensor_val": [<payload>] } }' }))}
                   className="px-2 py-0.5 bg-sky-500/10 border border-sky-500/30 text-sky-300 rounded text-[10px] font-mono hover:bg-sky-500/20 cursor-pointer"
                 >
-                  {`{ "d": { "data_vijay": [<payload>] } }`}
+                  {`{ "d": { "sensor_val": [<payload>] } }`}
                 </button>
                 <button
                   type="button"

@@ -20,6 +20,7 @@ export function createGeminiAdapter(apiKey: string, model = 'gemini-2.0-flash'):
   return {
     id: 'google_gemini',
     label: 'Google Gemini',
+    model: selectedModel,
 
     async *sendStream(
       messages: ChatMessage[],

@@ -20,6 +20,8 @@ import { getAppTheme, AppThemePreset } from '../utils/theme';
 import { registerCustomTag } from '../utils/tagManager';
 import { getSampleProject } from '../utils/sampleProjectPreset';
 import { sanitizeAppState } from '../utils/EditionManager';
+import { OperatorAuthContext } from './OperatorAuthContext';
+import { operatorAuthClient } from '../services/operatorAuthClientService';
 
 export interface AppContextType {
   // Session / State
@@ -389,19 +391,78 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     handleAcknowledgeAllAlarms
   } = alarmEngine;
 
-  // Publish with PIN Check
-  const handlePublish = useCallback((topic: string, payload: string | number) => {
-    if (appState.editPin && !isRuntimeUnlocked) {
-      setPinModalMode('enter');
-      setPendingAction(() => () => {
-        setIsRuntimeUnlocked(true);
-        executePublish(topic, payload);
-      });
-      setIsPinModalOpen(true);
+  // ── Operator RBAC context (may be null in Engineering Edition — context not mounted) ──
+  const operatorAuthCtx = useContext(OperatorAuthContext);
+
+  // ── Publish with Dual Auth Gate ───────────────────────────────────────────────
+  // Engineering Edition (userRole === 'admin'): existing editPin/PinModal gate — UNCHANGED
+  // Client Edition: Operator RBAC permission check + full audit trail
+  const handlePublish = useCallback((topic: string, payload: string | number, widgetName?: string, dashboardName?: string) => {
+    // ENGINEERING EDITION PATH — keep original behavior
+    if (userRole === 'admin') {
+      if (appState.editPin && !isRuntimeUnlocked) {
+        setPinModalMode('enter');
+        setPendingAction(() => () => {
+          setIsRuntimeUnlocked(true);
+          executePublish(topic, payload);
+        });
+        setIsPinModalOpen(true);
+        return;
+      }
+      executePublish(topic, payload);
       return;
     }
+
+    // CLIENT EDITION PATH — Operator RBAC
+    if (!operatorAuthCtx || !operatorAuthCtx.isAuthenticated) {
+      // No operator session — dispatch event so App.tsx can show login modal
+      window.dispatchEvent(new CustomEvent('op_login_required'));
+      return;
+    }
+    if (!operatorAuthCtx.hasPermission('write')) {
+      // Log denied attempt and dispatch notification event
+      operatorAuthClient.logAuditEvent('mqtt_write_denied', { topic, payload: String(payload), permissionMissing: 'write', widgetName });
+      window.dispatchEvent(new CustomEvent('op_permission_denied', { detail: { permission: 'write', username: operatorAuthCtx.currentOperator?.displayName } }));
+      return;
+    }
+    // ✅ Authorized — execute and audit
     executePublish(topic, payload);
-  }, [appState.editPin, isRuntimeUnlocked, executePublish, setIsRuntimeUnlocked, setPendingAction, setIsPinModalOpen, setPinModalMode]);
+    operatorAuthClient.logAuditEvent('mqtt_write', { topic, payload: String(payload), widgetName, dashboardName });
+  }, [userRole, appState.editPin, isRuntimeUnlocked, operatorAuthCtx, executePublish, setIsRuntimeUnlocked, setPendingAction, setIsPinModalOpen, setPinModalMode]);
+
+  // ── Alarm Acknowledge with Dual Auth Gate ─────────────────────────────────────
+  // Engineering Edition: direct pass-through to alarmEngine (unchanged)
+  // Client Edition: RBAC check + audit trail
+  const handleAcknowledgeAlarmGated = useCallback((alarmKey: string) => {
+    if (userRole === 'admin') {
+      // Engineering Edition — no RBAC check
+      handleAcknowledgeAlarm(alarmKey);
+      return;
+    }
+    // Client Edition
+    if (!operatorAuthCtx || !operatorAuthCtx.isAuthenticated) {
+      window.dispatchEvent(new CustomEvent('op_login_required'));
+      return;
+    }
+    if (!operatorAuthCtx.hasPermission('ackAlarms')) {
+      const alarm = activeAlarms.find(a => a.alarmKey === alarmKey);
+      operatorAuthClient.logAuditEvent('alarm_ack_denied', {
+        alarmId: alarmKey,
+        alarmMessage: alarm?.condition ?? alarmKey,
+        permissionMissing: 'ackAlarms'
+      });
+      window.dispatchEvent(new CustomEvent('op_permission_denied', { detail: { permission: 'ackAlarms', username: operatorAuthCtx.currentOperator?.displayName } }));
+      return;
+    }
+    // ✅ Authorized — ack and audit
+    const alarm = activeAlarms.find(a => a.alarmKey === alarmKey);
+    handleAcknowledgeAlarm(alarmKey);
+    operatorAuthClient.logAuditEvent('alarm_ack', {
+      alarmId: alarmKey,
+      alarmMessage: alarm?.condition ?? alarmKey
+    });
+  }, [userRole, operatorAuthCtx, handleAcknowledgeAlarm, activeAlarms]);
+
 
   // CRUD Handlers
   const handleAddPanelSelect = useCallback((type: string) => {
@@ -1139,7 +1200,7 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     setIsSoundEnabled,
     isAutoPopupEnabled,
     setIsAutoPopupEnabled,
-    handleAcknowledgeAlarm,
+    handleAcknowledgeAlarm: handleAcknowledgeAlarmGated,
     handleAcknowledgeAllAlarms,
 
     isSidebarOpen,
@@ -1287,7 +1348,6 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     setIsSoundEnabled,
     isAutoPopupEnabled,
     setIsAutoPopupEnabled,
-    handleAcknowledgeAlarm,
     handleAcknowledgeAllAlarms,
     isSidebarOpen,
     setIsSidebarOpen,

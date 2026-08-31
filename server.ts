@@ -2,6 +2,7 @@ import express from 'express';
 import http from 'http';
 import net from 'net';
 import path from 'path';
+import fs from 'fs';
 import os from 'os';
 import { exec } from 'child_process';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -26,6 +27,7 @@ import { ProfinetDriver } from './src/drivers/profinet/profinetDriver';
 import { ProfibusDriver } from './src/drivers/profibus/profibusDriver';
 import { gsdCatalogService } from './src/drivers/gsd/gsdCatalogService';
 import { scadaSqlRouter } from './src/routes/scadaSqlRoutes';
+import { operatorAuthRouter } from './src/routes/operatorAuthRoutes';
 
 const PORT = 3000;
 
@@ -124,6 +126,9 @@ async function startServer() {
   // ─── SCADA SQL Database Server Router (Isolated Data Source & Manipulator) ─────
   app.use('/api/scada-sql', scadaSqlRouter);
 
+  // ─── Operator Auth & RBAC Router (Client Edition Runtime User Management) ─────
+  app.use('/api/auth/op', operatorAuthRouter);
+
   // ─── AI Endpoint Transparent Proxy (CORS / SSE Streaming Passthrough) ─────────
   app.all('/api/ai/proxy', async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -134,9 +139,13 @@ async function startServer() {
       return res.status(200).end();
     }
 
-    const targetUrl = (req.query.url as string) || (req.headers['x-target-url'] as string);
+    let targetUrl = (req.query.url as string) || (req.headers['x-target-url'] as string);
     if (!targetUrl) {
       return res.status(400).json({ error: 'Missing target url parameter (?url=... or x-target-url header)' });
+    }
+    // Normalize localhost to 127.0.0.1 to avoid Windows Node.js IPv6 resolution errors for local Ollama/LM Studio
+    if (targetUrl.includes('//localhost:')) {
+      targetUrl = targetUrl.replace('//localhost:', '//127.0.0.1:');
     }
 
     try {
@@ -203,6 +212,213 @@ async function startServer() {
         res.end();
       }
     }
+  });
+
+  // ─── AI Python Daemon & Fast Local GGUF Scanner Endpoints ─────────────────
+  app.get('/api/local-ai/gguf-scan', (req, res) => {
+    const customDir = (req.query.dir as string) || '';
+    const searchDirs = new Set<string>();
+
+    if (customDir && fs.existsSync(customDir)) {
+      searchDirs.add(customDir);
+    }
+
+    const homeDir = os.homedir();
+    const standardPaths = [
+      path.join(homeDir, '.lmstudio', 'models'),
+      path.join(homeDir, '.cache', 'lm-studio', 'models'),
+      path.join(homeDir, '.ollama', 'models'),
+      'D:\\models',
+      'C:\\models',
+      path.join(process.cwd(), 'python_engine', 'models')
+    ];
+
+    for (const p of standardPaths) {
+      if (fs.existsSync(p)) searchDirs.add(p);
+    }
+
+    const foundModels: Array<{ name: string; path: string; sizeMb: number; isVisionProjector: boolean }> = [];
+
+    function walkDir(currentPath: string, depth: number = 0) {
+      if (depth > 6) return;
+      try {
+        const entries = fs.readdirSync(currentPath, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(currentPath, entry.name);
+          if (entry.isDirectory()) {
+            walkDir(fullPath, depth + 1);
+          } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.gguf')) {
+            try {
+              const stat = fs.statSync(fullPath);
+              const sizeMb = Math.round((stat.size / (1024 * 1024)) * 10) / 10;
+              const isVision = entry.name.toLowerCase().startsWith('mmproj');
+              foundModels.push({
+                name: entry.name,
+                path: fullPath,
+                sizeMb,
+                isVisionProjector: isVision
+              });
+            } catch {}
+          }
+        }
+      } catch {}
+    }
+
+    for (const d of searchDirs) {
+      walkDir(d);
+    }
+
+    // Sort: Main models first, descending by size
+    foundModels.sort((a, b) => {
+      if (a.isVisionProjector !== b.isVisionProjector) {
+        return a.isVisionProjector ? 1 : -1;
+      }
+      return b.sizeMb - a.sizeMb;
+    });
+
+    res.json({ status: 'SUCCESS', count: foundModels.length, models: foundModels });
+  });
+
+  // Verify GGUF file exists on disk
+  app.get('/api/local-ai/verify-model', (req, res) => {
+    const modelPath = (req.query.path as string) || '';
+    if (!modelPath) {
+      return res.status(400).json({ ok: false, error: 'No model path provided' });
+    }
+
+    try {
+      if (fs.existsSync(modelPath)) {
+        const stat = fs.statSync(modelPath);
+        const sizeMb = Math.round((stat.size / (1024 * 1024)) * 10) / 10;
+        const filename = path.basename(modelPath);
+        return res.json({
+          ok: true,
+          exists: true,
+          filename,
+          sizeMb,
+          sizeFormatted: sizeMb > 1024 ? `${(sizeMb / 1024).toFixed(2)} GB` : `${sizeMb} MB`,
+          message: `Model "${filename}" (${sizeMb > 1024 ? (sizeMb / 1024).toFixed(2) + ' GB' : sizeMb + ' MB'}) verified on disk.`
+        });
+      } else {
+        return res.status(404).json({
+          ok: false,
+          exists: false,
+          error: `File not found on disk: ${modelPath}`
+        });
+      }
+    } catch (e: any) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  });
+
+  // Python Daemon Auto-Spawn & Management
+  let pythonDaemonProcess: any = null;
+
+  function ensurePythonDaemon() {
+    if (pythonDaemonProcess && !pythonDaemonProcess.killed) return;
+    try {
+      const daemonScript = path.join(process.cwd(), 'python_engine', 'tasc_ai_daemon.py');
+      if (fs.existsSync(daemonScript)) {
+        pythonDaemonProcess = exec(`python "${daemonScript}" 8765`, (err) => {
+          if (err) console.warn('[Python Daemon Process Error]:', err.message);
+        });
+        console.log('[Python Daemon] Auto-spawned background process on port 8765');
+      }
+    } catch (err: any) {
+      console.warn('[Python Daemon Auto-spawn Failed]:', err.message);
+    }
+  }
+
+  // Auto-spawn daemon
+  ensurePythonDaemon();
+
+  app.post('/api/ai/daemon/start', (req, res) => {
+    ensurePythonDaemon();
+    res.json({ status: 'STARTING', message: 'Initiated Python AI daemon startup' });
+  });
+
+  app.get('/api/ai/daemon/health', (req, res) => {
+    const client = new net.Socket();
+    let isReturned = false;
+
+    client.setTimeout(200);
+
+    client.connect(8765, '127.0.0.1', () => {
+      client.write(JSON.stringify({ command: 'HEALTH_CHECK', requestId: 'health' }) + '\n');
+    });
+
+    client.on('data', (data) => {
+      if (isReturned) return;
+      isReturned = true;
+      try {
+        const parsed = JSON.parse(data.toString().trim());
+        res.json({ status: 'OK', daemon: parsed });
+      } catch {
+        res.json({ status: 'OK' });
+      }
+      client.destroy();
+    });
+
+    client.on('timeout', () => {
+      if (isReturned) return;
+      isReturned = true;
+      res.status(503).json({ status: 'OFFLINE', message: 'Python daemon not responding' });
+      client.destroy();
+    });
+
+    client.on('error', () => {
+      if (isReturned) return;
+      isReturned = true;
+      res.status(503).json({ status: 'OFFLINE', message: 'Python daemon socket unavailable' });
+      client.destroy();
+    });
+  });
+
+  app.post('/api/ai/daemon/evaluate', (req, res) => {
+    const client = new net.Socket();
+    let isReturned = false;
+    let responseBuffer = '';
+
+    client.setTimeout(1500);
+
+    client.connect(8765, '127.0.0.1', () => {
+      const command = req.body.command || 'SPECIALIST_EVAL';
+      const payload = {
+        command,
+        requestId: req.body.requestId || String(Date.now()),
+        payload: req.body.payload || req.body
+      };
+      client.write(JSON.stringify(payload) + '\n');
+    });
+
+    client.on('data', (data) => {
+      responseBuffer += data.toString();
+      if (responseBuffer.includes('\n')) {
+        if (isReturned) return;
+        isReturned = true;
+        try {
+          const parsed = JSON.parse(responseBuffer.trim());
+          res.json(parsed);
+        } catch (e: any) {
+          res.status(500).json({ status: 'ERROR', error: e.message });
+        }
+        client.destroy();
+      }
+    });
+
+    client.on('timeout', () => {
+      if (isReturned) return;
+      isReturned = true;
+      res.status(504).json({ status: 'TIMEOUT', message: 'Python daemon evaluation timed out' });
+      client.destroy();
+    });
+
+    client.on('error', (err) => {
+      if (isReturned) return;
+      isReturned = true;
+      res.status(503).json({ status: 'OFFLINE', error: err.message });
+      client.destroy();
+    });
   });
 
   // ─── Serial / COM Port Auto-Detection Endpoint ──────────────────────────────
@@ -604,6 +820,346 @@ async function startServer() {
         error: err.message
       });
     }
+  });
+
+  // 4. GET /api/local-ai/hardware-specs
+  app.get('/api/local-ai/hardware-specs', (req, res) => {
+    const cpus = os.cpus();
+    const cpuModel = cpus[0]?.model || 'Unknown CPU';
+    const cpuThreads = cpus.length;
+    const totalRamMb = Math.round(os.totalmem() / (1024 * 1024));
+    const freeRamMb = Math.round(os.freemem() / (1024 * 1024));
+
+    // Probe GPU via nvidia-smi
+    exec('nvidia-smi --query-gpu=name,memory.total,memory.free,memory.used --format=csv,noheader,nounits', (gpuErr, gpuOut) => {
+      let gpu = {
+        hasGpu: false,
+        name: 'N/A',
+        totalVramMb: 0,
+        freeVramMb: 0,
+        usedVramMb: 0
+      };
+
+      if (!gpuErr && gpuOut && gpuOut.trim()) {
+        const parts = gpuOut.trim().split(',').map(s => s.trim());
+        if (parts.length >= 4) {
+          gpu = {
+            hasGpu: true,
+            name: parts[0],
+            totalVramMb: parseInt(parts[1], 10) || 0,
+            freeVramMb: parseInt(parts[2], 10) || 0,
+            usedVramMb: parseInt(parts[3], 10) || 0
+          };
+        }
+      }
+
+      res.json({
+        success: true,
+        cpu: {
+          model: cpuModel,
+          threads: cpuThreads
+        },
+        ram: {
+          totalMb: totalRamMb,
+          freeMb: freeRamMb,
+          totalGb: (totalRamMb / 1024).toFixed(1)
+        },
+        gpu
+      });
+    });
+  });
+
+  // 4b. GET /api/local-ai/recommend-settings (Auto-calculates optimal hardware & inference settings per model)
+  app.get('/api/local-ai/recommend-settings', async (req, res) => {
+    const provider = ((req.query?.provider as string) || 'ollama').toLowerCase();
+    const model = ((req.query?.model as string) || '').trim();
+    const port = parseInt((req.query?.port as string) || (provider === 'ollama' ? '11434' : '1234'), 10);
+
+    if (!model) {
+      return res.status(400).json({ success: false, error: 'Model identifier is required' });
+    }
+
+    try {
+      let sizeBytes = 0;
+      let parameterSize = 'Unknown';
+      let quantization = 'Q4_K_M';
+      let capabilities: string[] = ['completion'];
+      let trainContext = 4096;
+      let family = '';
+
+      if (provider === 'ollama') {
+        const rootUrl = `http://127.0.0.1:${port}`;
+        // Fetch model info from Ollama
+        const showRes = await fetch(`${rootUrl}/api/show`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: model })
+        }).catch(() => null);
+
+        if (showRes && showRes.ok) {
+          const showData = await showRes.json();
+          parameterSize = showData.details?.parameter_size || 'Unknown';
+          quantization = showData.details?.quantization_level || 'Q4_K_M';
+          family = showData.details?.family || '';
+          capabilities = Array.isArray(showData.capabilities) ? showData.capabilities : ['completion'];
+          trainContext = showData.model_info?.['phi3.context_length'] || showData.model_info?.['llama.context_length'] || 32768;
+        }
+
+        // Fetch size from /api/tags
+        const tagsRes = await fetch(`${rootUrl}/api/tags`).catch(() => null);
+        if (tagsRes && tagsRes.ok) {
+          const tagsData = await tagsRes.json();
+          const found = (tagsData.models || []).find((m: any) => m.name === model || m.model === model);
+          if (found) {
+            sizeBytes = found.size || 0;
+            if (found.details?.parameter_size) parameterSize = found.details.parameter_size;
+          }
+        }
+      }
+
+      const sizeGb = sizeBytes > 0 ? sizeBytes / (1024 * 1024 * 1024) : 4.0;
+      const isCloud = model.includes('cloud') || sizeBytes < 10000;
+      const supportsTools = capabilities.includes('tools');
+      const supportsVision = capabilities.includes('vision');
+
+      // Hardware calibration against RTX 4060 (8.2 GB VRAM) + Ryzen (24 Threads)
+      let recommendedGpuOffload: string | number = 'max';
+      let recommendedContextLength = 4096;
+      let recommendedCpuThreads = 8;
+      let recommendedTemperature = 0.30;
+      let recommendedMaxTokens = 2048;
+      let fitAssessment = '100% Full GPU Acceleration';
+      let explanation = '';
+
+      if (isCloud) {
+        recommendedGpuOffload = 'max';
+        recommendedContextLength = 16384;
+        recommendedCpuThreads = 8;
+        fitAssessment = 'Cloud Remote Model (0 Local VRAM)';
+        explanation = 'Model is routed via high-speed Ollama Cloud infrastructure with zero local GPU usage.';
+      } else if (sizeGb <= 4.5) {
+        // e.g. phi3:mini (2.2GB), mistral (4.4GB)
+        recommendedGpuOffload = 'max';
+        recommendedContextLength = 8192;
+        recommendedCpuThreads = 8;
+        fitAssessment = '100% Full GPU (Ultra-Fast 60-100 tok/s)';
+        explanation = `Compact ${parameterSize} model (${sizeGb.toFixed(1)} GB) fits 100% into RTX 4060 VRAM with generous 8K context.`;
+      } else if (sizeGb <= 7.0) {
+        // e.g. llama3.1:8b (4.9GB), qwen3.5:9b (6.6GB)
+        recommendedGpuOffload = 'max';
+        recommendedContextLength = 4096;
+        recommendedCpuThreads = 8;
+        fitAssessment = '100% Full GPU Acceleration';
+        explanation = `${parameterSize} model (${sizeGb.toFixed(1)} GB) occupies ~${Math.round(sizeGb + 1.2)}GB of 8.2GB VRAM. 4K context provides optimal balance.`;
+      } else if (sizeGb <= 8.0) {
+        // e.g. gemma4:12b (7.55GB)
+        recommendedGpuOffload = 'max';
+        recommendedContextLength = 2048;
+        recommendedCpuThreads = 8;
+        fitAssessment = 'Full GPU (High VRAM ~92%)';
+        explanation = `Heavy ${parameterSize} model (${sizeGb.toFixed(1)} GB) uses almost all 8.2GB VRAM. 2K context recommended to prevent memory spike.`;
+      } else {
+        // e.g. gemma4:e4b (9.6GB)
+        recommendedGpuOffload = 22; // 22 GPU layers
+        recommendedContextLength = 2048;
+        recommendedCpuThreads = 12;
+        fitAssessment = 'Hybrid Partial GPU (22 GPU Layers)';
+        explanation = `Model (${sizeGb.toFixed(1)} GB) exceeds 8.2GB VRAM. Automatically allocated 22 GPU layers + 12 CPU threads to prevent CUDA Out-of-Memory.`;
+      }
+
+      res.json({
+        success: true,
+        model,
+        provider,
+        modelDetails: {
+          sizeGb: sizeGb.toFixed(2),
+          parameterSize,
+          quantization,
+          family,
+          supportsTools,
+          supportsVision,
+          trainContext
+        },
+        recommendations: {
+          contextLength: recommendedContextLength,
+          gpuOffload: recommendedGpuOffload,
+          cpuThreads: recommendedCpuThreads,
+          temperature: recommendedTemperature,
+          maxTokens: recommendedMaxTokens,
+          fitAssessment,
+          explanation
+        }
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 5. POST /api/local-ai/load-model (Applies Context Length, GPU Offload, and CPU Threads)
+  app.post('/api/local-ai/load-model', async (req, res) => {
+    const provider = ((req.body?.provider || req.query?.provider as string) || 'lmstudio').toLowerCase();
+    const model = (req.body?.model || req.query?.model as string || '').trim();
+    const contextLength = parseInt(req.body?.contextLength || '4096', 10);
+    const gpuOffload = req.body?.gpuOffload !== undefined ? req.body.gpuOffload : 'max';
+    const cpuThreads = parseInt(req.body?.cpuThreads || '8', 10);
+    const temperature = req.body?.temperature !== undefined ? parseFloat(req.body.temperature) : 0.3;
+    const ttl = parseInt(req.body?.ttl || '3600', 10);
+    const port = parseInt(req.body?.port || (provider === 'ollama' ? '11434' : '1234'), 10);
+
+    if (!model) {
+      return res.status(400).json({ success: false, error: 'Model identifier is required' });
+    }
+
+    if (provider === 'lmstudio') {
+      const gpuArg = gpuOffload ? `--gpu ${gpuOffload}` : '--gpu max';
+      const ctxArg = contextLength ? `-c ${contextLength}` : '';
+      const ttlArg = ttl ? `--ttl ${ttl}` : '--ttl 3600';
+      const cmd = `lms load "${model}" ${gpuArg} ${ctxArg} ${ttlArg} -y`;
+
+      console.log(`[LocalAI] Executing LM Studio Load: ${cmd}`);
+      exec(cmd, { timeout: 120000 }, (err, stdout, stderr) => {
+        if (err) {
+          console.error(`[LocalAI Load Error]`, stderr || stdout || err.message);
+          return res.status(500).json({
+            success: false,
+            error: stderr || stdout || err.message,
+            command: cmd
+          });
+        }
+        res.json({
+          success: true,
+          message: `Model "${model}" successfully loaded in LM Studio (Context: ${contextLength}, GPU Offload: ${gpuOffload})`,
+          output: (stdout || '').trim(),
+          command: cmd
+        });
+      });
+    } else if (provider === 'ollama') {
+      // Warm up Ollama model with custom context length, GPU layers, and CPU threads
+      let numGpu = gpuOffload === 'max' ? 99 : gpuOffload === 'off' ? 0 : typeof gpuOffload === 'number' ? gpuOffload : 99;
+      const rootUrl = `http://127.0.0.1:${port}`;
+      console.log(`[LocalAI] Pre-loading Ollama model "${model}" with num_ctx=${contextLength}, num_gpu=${numGpu}, num_thread=${cpuThreads}`);
+
+      const attemptOllamaLoad = async (numCtx: number, numGpuLayers: number): Promise<{ ok: boolean; text: string }> => {
+        const ollamaRes = await fetch(`${rootUrl}/api/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model,
+            keep_alive: `${ttl}s`,
+            options: {
+              num_ctx: numCtx,
+              num_gpu: numGpuLayers,
+              num_thread: cpuThreads,
+              temperature
+            }
+          })
+        });
+        const text = ollamaRes.ok ? '' : await ollamaRes.text().catch(() => '');
+        return { ok: ollamaRes.ok, text };
+      };
+
+      try {
+        let result = await attemptOllamaLoad(contextLength, numGpu);
+
+        // OOM Detection: if GPU load failed with memory allocation error, retry with CPU-only + reduced context
+        if (!result.ok) {
+          const isOom = result.text.toLowerCase().includes('alloc') ||
+            result.text.toLowerCase().includes('out-of-memory') ||
+            result.text.toLowerCase().includes('ggml_backend') ||
+            result.text.toLowerCase().includes('cuda_host') ||
+            result.text.toLowerCase().includes('failed to allocate');
+
+          if (isOom && numGpu > 0) {
+            const reducedCtx = Math.max(1024, Math.floor(contextLength / 2));
+            console.warn(`[LocalAI] Ollama OOM on GPU load. Retrying CPU-only with ctx=${reducedCtx} (Original error: ${result.text.slice(0, 120)})`);
+            result = await attemptOllamaLoad(reducedCtx, 0);
+            if (result.ok) {
+              return res.json({
+                success: true,
+                provider: 'ollama',
+                message: `⚠️ GPU OOM detected — model "${model}" loaded in CPU-only mode (Context: ${reducedCtx}, Threads: ${cpuThreads}). For full GPU, select a smaller model or reduce context length.`,
+                oomFallback: true
+              });
+            }
+          }
+        }
+
+        if (result.ok) {
+          res.json({
+            success: true,
+            message: `Model "${model}" successfully loaded in Ollama (Context: ${contextLength}, GPU Layers: ${numGpu === 99 ? 'Full GPU' : numGpu}, Threads: ${cpuThreads})`,
+            provider: 'ollama'
+          });
+        } else {
+          const isOom = result.text.toLowerCase().includes('alloc') ||
+            result.text.toLowerCase().includes('out-of-memory') ||
+            result.text.toLowerCase().includes('ggml_backend');
+          res.status(500).json({
+            success: false,
+            oomError: isOom,
+            error: isOom
+              ? `Out of memory loading "${model}". Please: (1) Select a smaller 3B/7B model, (2) Reduce context length to 2048, or (3) Set GPU Offload to "off". Details: ${result.text.slice(0, 300)}`
+              : `Ollama load failed: ${result.text.slice(0, 300)}`
+          });
+        }
+      } catch (err: any) {
+        res.status(500).json({
+          success: false,
+          error: `Failed to load Ollama model: ${err.message}`
+        });
+      }
+    } else {
+      res.json({
+        success: true,
+        message: `Configuration updated for ${provider}. Model will apply parameters during next query.`
+      });
+    }
+  });
+
+  // 6. POST /api/local-ai/unload-model
+  app.post('/api/local-ai/unload-model', async (req, res) => {
+    const provider = ((req.body?.provider || req.query?.provider as string) || 'all').toLowerCase();
+    const model = (req.body?.model || '').trim();
+
+    if (provider === 'ollama') {
+      try {
+        // Query running models from Ollama
+        const psRes = await fetch('http://127.0.0.1:11434/api/ps');
+        if (psRes.ok) {
+          const psData = await psRes.json();
+          const runningModels = Array.isArray(psData.models) ? psData.models : [];
+          for (const m of runningModels) {
+            const mName = m.name || m.model;
+            if (!model || model === mName) {
+              await fetch('http://127.0.0.1:11434/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: mName, keep_alive: 0 })
+              }).catch(() => {});
+            }
+          }
+        }
+        return res.json({
+          success: true,
+          message: model ? `Ollama model "${model}" unloaded.` : 'All Ollama models unloaded from VRAM.'
+        });
+      } catch (err: any) {
+        return res.status(500).json({ success: false, error: err.message });
+      }
+    }
+
+    // Default LM Studio unload
+    const cmd = model ? `lms unload "${model}"` : 'lms unload --all';
+    exec(cmd, { timeout: 30000 }, (err, stdout, stderr) => {
+      if (err) {
+        return res.status(500).json({ success: false, error: stderr || stdout || err.message });
+      }
+      res.json({
+        success: true,
+        message: model ? `Model "${model}" unloaded.` : 'All local models unloaded from VRAM/RAM.',
+        output: (stdout || '').trim()
+      });
+    });
   });
 
   // IEC 61850 Test Connection & Model Discovery Endpoints

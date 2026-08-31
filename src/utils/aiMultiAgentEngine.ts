@@ -31,14 +31,16 @@ export function emitAgentActivity(
   agentType: MultiAgentSpecialistType,
   agentName: string,
   status: MultiAgentEvent['status'],
-  actionDescription: string
+  actionDescription: string,
+  activeAgentCount?: number
 ): void {
   const event: MultiAgentEvent = {
     agentType,
     agentName,
     status,
     actionDescription,
-    timestamp: Date.now()
+    timestamp: Date.now(),
+    activeAgentCount
   };
   try {
     window.dispatchEvent(new CustomEvent('tasc_agent_activity', { detail: event }));
@@ -84,36 +86,127 @@ export async function runMemorySpecialist(queryText: string, appState: AppState)
   return { resolvedAliases, relevantNotes };
 }
 
+export interface TelemetryTimeHorizon {
+  fromMs: number;
+  toMs: number;
+  isArchive: boolean;
+  label: string;
+  storageTier: 'hot_raw' | 'compressed_archive_chunk' | '1hour_rollup' | '1day_rollup';
+}
+
+export function parseQueryTimeHorizon(queryText: string): TelemetryTimeHorizon {
+  const clean = queryText.toLowerCase();
+  const now = Date.now();
+  const ONE_HOUR = 3600 * 1000;
+  const ONE_DAY = 24 * ONE_HOUR;
+  const ONE_MONTH = 30 * ONE_DAY;
+
+  if (clean.includes('6 month') || clean.includes('six month') || clean.includes('half year') || clean.includes('180 day')) {
+    return {
+      fromMs: now - (6 * ONE_MONTH),
+      toMs: now,
+      isArchive: true,
+      label: '6 Months (Long-Term Archive)',
+      storageTier: 'compressed_archive_chunk'
+    };
+  }
+
+  if (clean.includes('1 year') || clean.includes('one year') || clean.includes('365 day') || clean.includes('last year')) {
+    return {
+      fromMs: now - (12 * ONE_MONTH),
+      toMs: now,
+      isArchive: true,
+      label: '1 Year (Long-Term Archive)',
+      storageTier: '1day_rollup'
+    };
+  }
+
+  if (clean.includes('3 month') || clean.includes('quarter') || clean.includes('90 day')) {
+    return {
+      fromMs: now - (3 * ONE_MONTH),
+      toMs: now,
+      isArchive: true,
+      label: '3 Months (Quarterly Archive)',
+      storageTier: 'compressed_archive_chunk'
+    };
+  }
+
+  if (clean.includes('month') || clean.includes('30 day')) {
+    return {
+      fromMs: now - ONE_MONTH,
+      toMs: now,
+      isArchive: true,
+      label: '1 Month Archive',
+      storageTier: 'compressed_archive_chunk'
+    };
+  }
+
+  if (clean.includes('week') || clean.includes('7 day')) {
+    return {
+      fromMs: now - (7 * ONE_DAY),
+      toMs: now,
+      isArchive: false,
+      label: '7 Days',
+      storageTier: 'hot_raw'
+    };
+  }
+
+  // Default: 24 Hours
+  return {
+    fromMs: now - ONE_DAY,
+    toMs: now,
+    isArchive: false,
+    label: '24 Hours',
+    storageTier: 'hot_raw'
+  };
+}
+
 export async function runTelemetrySpecialist(
   tagIds: string[],
-  fromMs: number,
-  toMs: number
+  timeHorizon?: TelemetryTimeHorizon
 ): Promise<Array<{
   tagId: string;
-  source: 'precomputed_chunk' | 'historian_raw';
+  source: 'precomputed_chunk' | 'historian_raw' | 'compressed_archive_chunk' | '1hour_rollup' | '1day_rollup';
+  timeframe: string;
   stats: { min: number; max: number; avg: number; delta: number; count: number };
 }>> {
-  emitAgentActivity('telemetry', 'Telemetry Specialist', 'running', `Analyzing time-series data for ${tagIds.length} tags...`);
+  const horizon = timeHorizon || {
+    fromMs: Date.now() - (24 * 3600 * 1000),
+    toMs: Date.now(),
+    isArchive: false,
+    label: '24 Hours',
+    storageTier: 'hot_raw'
+  };
+
+  const isArchive = horizon.isArchive;
+  const statusMsg = isArchive
+    ? `Decompressing archive partition clusters & querying rollups (${horizon.label}) for ${tagIds.length} tags...`
+    : `Analyzing time-series data (${horizon.label}) for ${tagIds.length} tags...`;
+
+  emitAgentActivity('telemetry', 'Telemetry Specialist', 'running', statusMsg);
 
   const results: Array<any> = [];
 
   for (const tagId of tagIds) {
-    // 1. Check if a precomputed 1-day chunk exists in TascAiMemoryDB
-    const dateStr = new Date(toMs).toISOString().slice(0, 10);
-    const chunkKey = `chunk_${tagId}_1d_${dateStr}`;
-    const cached = await getPrecomputedChunk(chunkKey);
+    // 1. Check if a precomputed 1-day chunk exists in TascAiMemoryDB for recent queries
+    if (!isArchive) {
+      const dateStr = new Date(horizon.toMs).toISOString().slice(0, 10);
+      const chunkKey = `chunk_${tagId}_1d_${dateStr}`;
+      const cached = await getPrecomputedChunk(chunkKey);
 
-    if (cached && cached.stats) {
-      results.push({
-        tagId,
-        source: 'precomputed_chunk',
-        stats: cached.stats
-      });
-      continue;
+      if (cached && cached.stats) {
+        results.push({
+          tagId,
+          source: 'precomputed_chunk',
+          timeframe: horizon.label,
+          stats: cached.stats
+        });
+        continue;
+      }
     }
 
-    // 2. Query Historian Range directly
-    const points = await queryHistoricalRange(tagId, fromMs, toMs);
+    // 2. Query Historian Range directly (routes through hot raw + decompressing cluster partition archives)
+    const points = await queryHistoricalRange(tagId, horizon.fromMs, horizon.toMs, 1000);
     const values = points.map(p => p.v).filter(v => typeof v === 'number' && isFinite(v));
 
     if (values.length > 0) {
@@ -123,15 +216,22 @@ export async function runTelemetrySpecialist(
       const avg = Math.round((sum / values.length) * 100) / 100;
       const delta = Math.max(0, values[values.length - 1] - values[0]);
 
+      const sourceTier = isArchive ? (horizon.storageTier || 'compressed_archive_chunk') : 'historian_raw';
+
       results.push({
         tagId,
-        source: 'historian_raw',
+        source: sourceTier,
+        timeframe: horizon.label,
         stats: { min, max, avg, delta, count: values.length }
       });
     }
   }
 
-  emitAgentActivity('telemetry', 'Telemetry Specialist', 'completed', `Telemetry computed for ${results.length} tags`);
+  const completionMsg = isArchive
+    ? `Archive data retrieved & decompressed for ${results.length} tags (${horizon.label})`
+    : `Telemetry computed for ${results.length} tags (${horizon.label})`;
+
+  emitAgentActivity('telemetry', 'Telemetry Specialist', 'completed', completionMsg);
   return results;
 }
 
@@ -195,39 +295,111 @@ export async function gatherMultiAgentEvidence(
   promptText: string,
   ctx: MultiAgentContext
 ): Promise<string> {
-  emitAgentActivity('supervisor', 'Supervisor Orchestrator', 'running', 'Dispatching specialist micro-agents...');
-
   const cleanPrompt = promptText.toLowerCase();
+
+  // Dynamically determine required specialists for this specific query
+  const plannedSpecialists: string[] = ['Memory Specialist'];
+
+  const needsTelemetry =
+    cleanPrompt.includes('energy') ||
+    cleanPrompt.includes('power') ||
+    cleanPrompt.includes('temp') ||
+    cleanPrompt.includes('trend') ||
+    cleanPrompt.includes('yesterday') ||
+    cleanPrompt.includes('today') ||
+    cleanPrompt.includes('last') ||
+    cleanPrompt.includes('month') ||
+    cleanPrompt.includes('archive') ||
+    cleanPrompt.includes('history') ||
+    cleanPrompt.includes('historical') ||
+    cleanPrompt.includes('year') ||
+    cleanPrompt.includes('quarter');
+  if (needsTelemetry) plannedSpecialists.push('Telemetry Specialist');
+
+  const needsFdd =
+    cleanPrompt.includes('fault') ||
+    cleanPrompt.includes('fdd') ||
+    cleanPrompt.includes('chiller') ||
+    cleanPrompt.includes('waste') ||
+    cleanPrompt.includes('maintenance') ||
+    cleanPrompt.includes('trip');
+  if (needsFdd) plannedSpecialists.push('FDD Diagnostic Specialist');
+
+  const needsDiag =
+    cleanPrompt.includes('driver') ||
+    cleanPrompt.includes('modbus') ||
+    cleanPrompt.includes('opc') ||
+    cleanPrompt.includes('connection') ||
+    cleanPrompt.includes('offline') ||
+    cleanPrompt.includes('quality');
+  if (needsDiag) plannedSpecialists.push('Protocol & Driver Specialist');
+
+  const needsOee =
+    cleanPrompt.includes('oee') ||
+    cleanPrompt.includes('downtime') ||
+    cleanPrompt.includes('bottling') ||
+    cleanPrompt.includes('cnc') ||
+    cleanPrompt.includes('carton') ||
+    cleanPrompt.includes('availability') ||
+    cleanPrompt.includes('performance') ||
+    cleanPrompt.includes('pareto') ||
+    cleanPrompt.includes('shift');
+  if (needsOee) plannedSpecialists.push('OEE Production Specialist');
+
+  const needsTrace =
+    cleanPrompt.includes('batch') ||
+    cleanPrompt.includes('recipe') ||
+    cleanPrompt.includes('genealogy') ||
+    cleanPrompt.includes('lot') ||
+    cleanPrompt.includes('recall') ||
+    cleanPrompt.includes('coa') ||
+    cleanPrompt.includes('cfr') ||
+    cleanPrompt.includes('serial');
+  if (needsTrace) plannedSpecialists.push('Batch Traceability Specialist');
+
+  const activeCount = plannedSpecialists.length;
+
+  emitAgentActivity(
+    'supervisor',
+    'Supervisor Orchestrator',
+    'running',
+    `Activating ${activeCount} domain specialist(s): ${plannedSpecialists.join(', ')}`,
+    activeCount
+  );
 
   // 1. Run Memory Specialist on every prompt
   const memoryEvidence = await runMemorySpecialist(promptText, ctx.appState);
 
-  // 2. Identify target tags
-  const targetTagIds: string[] = memoryEvidence.resolvedAliases.map(a => a.tagId);
-
-  // 3. Run Telemetry Specialist if time or numbers are requested
-  let telemetryEvidence: Array<any> = [];
-  if (cleanPrompt.includes('energy') || cleanPrompt.includes('power') || cleanPrompt.includes('temp') || cleanPrompt.includes('trend') || cleanPrompt.includes('yesterday') || cleanPrompt.includes('today') || cleanPrompt.includes('last')) {
-    const now = Date.now();
-    const fromMs = now - (24 * 3600 * 1000);
-    telemetryEvidence = await runTelemetrySpecialist(targetTagIds, fromMs, now);
+  // 2. Identify target tags (from resolved aliases, or fallback to all registered driver tags)
+  let targetTagIds: string[] = memoryEvidence.resolvedAliases.map(a => a.tagId);
+  if (targetTagIds.length === 0 && ctx.appState.driverTags && ctx.appState.driverTags.length > 0) {
+    targetTagIds = ctx.appState.driverTags.slice(0, 5).map(t => t.tagId);
   }
 
-  // 4. Run FDD Specialist if equipment health/faults are asked
+  // 3. Time Horizon Intent Analysis (Detects 6-Month, 1-Year, Archive requests)
+  const timeHorizon = parseQueryTimeHorizon(promptText);
+
+  // 4. Run Telemetry Specialist if needed
+  let telemetryEvidence: Array<any> = [];
+  if (needsTelemetry) {
+    telemetryEvidence = await runTelemetrySpecialist(targetTagIds, timeHorizon);
+  }
+
+  // 5. Run FDD Specialist if needed
   let fddEvidence: any = null;
-  if (cleanPrompt.includes('fault') || cleanPrompt.includes('fdd') || cleanPrompt.includes('chiller') || cleanPrompt.includes('waste') || cleanPrompt.includes('maintenance') || cleanPrompt.includes('trip')) {
+  if (needsFdd) {
     fddEvidence = runFddSpecialist();
   }
 
-  // 5. Run Diagnostic Specialist if communication or drivers are asked
+  // 6. Run Diagnostic Specialist if needed
   let diagEvidence: any = null;
-  if (cleanPrompt.includes('driver') || cleanPrompt.includes('modbus') || cleanPrompt.includes('opc') || cleanPrompt.includes('connection') || cleanPrompt.includes('offline') || cleanPrompt.includes('quality')) {
+  if (needsDiag) {
     diagEvidence = runDiagnosticSpecialist(ctx.appState);
   }
 
-  // 6. Run OEE Specialist if production, downtime, efficiency, or machine speed is asked
+  // 7. Run OEE Specialist if needed
   let oeeEvidence: string | null = null;
-  if (cleanPrompt.includes('oee') || cleanPrompt.includes('downtime') || cleanPrompt.includes('bottling') || cleanPrompt.includes('cnc') || cleanPrompt.includes('carton') || cleanPrompt.includes('availability') || cleanPrompt.includes('quality') || cleanPrompt.includes('performance') || cleanPrompt.includes('pareto') || cleanPrompt.includes('shift')) {
+  if (needsOee) {
     try {
       const oeeLines = OeePersistence.loadLines();
       const activeLineId = OeePersistence.getActiveLineId();
@@ -247,9 +419,9 @@ export async function gatherMultiAgentEvidence(
     } catch {}
   }
 
-  // 7. Run Batch Traceability Specialist if batches, recipes, genealogy, lot, or recall are asked
+  // 8. Run Batch Traceability Specialist if needed
   let traceEvidence: string | null = null;
-  if (cleanPrompt.includes('batch') || cleanPrompt.includes('recipe') || cleanPrompt.includes('genealogy') || cleanPrompt.includes('lot') || cleanPrompt.includes('recall') || cleanPrompt.includes('coa') || cleanPrompt.includes('cfr') || cleanPrompt.includes('serial')) {
+  if (needsTrace) {
     try {
       const batches = TraceabilityService.loadBatches();
       const activeBatchId = TraceabilityService.getActiveBatchId();
@@ -260,10 +432,20 @@ export async function gatherMultiAgentEvidence(
     } catch {}
   }
 
-  emitAgentActivity('supervisor', 'Supervisor Orchestrator', 'completed', 'Evidence compiled for synthesis');
+  emitAgentActivity(
+    'supervisor',
+    'Supervisor Orchestrator',
+    'completed',
+    `Evidence gathered across ${activeCount} active specialist domain(s)`,
+    activeCount
+  );
 
   // Format into structured evidence block
   const lines: string[] = ['[MULTI-AGENT DOMAIN SPECIALIST EVIDENCE]'];
+
+  if (timeHorizon.isArchive) {
+    lines.push(`- Time Horizon Analysis: ${timeHorizon.label} (Storage Tier: ${timeHorizon.storageTier.toUpperCase()} — Decompressed from persistent archive partitions)`);
+  }
 
   if (memoryEvidence.resolvedAliases.length > 0) {
     lines.push(`- Learned Tag Aliases Resolved: ${memoryEvidence.resolvedAliases.map(a => `"${a.term}" ➔ ${a.tagName} (${a.tagId})`).join(', ')}`);
@@ -272,7 +454,7 @@ export async function gatherMultiAgentEvidence(
     lines.push(`- Plant SOP Notes Applied:\n  ${memoryEvidence.relevantNotes.join('\n  ')}`);
   }
   if (telemetryEvidence.length > 0) {
-    lines.push(`- Telemetry Pre-Computed Stats:\n  ${telemetryEvidence.map(t => `Tag ${t.tagId} [Source: ${t.source}]: Min=${t.stats.min}, Max=${t.stats.max}, Avg=${t.stats.avg}, Delta=${t.stats.delta}`).join('\n  ')}`);
+    lines.push(`- Telemetry Pre-Computed Stats (${timeHorizon.label}):\n  ${telemetryEvidence.map(t => `Tag ${t.tagId} [Source: ${t.source} | Window: ${t.timeframe}]: Min=${t.stats.min}, Max=${t.stats.max}, Avg=${t.stats.avg}, Delta=${t.stats.delta}, Samples=${t.stats.count}`).join('\n  ')}`);
   }
   if (fddEvidence) {
     lines.push(`- FDD Equipment Diagnostics: ${fddEvidence.activeFaultsCount} Active Faults (${fddEvidence.criticalCount} Critical, $${fddEvidence.totalCostPerHour}/hr waste)`);

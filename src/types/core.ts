@@ -53,7 +53,9 @@ export enum AppView {
   REPORTING = 'reporting',
   SQL_STUDIO = 'sql_studio',
   OEE_STUDIO = 'oee_studio',
-  TRACEABILITY_STUDIO = 'traceability_studio'
+  TRACEABILITY_STUDIO = 'traceability_studio',
+  CREDENTIALS = 'credentials',
+  AI_WORKBENCH = 'ai_workbench'
 }
 
 export interface MqttConnection {
@@ -186,7 +188,7 @@ export interface Panel {
   showOfflineBadge?: boolean;       // Display glowing OFFLINE badge overlay on element
   buttonPayload?: string; // For Button
   sliderStep?: number; // For Slider
-  publishPattern?: string; // JSON pattern for publish, e.g. { "d": { "data_vijay": [<payload>] } }
+  publishPattern?: string; // JSON pattern for publish, e.g. { "d": { "sensor_val": [<payload>] } }
   publishTopic?: string; // Separate publish topic for write actions (if different from subscribe topic)
   clearOnPublish?: boolean;
   confirmPublish?: boolean;
@@ -299,6 +301,127 @@ export interface Panel {
 
   // Multiple Dynamic Behaviors Pipeline
   dynamics?: DynamicBehaviorRule[];
+
+  // Smart Object & Parameterized Faceplate Metadata
+  smartObjectId?: string;
+  isSmartObjectRoot?: boolean;
+  smartObjectTemplateId?: string;
+  rootTagSource?: 'asset' | 'driver_tag' | 'mqtt';
+  rootTagPath?: string;
+  relativeTagBinding?: string; // e.g. "Start", "_Start", "Speed_PV", "Fault_Trip"
+}
+
+// ─── TASC ISA-95 Asset Hierarchy & Master Tag Engine Types ───────────────────
+
+export type AssetNodeType = 'enterprise' | 'site' | 'area' | 'line' | 'equipment' | 'folder';
+
+export type AssetTagSourceType = 'driver' | 'mqtt' | 'static' | 'sql_query' | 'expression';
+
+export interface StaticTagConfig {
+  initialValue: string | number | boolean;
+  currentValue?: string | number | boolean;
+  persisted: boolean; // Persist in LocalStorage / SQLite
+  storageTarget?: 'local_storage' | 'sqlite' | 'memory';
+}
+
+export interface SqlTagConfig {
+  connectionId?: string; // Target SQL Server / SQLite / PostgreSQL / MySQL connection
+  queryMode: 'cell_lookup' | 'scalar_query';
+  tableName?: string;
+  columnName?: string;
+  keyColumn?: string;
+  keyValue?: string;
+  customQuery?: string; // e.g. "SELECT speed_sp FROM recipes WHERE recipe_id = 1"
+  pollIntervalMs?: number; // Query polling rate
+  writable?: boolean; // If true, HMI writes execute parameterized UPDATE query
+}
+
+export interface AssetTagDefinition {
+  tagId: string;
+  tagName: string;
+  path: string; // e.g. "Enterprise/Site/Area/Pump_01/Flow_Rate"
+  description?: string;
+  dataType: 'Float' | 'Integer' | 'Boolean' | 'String';
+  unit?: string;
+  scanRateMs?: number;
+  sourceType?: AssetTagSourceType;
+
+  // 1. Static / Memory Configuration
+  staticConfig?: StaticTagConfig;
+
+  // 2. SQL Database Cell Configuration
+  sqlConfig?: SqlTagConfig;
+
+  // 3. Protocol / Driver Source Tab (Dynamic Live Sources)
+  source: {
+    connectionId?: string;
+    protocol: 'modbus' | 'opcua' | 'mqtt' | 'sql' | 'memory';
+    address: string; // e.g. "40001", "ns=2;s=Pump1.Speed", "factory/pump/1"
+    pollIntervalMs?: number;
+    access?: 'read' | 'write' | 'read_write';
+  };
+
+  // 4. Trend Historian Tab
+  historian?: {
+    enabled: boolean;
+    logMode: 'on_change' | 'periodic';
+    intervalMs?: number;
+    deadband?: number;
+    compression?: boolean;
+    retentionDays?: number;
+    triggerTag?: string; // Condition-based logging (e.g. only record while Motor_Running == 1)
+  };
+
+  // 5. Alarm Engine Tab
+  alarms?: {
+    enabled: boolean;
+    alarmType: 'analog_4_limit' | 'digital_state' | 'deviation';
+    highHigh?: { setpoint: number; priority: 'CRITICAL'; message: string };
+    high?: { setpoint: number; priority: 'HIGH'; message: string; tagReference?: string };
+    low?: { setpoint: number; priority: 'MID'; message: string; tagReference?: string };
+    lowLow?: { setpoint: number; priority: 'CRITICAL'; message: string };
+    digitalFault?: { triggerValue: boolean | number; priority: 'HIGH' | 'CRITICAL'; message: string };
+    deviation?: {
+      setpointTagReference: string; // Dynamic Setpoint Tag (e.g. Asset:Plant/Pumps/Pump_01/Target_SP)
+      maxDelta: number; // Trip if abs(PV - SP) > maxDelta
+      priority: 'CRITICAL' | 'HIGH' | 'MID' | 'LOW';
+      message: string;
+    };
+    deadband?: number;
+    autoAck?: boolean;
+  };
+}
+
+export interface AssetNode {
+  id: string;
+  name: string;
+  type: AssetNodeType;
+  description?: string;
+  parentId?: string | null;
+  children?: AssetNode[];
+  tags?: AssetTagDefinition[];
+  equipmentClassId?: string;
+}
+
+export interface EquipmentClass {
+  id: string;
+  name: string;
+  description?: string;
+  category?: string;
+  tags: Omit<AssetTagDefinition, 'path'>[];
+}
+
+export interface SmartObjectTemplate {
+  id: string;
+  name: string;
+  category?: string;
+  description?: string;
+  rootSourceType: 'asset' | 'driver_tag' | 'mqtt';
+  defaultRootPath: string;
+  w: number;
+  h: number;
+  panels: Partial<Panel>[];
+  createdAt?: string;
 }
 
 export interface MqttMessageLog {
@@ -374,6 +497,13 @@ export interface AppState {
   // Industrial Driver Support (additive)
   driverConnections?: DriverConnection[];
   driverTags?: DriverTag[];
+
+  // ISA-95 Asset Hierarchy & Equipment Classes
+  assetHierarchy?: AssetNode[];
+  equipmentClasses?: EquipmentClass[];
+
+  // Smart Object & Parameterized Faceplate Templates
+  smartObjectTemplates?: SmartObjectTemplate[];
 
   // 3D SCADA Visualization Scenes (additive)
   scenes3d?: Scada3dScene[];

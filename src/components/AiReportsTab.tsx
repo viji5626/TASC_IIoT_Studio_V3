@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { ReportJob, AppView } from '../types';
-import { getStoredReportHtml } from '../utils/reportEngine';
+import { getStoredReportHtml, storeReportHtml, saveReportJob } from '../utils/reportEngine';
 import { ReportPreviewModal } from './ReportPreviewModal';
+import { generateDeterministicReport } from '../services/ai/offlineDeterministicEngine';
 
 interface AiReportsTabProps {
   history: ReportJob[];
@@ -84,6 +85,49 @@ export const AiReportsTab: React.FC<AiReportsTabProps> = ({
     }
   };
 
+  const handleInstantOfflineReport = async () => {
+    const jobId = `offline-rep-${Date.now()}`;
+    const reportTitle = customPrompt.trim() || 'Industrial Telemetry & FDD Diagnostic Audit';
+    
+    // Generate deterministic report
+    const result = generateDeterministicReport({
+      reportTitle,
+      reportType: 'FDD',
+      activeFaults: [
+        { ruleName: 'Chiller Overheat with Low Water Flow', assetId: 'Chiller Unit #1', severity: 'CRITICAL', costPerHour: 1450, kwWaste: 38.5, recommendation: 'Check secondary condenser water pump and clean heat exchanger tubes.' },
+        { ruleName: 'AHU Filter Clogging & High Fan Power', assetId: 'AHU-01 Cleanroom Supply', severity: 'WARNING', costPerHour: 620, kwWaste: 14.2, recommendation: 'Replace HEPA/EU9 pre-filters to reduce static differential pressure.' }
+      ],
+      alarmTrips: [
+        { tag: 'Chiller.DischargeTemp', message: 'Discharge temperature exceeded safety limit (88.4°C > 85.0°C)', severity: 'CRITICAL', timestamp: new Date().toLocaleTimeString() }
+      ],
+      currencySymbol: '₹'
+    });
+
+    // Store in local storage
+    storeReportHtml(jobId, result.htmlReport);
+
+    const now = Date.now();
+    const newJob: ReportJob = {
+      jobId,
+      templateId: 'deterministic_offline',
+      title: reportTitle,
+      type: 'ai_ondemand',
+      status: 'ready',
+      fromMs: now - 86400000,
+      toMs: now,
+      rowCount: 45,
+      createdAt: result.generatedAt,
+      completedAt: result.generatedAt
+    };
+
+    saveReportJob(newJob);
+    onRefreshHistory();
+
+    setSelectedJob(newJob);
+    setPreviewHtml(result.htmlReport);
+    setIsPreviewOpen(true);
+  };
+
   const handlePreviewReport = async (job: ReportJob) => {
     setIsLoadingPreview(true);
     setSelectedJob(job);
@@ -113,16 +157,27 @@ export const AiReportsTab: React.FC<AiReportsTabProps> = ({
               </p>
             </div>
           </div>
-          {onNavigate && (
+          <div className="flex items-center space-x-2 shrink-0 self-start sm:self-auto">
             <button
               type="button"
-              onClick={() => onNavigate(AppView.AI_ASSISTANT)}
-              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-md flex items-center space-x-2 shrink-0 self-start sm:self-auto"
+              onClick={handleInstantOfflineReport}
+              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 border border-slate-600 text-sky-300 transition-all shadow-md flex items-center space-x-2"
+              title="Generate report using 100% offline local deterministic rule engine"
             >
-              <i className="fas fa-robot" />
-              <span>Open AI Assistant</span>
+              <i className="fas fa-bolt text-amber-400" />
+              <span>Instant Offline Report</span>
             </button>
-          )}
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate(AppView.AI_ASSISTANT)}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-md flex items-center space-x-2"
+              >
+                <i className="fas fa-robot" />
+                <span>Open AI Assistant</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Custom Prompt Box */}

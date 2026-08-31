@@ -5,6 +5,7 @@ import { CommunityAiQuotaStatus } from '../utils/aiQuotaManager';
 import { PendingReportRequest, MultiAgentEvent, AppView } from '../types';
 import { useAppStore } from '../store/useAppStore';
 import { Ai3dAssetDefinition, Ai3dAssetService } from '../services/Ai3dAssetService';
+import { verifyAiResponseTruth } from '../services/ai/multiTierFactShield';
 
 interface Props {
   messages: ChatMessage[];
@@ -18,6 +19,7 @@ interface Props {
   supportsVision?: boolean;
   isCommunity?: boolean;
   quotaStatus?: CommunityAiQuotaStatus;
+  activeModel?: string;       // Currently loaded model name
   // Report generation props
   pendingReport?: PendingReportRequest | null;
   reportDownloads?: Array<{ jobId: string; title: string; html: string; excelWb?: any }>;
@@ -100,6 +102,7 @@ export const AiChatPanel: React.FC<Props> = ({
   supportsVision = true,
   isCommunity = false,
   quotaStatus,
+  activeModel,
   pendingReport = null,
   reportDownloads = [],
   onReportSuggestionSelected,
@@ -377,7 +380,7 @@ export const AiChatPanel: React.FC<Props> = ({
 
               <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[88%]`}>
                 {/* Meta Header: Response Time Badge & Timestamp */}
-                <div className="flex items-center space-x-2 mb-1 px-1 text-[11px] text-slate-400">
+                <div className="flex flex-wrap items-center gap-2 mb-1 px-1 text-[11px] text-slate-400">
                   {!isUser && responseTimeStr && (
                     <span className="bg-sky-500/15 border border-sky-500/30 text-sky-300 px-2 py-0.2 rounded-full font-mono text-[10px] flex items-center space-x-1">
                       <i className="fas fa-bolt text-amber-400"></i>
@@ -463,20 +466,41 @@ export const AiChatPanel: React.FC<Props> = ({
           </div>
         )}
 
-        {/* Live Multi-Agent Specialist Activity */}
+        {/* Compact Agent Status Bar — shown only while loading */}
         {agentActivity && isLoading && (
-          <div className="flex items-center space-x-2.5 px-3.5 py-2 bg-indigo-950/60 border border-indigo-500/40 rounded-xl text-indigo-200 text-xs w-fit shadow-md animate-pulse">
-            <i className="fas fa-microchip text-indigo-400 text-xs" />
-            <div className="flex items-center space-x-1.5">
-              <strong className="text-indigo-300">[{agentActivity.agentName}]</strong>
-              <span className="text-slate-300">{agentActivity.actionDescription}</span>
-            </div>
+          <div className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-900/80 border border-slate-700/60 rounded-lg text-[11px] w-fit max-w-full">
+            {/* Pulsing active indicator */}
+            <span className="flex items-center gap-1 shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
+              <span className="text-slate-400 font-mono">
+                {agentActivity.activeAgentCount != null && agentActivity.activeAgentCount > 0
+                  ? `${agentActivity.activeAgentCount} agent${agentActivity.activeAgentCount === 1 ? '' : 's'}`
+                  : '1 agent'}
+              </span>
+            </span>
+            <span className="text-slate-700">|</span>
+            {/* Loaded model name */}
+            {activeModel && (
+              <>
+                <span className="text-slate-300 font-mono truncate max-w-[120px]" title={activeModel}>
+                  {activeModel.split('/').pop()?.split(':')[0] || activeModel}
+                </span>
+                <span className="text-slate-700">|</span>
+              </>
+            )}
+            {/* Current agent + action (truncated) */}
+            <span className="text-sky-400 font-semibold shrink-0">{agentActivity.agentName}</span>
+            <span className="text-slate-400 truncate max-w-[180px]" title={agentActivity.actionDescription}>
+              {agentActivity.actionDescription.length > 50
+                ? agentActivity.actionDescription.slice(0, 50) + '…'
+                : agentActivity.actionDescription}
+            </span>
           </div>
         )}
 
         {/* Tool Activity Indicator */}
         {activeToolName && (
-          <div className="flex items-center space-x-2 px-3 py-2 bg-indigo-950/40 border border-indigo-500/30 rounded-xl text-indigo-300 text-xs w-fit">
+          <div className="flex items-center space-x-2 px-3 py-2 bg-slate-900/90 border border-indigo-500/40 rounded-xl text-indigo-300 text-xs w-fit shadow-md">
             <i className="fas fa-gear fa-spin text-indigo-400"></i>
             <span>Executing industrial tool: <strong className="font-mono text-indigo-200">{activeToolName}</strong>...</span>
           </div>

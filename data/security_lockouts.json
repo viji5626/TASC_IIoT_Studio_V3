@@ -1,0 +1,156 @@
+{
+  "userLockouts": {},
+  "ipRateLimits": {
+    "192.168.1.105": {
+      "count": 5,
+      "firstAttemptTime": 1788029521463,
+      "lastAttemptTime": 1788029521465
+    }
+  },
+  "auditTrail": [
+    {
+      "id": "audit-1788029521465-9o5j0s",
+      "timestamp": "2026-08-29T18:52:01.465Z",
+      "eventType": "LOGIN_FAILURE",
+      "username": "test_op_1788029521463",
+      "ip": "192.168.1.105",
+      "details": "Invalid username or password."
+    },
+    {
+      "id": "audit-1788029521465-1qoq2p",
+      "timestamp": "2026-08-29T18:52:01.465Z",
+      "eventType": "ACCOUNT_LOCKOUT",
+      "username": "test_op_1788029521463",
+      "ip": "192.168.1.105",
+      "details": "Account locked for 5 minutes after 5 consecutive failures."
+    },
+    {
+      "id": "audit-1788029521464-uzan1e",
+      "timestamp": "2026-08-29T18:52:01.464Z",
+      "eventType": "LOGIN_FAILURE",
+      "username": "test_op_1788029521463",
+      "ip": "192.168.1.105",
+      "details": "Invalid username or password."
+    },
+    {
+      "id": "audit-1788029521464-wo3i8v",
+      "timestamp": "2026-08-29T18:52:01.464Z",
+      "eventType": "LOGIN_FAILURE",
+      "username": "test_op_1788029521463",
+      "ip": "192.168.1.105",
+      "details": "Invalid username or password."
+    },
+    {
+      "id": "audit-1788029521464-tlcxg5",
+      "timestamp": "2026-08-29T18:52:01.464Z",
+      "eventType": "LOGIN_FAILURE",
+      "username": "test_op_1788029521463",
+      "ip": "192.168.1.105",
+      "details": "Invalid username or password."
+    },
+    {
+      "id": "audit-1788029521463-pfu5od",
+      "timestamp": "2026-08-29T18:52:01.463Z",
+      "eventType": "LOGIN_FAILURE",
+      "username": "test_op_1788029521463",
+      "ip": "192.168.1.105",
+      "details": "Invalid username or password."
+    },
+    {
+      "id": "audit-1788024389981-vs3ipe",
+      "timestamp": "2026-08-29T17:26:29.981Z",
+      "eventType": "LOGIN_FAILURE",
+      "username": "test_op_1788024389978",
+      "ip": "192.168.1.105",
+      "details": "Invalid username or password."
+    },
+    {
+      "id": "audit-1788024389981-8dp7p3",
+      "timestamp": "2026-08-29T17:26:29.981Z",
+      "eventType": "ACCOUNT_LOCKOUT",
+      "username": "test_op_1788024389978",
+      "ip": "192.168.1.105",
+      "details": "Account locked for 5 minutes after 5 consecutive failures."
+    },
+    {
+      "id": "audit-1788024389981-dium00",
+      "timestamp": "2026-08-29T17:26:29.981Z",
+      "eventType": "LOGIN_FAILURE",
+      "username": "test_op_1788024389978",
+      "ip": "192.168.1.105",
+      "details": "Invalid username or password."
+    },
+    {
+      "id": "audit-1788024389980-67lj0j",
+      "timestamp": "2026-08-29T17:26:29.980Z",
+      "eventType": "LOGIN_FAILURE",
+      "username": "test_op_1788024389978",
+      "ip": "192.168.1.105",
+      "details": "Invalid username or password."
+    },
+    {
+      "id": "audit-1788024389980-iqhvd0",
+      "timestamp": "2026-08-29T17:26:29.980Z",
+      "eventType": "LOGIN_FAILURE",
+      "username": "test_op_1788024389978",
+      "ip": "192.168.1.105",
+      "details": "Invalid username or password."
+    },
+    {
+      "id": "audit-1788024389979-abvn2s",
+      "timestamp": "2026-08-29T17:26:29.979Z",
+      "eventType": "LOGIN_FAILURE",
+      "username": "test_op_1788024389978",
+      "ip": "192.168.1.105",
+      "details": "Invalid username or password."
+    },
+    {
+      "id": "audit-1788024348626-6m1l1b",
+      "timestamp": "2026-08-29T17:25:48.626Z",
+      "eventType": "LOGIN_FAILURE",
+      "username": "test_op_1788024348624",
+      "ip": "192.168.1.105",
+      "details": "Invalid username or password."
+    },
+    {
+      "id": "audit-1788024348626-bffzk0",
+      "timestamp": "2026-08-29T17:25:48.626Z",
+      "eventType": "ACCOUNT_LOCKOUT",
+      "username": "test_op_1788024348624",
+      "ip": "192.168.1.105",
+      "details": "Account locked for 5 minutes after 5 consecutive failures."
+    },
+    {
+      "id": "audit-1788024348626-3m6xtt",
+      "timestamp": "2026-08-29T17:25:48.626Z",
+      "eventType": "LOGIN_FAILURE",
+      "username": "test_op_1788024348624",
+      "ip": "192.168.1.105",
+      "details": "Invalid username or password."
+    },
+    {
+      "id": "audit-1788024348626-wcyvbx",
+      "timestamp": "2026-08-29T17:25:48.626Z",
+      "eventType": "LOGIN_FAILURE",
+      "username": "test_op_1788024348624",
+      "ip": "192.168.1.105",
+      "details": "Invalid username or password."
+    },
+    {
+      "id": "audit-1788024348625-e2toyb",
+      "timestamp": "2026-08-29T17:25:48.625Z",
+      "eventType": "LOGIN_FAILURE",
+      "username": "test_op_1788024348624",
+      "ip": "192.168.1.105",
+      "details": "Invalid username or password."
+    },
+    {
+      "id": "audit-1788024348625-todf6i",
+      "timestamp": "2026-08-29T17:25:48.625Z",
+      "eventType": "LOGIN_FAILURE",
+      "username": "test_op_1788024348624",
+      "ip": "192.168.1.105",
+      "details": "Invalid username or password."
+    }
+  ]
+}

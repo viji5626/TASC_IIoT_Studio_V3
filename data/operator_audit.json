@@ -1,0 +1,24 @@
+[
+  {
+    "id": "evt_1788029615833_47d6",
+    "timestamp": "2026-08-29T18:53:35.833Z",
+    "username": "jkl",
+    "displayName": "jkljljlk",
+    "action": "user_created",
+    "success": true,
+    "ip": null,
+    "details": {
+      "newUsername": "jkl",
+      "role": "admin",
+      "permissionsGranted": [
+        "read",
+        "write",
+        "ackAlarms",
+        "controlEquipment",
+        "exportReports",
+        "configSettings",
+        "manageUsers"
+      ]
+    }
+  }
+]

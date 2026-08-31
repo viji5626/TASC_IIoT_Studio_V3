@@ -1,5 +1,7 @@
 import { Panel, DynamicBehaviorRule } from '../types';
 import { getJsonValue } from './mqttHelper';
+import { staticTagService } from '../services/assets/staticTagService';
+import { sqlTagEngine } from '../services/data/sqlTagEngine';
 
 export interface EvaluatedPanelDynamics {
   levelFill: {
@@ -72,6 +74,19 @@ export function evaluatePanelDynamics(
           }
         }
       }
+
+      // Check Static SCADA Local Tags (Memory/Setpoints)
+      if (rawVal === undefined) {
+        rawVal = staticTagService.getTagValue(cleanKey);
+      }
+
+      // Check Database SQL Tags
+      if (rawVal === undefined) {
+        const sqlVal = sqlTagEngine.getValue(cleanKey);
+        if (sqlVal && sqlVal.value !== null) {
+          rawVal = sqlVal.value;
+        }
+      }
     }
 
     // Fallback to panel's own primary tag or panelId if not resolved
@@ -101,7 +116,7 @@ export function evaluatePanelDynamics(
     const num = typeof rawVal === 'number' ? rawVal : (rawVal !== undefined && rawVal !== null ? parseFloat(String(rawVal)) : NaN);
     const str = rawVal !== undefined && rawVal !== null ? String(rawVal).trim() : '';
 
-    const isDigitalMode = (rule.tagDataType || (rule.type === 'level_fill' ? 'analog' : 'digital')) === 'digital';
+    const isDigitalMode = rule.tagDataType === 'digital' || (rule.tagDataType !== 'analog' && rule.conditionType !== 'threshold' && rule.conditionType !== 'range' && (rule.state1Value !== undefined || rule.state2Value !== undefined));
 
     if (isDigitalMode) {
       // 2-State Digital Mode
@@ -164,14 +179,35 @@ export function evaluatePanelDynamics(
       if (rule.conditionType === 'always' || rule.type === 'level_fill') {
         isMatch = true;
       } else if (rule.conditionType === 'threshold' && !isNaN(num)) {
-        const targetVal = parseFloat(String(rule.conditionValue ?? '0'));
-        const op = rule.operator || '>';
-        if (op === '>') isMatch = num > targetVal;
-        else if (op === '>=') isMatch = num >= targetVal;
-        else if (op === '<') isMatch = num < targetVal;
-        else if (op === '<=') isMatch = num <= targetVal;
-        else if (op === '==') isMatch = num === targetVal;
-        else if (op === '!=') isMatch = num !== targetVal;
+        let targetVal = parseFloat(String(rule.conditionValue ?? '0'));
+
+        // If conditionValue references an Asset/Static/Live tag (e.g. "@Asset:Plant/Pumps/Pump_01/Target_SP" or "Target_SP")
+        const condStr = String(rule.conditionValue ?? '').trim();
+        if (isNaN(targetVal) || condStr.startsWith('@') || condStr.startsWith('Asset:') || condStr.includes('/')) {
+          const cleanRef = condStr.replace(/^@?(Asset:)?/, '').trim();
+          const staticVal = staticTagService.getTagValue(cleanRef);
+          if (staticVal !== undefined) {
+            targetVal = parseFloat(String(staticVal));
+          } else if (latestValues[cleanRef] !== undefined) {
+            const lv = latestValues[cleanRef]?.val !== undefined ? latestValues[cleanRef].val : latestValues[cleanRef];
+            targetVal = parseFloat(String(lv));
+          } else {
+            const sqlV = sqlTagEngine.getValue(cleanRef);
+            if (sqlV && sqlV.value !== null) {
+              targetVal = parseFloat(String(sqlV.value));
+            }
+          }
+        }
+
+        if (!isNaN(targetVal)) {
+          const op = rule.operator || '>';
+          if (op === '>') isMatch = num > targetVal;
+          else if (op === '>=') isMatch = num >= targetVal;
+          else if (op === '<') isMatch = num < targetVal;
+          else if (op === '<=') isMatch = num <= targetVal;
+          else if (op === '==') isMatch = num === targetVal;
+          else if (op === '!=') isMatch = num !== targetVal;
+        }
       } else if (rule.conditionType === 'range' && !isNaN(num)) {
         const minVal = rule.minTagValue ?? 0;
         const maxVal = rule.maxTagValue ?? 100;
@@ -199,8 +235,8 @@ export function evaluatePanelDynamics(
       } else if (isMatch) {
         if (rule.type === 'color_shift') {
           result.colorShift = {
-            fill: rule.targetFill,
-            stroke: rule.targetStroke
+            fill: rule.targetFill || rule.state1Fill || (rule as any).color || (rule as any).fill,
+            stroke: rule.targetStroke || rule.state1Stroke || (rule as any).stroke
           };
         } else if (rule.type === 'visibility_blink') {
           const act = rule.actionOnMatch || (rule.isBlinking ? 'blink' : 'hide');

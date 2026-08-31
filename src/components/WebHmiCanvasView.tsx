@@ -42,6 +42,7 @@ interface WebHmiCanvasViewProps {
 import { getSmoothCurvePath, getPipeFilletPath } from '../utils/hmiPathMath';
 import { CANVAS_PRESET_COLORS, ELEMENT_PRESET_COLORS } from './canvas/CanvasPresetColors';
 import { LiveClockWidget } from './canvas/LiveClockWidget';
+import { AiCanvasBuilderModal } from './AiCanvasBuilderModal';
 
 const DEMO_PRESETS = [
   { id: 'water_air_sample', title: 'Water & Air Sample System', icon: 'fa-droplet', bgClass: 'bg-sky-500/20', textClass: 'text-sky-400', elementCount: 9, desc: 'Pumps, water tank levels, flow rate indicators, ambient temperature, humidity, and exhaust fans' },
@@ -84,6 +85,67 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   const setIsEditMode = store?.setIsHmiEditMode || setLocalEditMode;
   const [gridSnap, setGridSnap] = useState(true);
   const [isMobileToolsCollapsed, setIsMobileToolsCollapsed] = useState<boolean>(false);
+  const [isAiBuilderModalOpen, setIsAiBuilderModalOpen] = useState<boolean>(false);
+
+  const handleAddPanelsFromAi = (newPanels: Partial<Panel>[]) => {
+    if (!onUpdateAppState || !appState) return;
+    const currentDash = appState.dashboards.find(d => d.dashboardId === activeDashboardId) || appState.dashboards[0];
+    if (!currentDash) return;
+
+    const availableDriverTags = appState.driverTags || [];
+
+    const fullPanels: Panel[] = newPanels.map((p, idx) => {
+      const isDriver = p.rootTagSource === 'driver_tag' || p.dataSourceMode === 'driver';
+      let matchedDriverTagId = p.driverTagId;
+      let matchedWriteTagId = p.driverWriteTagId;
+
+      if (isDriver && p.topic) {
+        const found = availableDriverTags.find(
+          dt => dt.tagName.toLowerCase() === p.topic!.toLowerCase() || dt.tagId.toLowerCase() === p.topic!.toLowerCase()
+        );
+        if (found) {
+          matchedDriverTagId = found.tagId;
+          if (found.access === 'write' || found.access === 'read_write') {
+            matchedWriteTagId = found.tagId;
+          }
+        }
+      }
+
+      return {
+        panelId: p.panelId || `smart_panel_${Date.now()}_${idx}`,
+        dashboardId: currentDash.dashboardId,
+        connectionId: p.connectionId || 'local_driver',
+        panelName: p.panelName || `Control ${idx + 1}`,
+        type: p.type || PanelType.TEXT_OUTPUT,
+        topic: p.topic || 'plant/telemetry',
+        x: p.x ?? 100,
+        y: p.y ?? 100,
+        w: p.w ?? 150,
+        h: p.h ?? 120,
+        groupId: p.smartObjectId || p.groupId,
+        dataSourceMode: isDriver ? 'driver' : 'mqtt',
+        driverTagId: matchedDriverTagId,
+        driverWriteTagId: matchedWriteTagId,
+        ...p
+      } as Panel;
+    });
+
+    const updatedDashboards = appState.dashboards.map(d => {
+      if (d.dashboardId === currentDash.dashboardId) {
+        return {
+          ...d,
+          panels: [...(d.panels || []), ...fullPanels]
+        };
+      }
+      return d;
+    });
+
+    onUpdateAppState({
+      ...appState,
+      panels: [...(appState.panels || []), ...fullPanels],
+      dashboards: updatedDashboards
+    });
+  };
 
   // Canvas DOM container ref
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -2916,15 +2978,15 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         className="bg-transparent text-xs font-bold text-amber-300 outline-none cursor-pointer max-w-[100px] sm:max-w-[125px]"
                       >
                         <option value="" disabled className="bg-slate-900 text-slate-400">+ Add Shape...</option>
-                        <option value="rectangle" className="bg-slate-900 text-white">🔲 Rectangle</option>
-                        <option value="circle" className="bg-slate-900 text-white">⚪ Circle / Ellipse</option>
-                        <option value="line" className="bg-slate-900 text-white">➖ Vector Line</option>
-                        <option value="polyline" className="bg-slate-900 text-white">🐍 Bendable Polyline</option>
-                        <option value="pipe" className="bg-slate-900 text-white">🚰 Process Pipe</option>
-                        <option value="triangle" className="bg-slate-900 text-white">🔺 Triangle</option>
-                        <option value="polygon" className="bg-slate-900 text-white">⬡ Custom Polygon</option>
-                        <option value="star" className="bg-slate-900 text-white">⭐ Vector Star</option>
-                        <option value="arrow" className="bg-slate-900 text-white">➔ Vector Arrow</option>
+                        <option value="rectangle" className="bg-slate-900 text-white">Rectangle</option>
+                        <option value="circle" className="bg-slate-900 text-white">Circle / Ellipse</option>
+                        <option value="line" className="bg-slate-900 text-white">Vector Line</option>
+                        <option value="polyline" className="bg-slate-900 text-white">Bendable Polyline</option>
+                        <option value="pipe" className="bg-slate-900 text-white">Process Pipe</option>
+                        <option value="triangle" className="bg-slate-900 text-white">Triangle</option>
+                        <option value="polygon" className="bg-slate-900 text-white">Custom Polygon</option>
+                        <option value="star" className="bg-slate-900 text-white">Vector Star</option>
+                        <option value="arrow" className="bg-slate-900 text-white">Vector Arrow</option>
                       </select>
                     </div>
 
@@ -2938,6 +3000,18 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       <i className="fas fa-industry text-xs text-sky-400"></i>
                       <span className="hidden 2xl:inline">Symbol Library</span>
                       <span className="bg-sky-500/30 text-sky-200 text-[9px] font-extrabold px-1 py-0.2 rounded-md border border-sky-400/30">Symbols</span>
+                    </button>
+
+                    {/* AI Screen Builder (Text-to-Canvas) */}
+                    <button
+                      type="button"
+                      onClick={() => setIsAiBuilderModalOpen(true)}
+                      className="px-2 sm:px-2.5 py-1 bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-indigo-500/20 hover:from-purple-500/30 text-purple-300 hover:text-white border border-purple-500/40 hover:border-purple-400 rounded-xl text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shrink-0 shadow-md active:scale-95"
+                      title="AI Rapid Screen Builder - Generate multi-element HMI layouts from plain text"
+                    >
+                      <i className="fas fa-wand-magic-sparkles text-xs text-purple-400"></i>
+                      <span className="hidden 2xl:inline">AI Builder</span>
+                      <span className="bg-purple-500/30 text-purple-200 text-[9px] font-extrabold px-1 py-0.2 rounded-md border border-purple-400/30">AI</span>
                     </button>
 
                     {/* Left Studio Dock (Explorer / Config) Toggle Button */}
@@ -4656,7 +4730,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                               );
                             })()
                           ) : panel.shapeType === 'pipe' || panel.type === PanelType.PIPE || (panel.type as string) === 'pipe' ? (
-                            /* Iconics GraphWorX Style 3D Process Pipe with Realistic Turning Radius, Midline Highlight & Bubble Flow Mechanics */
+                            /* TASC HMI 3D Process Pipe with Realistic Turning Radius, Midline Highlight & Bubble Flow Mechanics */
                             (() => {
                               const boxW = Math.max(10, pos.w);
                               const boxH = Math.max(10, pos.h);
@@ -4739,7 +4813,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                     strokeLinejoin="round"
                                   />
 
-                                  {/* Layer 3: Midline Center Specular Light Gradient Highlight (Iconics GraphWorX 3D Cylindrical Sheen) */}
+                                  {/* Layer 3: Midline Center Specular Light Gradient Highlight (3D Cylindrical Sheen) */}
                                   <path
                                     d={dPath}
                                     fill="none"
@@ -5877,6 +5951,14 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
           <span>{propertyCopiedToast}</span>
         </div>
       )}
+
+      {/* AI Screen Builder Modal */}
+      <AiCanvasBuilderModal
+        isOpen={isAiBuilderModalOpen}
+        onClose={() => setIsAiBuilderModalOpen(false)}
+        onAddPanelsToCanvas={handleAddPanelsFromAi}
+        activeDashboardId={activeDashboardId}
+      />
 
     </div>
   );

@@ -1,0 +1,74 @@
+[
+  {
+    "id": "chap-1-arch",
+    "chapter": 1,
+    "title": "System Architecture & Offline Execution",
+    "keywords": ["architecture", "offline", "indexeddb", "localstorage", "scada", "hmi", "zero database", "browser"],
+    "summary": "TASC IIoT Studio operates 100% inside modern web browsers with zero desktop installation or SQL server requirements. Utilizes high-performance IndexedDB for multi-year time-series telemetry logging and localStorage for project configurations.",
+    "vector": [0.082, 0.142, -0.054, 0.231, 0.015, -0.118, 0.092, 0.174, -0.043, 0.088, 0.112, -0.031, 0.198, 0.065, -0.142, 0.076]
+  },
+  {
+    "id": "chap-2-canvas",
+    "chapter": 2,
+    "title": "SCADA Dashboard & Web HMI Canvas",
+    "keywords": ["canvas", "symbols", "pipes", "tanks", "pumps", "gauges", "drag and drop", "vector graphics", "hmi"],
+    "summary": "Full vector HMI canvas supporting interactive industrial equipment symbols (pumps, chillers, valves, cooling towers, pipes, conveyor belts), real-time color animations, and responsive zoom/pan controls.",
+    "vector": [0.125, 0.034, -0.112, 0.098, 0.215, -0.045, 0.188, 0.042, -0.091, 0.144, 0.082, -0.015, 0.076, 0.189, -0.065, 0.121]
+  },
+  {
+    "id": "chap-3-protocols",
+    "chapter": 3,
+    "title": "Industrial Communication Protocols (Modbus, MQTT, OPC UA)",
+    "keywords": ["modbus", "mqtt", "opc ua", "ethernet/ip", "serial", "tcp", "rtu", "driver bridge", "telemetry"],
+    "summary": "Connects to physical industrial hardware via native driver bridges. Supports Modbus TCP/RTU, standard MQTT JSON brokers, Sparkplug B, and OPC UA binary streams with millisecond telemetry polling.",
+    "vector": [0.045, 0.212, -0.088, 0.176, 0.032, -0.154, 0.067, 0.245, -0.012, 0.054, 0.189, -0.078, 0.145, 0.021, -0.198, 0.095]
+  },
+  {
+    "id": "chap-4-tags",
+    "chapter": 4,
+    "title": "Driver & MQTT Tag Management",
+    "keywords": ["tags", "tag dictionary", "scaling", "deadband", "registers", "engineering units", "data types"],
+    "summary": "Unified tag dictionary with linear sensor scaling (y = mx + c), deadband noise suppression, raw register mapping, float32/int16 data type conversion, and live telemetry health status flags.",
+    "vector": [0.068, 0.189, -0.042, 0.134, 0.078, -0.095, 0.115, 0.162, -0.064, 0.112, 0.145, -0.048, 0.167, 0.089, -0.115, 0.084]
+  },
+  {
+    "id": "chap-5-alarms",
+    "chapter": 5,
+    "title": "Real-Time Alarms & Safety Trip Interlocks",
+    "keywords": ["alarms", "safety", "trips", "interlocks", "high-high", "low-low", "fifo", "auditing", "acknowledgment"],
+    "summary": "IEC 62682 industrial alarm engine featuring 4-level limit thresholds (HH, H, L, LL), rate-of-change trip detection, operator acknowledgment audit trails, audio chimes, and persistent IndexedDB FIFO logging.",
+    "vector": [0.198, 0.075, -0.031, 0.064, 0.045, -0.082, 0.142, 0.098, -0.178, 0.215, 0.067, -0.125, 0.042, 0.168, -0.095, 0.231]
+  },
+  {
+    "id": "chap-6-historian",
+    "chapter": 6,
+    "title": "High-Performance Trend Historian",
+    "keywords": ["historian", "time-series", "downsampling", "lttb", "trends", "charts", "csv export", "performance"],
+    "summary": "Client-side high-throughput time-series trend historian with sub-second logging, multi-pen chart overlays, LTTB lossless visual downsampling, and instant CSV/Excel audit sheet export.",
+    "vector": [0.095, 0.165, -0.078, 0.198, 0.088, -0.124, 0.076, 0.189, -0.052, 0.094, 0.167, -0.062, 0.212, 0.045, -0.165, 0.112]
+  },
+  {
+    "id": "chap-7-fdd",
+    "chapter": 7,
+    "title": "Fault Detection & Diagnostics (FDD) & Predictive Maintenance (CBM)",
+    "keywords": ["fdd", "cbm", "predictive maintenance", "root cause", "rules", "chiller overheat", "vibration", "energy waste", "work orders"],
+    "summary": "Automated AST rule engine for continuous anomaly detection (e.g. Chiller overheat with low water flow, AHU filter clogging, pump cavitation). Computes real-time financial waste rates ($/₹ per hour) and generates automated SOP work orders.",
+    "vector": [0.245, 0.089, -0.012, 0.045, 0.067, -0.064, 0.189, 0.072, -0.145, 0.234, 0.054, -0.145, 0.038, 0.212, -0.078, 0.265]
+  },
+  {
+    "id": "chap-8-ai",
+    "chapter": 8,
+    "title": "Industrial AI Assistant & Natural Language Reporter",
+    "keywords": ["ai", "copilot", "gemini", "openai", "groq", "ollama", "react", "rag", "reports", "natural language"],
+    "summary": "Industrial AI Copilot supporting multi-provider LLMs (Gemini, OpenAI, Groq, Ollama) with client-side WebCrypto encryption. Features ReAct agentic reasoning, telemetry compaction, offline RAG, and automated engineering reports.",
+    "vector": [0.178, 0.112, -0.065, 0.145, 0.115, -0.098, 0.154, 0.125, -0.112, 0.189, 0.095, -0.088, 0.134, 0.176, -0.112, 0.198]
+  },
+  {
+    "id": "chap-9-security",
+    "chapter": 9,
+    "title": "Cybersecurity & Role-Based Access Control (RBAC)",
+    "keywords": ["security", "rbac", "rate limit", "passwords", "roles", "admin", "supervisor", "operator", "lockout", "audit"],
+    "summary": "Comprehensive plant security with Dual-Key Token-Bucket rate limiting, brute-force lockout, configurable password expiry tenures (30-365 days / never), and granular role permissions (Admin, Supervisor, Operator).",
+    "vector": [0.215, 0.064, -0.045, 0.078, 0.032, -0.074, 0.165, 0.089, -0.189, 0.245, 0.048, -0.135, 0.025, 0.195, -0.085, 0.248]
+  }
+]

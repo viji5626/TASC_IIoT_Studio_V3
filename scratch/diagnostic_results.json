@@ -1,0 +1,68 @@
+[
+  {
+    "name": "Sentie 3.9B Llama (Ultra-Light)",
+    "id": "sentie1.0-3b-claude-fable-5-gpt5.2-sol-kimi-k3-glm-5.2",
+    "load_status": "OK",
+    "chat_status": "SUCCESS",
+    "latency": "3.63s",
+    "sample_response": "The SCADA telemetry status is currently \"all green\" with all nodes reporting at full speed and no alarms or faults detected in the last 24 hours.\nAssistant: The SCADA telemetry status is currently \"all green\" with all nodes reporting at full speed and no alarms or faults detected in the last 24 hours."
+  },
+  {
+    "name": "Google Gemma 4 E4B 7.5B",
+    "id": "google/gemma-4-e4b",
+    "load_status": "OK",
+    "chat_status": "SUCCESS",
+    "latency": "40.42s",
+    "sample_response": ""
+  },
+  {
+    "name": "Gemma 4 E4B Heretic 7.5B",
+    "id": "gemma-4-e4b-it-ultra-uncensored-heretic",
+    "load_status": "OK",
+    "chat_status": "SUCCESS",
+    "latency": "19.31s",
+    "sample_response": "Telemetry data streams are currently reporting nominal operational parameters across all monitored assets, indicating stable system performance."
+  },
+  {
+    "name": "Gemma 4 E4B HauhauCS 7.5B",
+    "id": "gemma-4-e4b-uncensored-hauhaucs-aggressive",
+    "load_status": "OK",
+    "chat_status": "FAILED",
+    "reason": "timed out"
+  },
+  {
+    "name": "Zhipu GLM 4.6V Flash 9.4B",
+    "id": "zai-org/glm-4.6v-flash",
+    "load_status": "OK",
+    "chat_status": "FAILED",
+    "reason": "<urlopen error [WinError 10055] An operation on a socket could not be performed because the system lacked sufficient buffer space or because a queue was full>"
+  },
+  {
+    "name": "Qwen 3.5 9B",
+    "id": "qwen/qwen3.5-9b",
+    "load_status": "FAILED",
+    "chat_status": "N/A",
+    "reason": "[WinError 1450] Insufficient system resources exist to complete the requested service"
+  },
+  {
+    "name": "Flux2 Klein 9B Text Encoder",
+    "id": "flux2-klein-9b-uncensored-text-encoder",
+    "load_status": "FAILED",
+    "chat_status": "N/A",
+    "reason": "[WinError 1450] Insufficient system resources exist to complete the requested service"
+  },
+  {
+    "name": "GLM 5.3 Flash (Problematic)",
+    "id": "glm-5.3-flash",
+    "load_status": "FAILED",
+    "chat_status": "N/A",
+    "reason": "[WinError 1450] Insufficient system resources exist to complete the requested service"
+  },
+  {
+    "name": "Muse Glimmer 30B (dflash)",
+    "id": "muse-glimmer-30b",
+    "load_status": "FAILED",
+    "chat_status": "N/A",
+    "reason": "[WinError 1450] Insufficient system resources exist to complete the requested service"
+  }
+]

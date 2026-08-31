@@ -26,12 +26,53 @@ export interface AiToolsContext {
 
 let currentContext: AiToolsContext | null = null;
 
+export function resolveAiToolsContext(): AiToolsContext {
+  if (currentContext && currentContext.appState) {
+    return currentContext;
+  }
+  let fallbackAppState: any = {};
+  try {
+    const raw = 
+      localStorage.getItem('tasc_app_state') || 
+      localStorage.getItem('mqtt_dash_pro_state') || 
+      localStorage.getItem('tasc_studio_state') || 
+      localStorage.getItem('tasc_client_state_backup') || 
+      localStorage.getItem('tasc_community_state_backup');
+    if (raw) {
+      fallbackAppState = JSON.parse(raw);
+    }
+  } catch {}
+
+  const safeAppState: AppState = {
+    dashboards: fallbackAppState.dashboards || [],
+    panels: fallbackAppState.panels || [],
+    connections: fallbackAppState.connections || [],
+    driverConnections: fallbackAppState.driverConnections || [],
+    driverTags: fallbackAppState.driverTags || [],
+    historianTags: fallbackAppState.historianTags || [],
+    assetHierarchy: fallbackAppState.assetHierarchy || [],
+    equipmentClasses: fallbackAppState.equipmentClasses || [],
+    userRole: (localStorage.getItem('tasc_user_role') as any) || 'admin',
+    productEdition: (localStorage.getItem('tasc_product_edition') as any) || 'engineering',
+    ...fallbackAppState
+  } as AppState;
+
+  const fallbackCtx: AiToolsContext = {
+    latestValues: currentContext?.latestValues || {},
+    appState: safeAppState,
+    activeAlarms: currentContext?.activeAlarms || []
+  };
+
+  currentContext = fallbackCtx;
+  return fallbackCtx;
+}
+
 export function setAiToolsContext(ctx: AiToolsContext): void {
   currentContext = ctx;
 }
 
-export function getAiToolsContext(): AiToolsContext | null {
-  return currentContext;
+export function getAiToolsContext(): AiToolsContext {
+  return resolveAiToolsContext();
 }
 
 /**
@@ -39,8 +80,8 @@ export function getAiToolsContext(): AiToolsContext | null {
  * to inject directly into the system prompt for instant zero-latency reasoning.
  */
 export function getLiveContextSnapshot(): string {
-  if (!currentContext) return 'Project state is loading.';
-  const { appState, activeAlarms, latestValues } = currentContext;
+  const ctx = resolveAiToolsContext();
+  const { appState, activeAlarms, latestValues } = ctx;
 
   const drivers = appState.driverConnections || [];
   const driverTags = appState.driverTags || [];
@@ -569,7 +610,7 @@ export const AI_TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: 'generate_3d_asset',
-    description: 'Procedurally create an interactive 3D SCADA equipment/asset (e.g. pumps, extruders, bioreactors, distillation columns, robotic arms, conveyors, tanks) with PBR materials, ASME flanged nozzles, dimensions, and real-time PLC/MQTT telemetry binding hooks for the 3D SCADA Studio.',
+    description: 'ONLY use when the user EXPLICITLY commands to "generate 3d model", "create 3d asset", or "build 3d equipment". NEVER use for general questions, summaries, alarms, or normal conversation. Procedurally creates interactive 3D SCADA equipment (pumps, tanks, valves, mixers, conveyors) with PBR materials and telemetry hooks.',
     parameters: {
       type: 'object',
       properties: {
@@ -684,11 +725,42 @@ export const AI_TOOL_DEFINITIONS: ToolDefinition[] = [
   }
 ];
 
-export async function executeAiTool(name: string, args: Record<string, unknown>): Promise<string> {
-  const ctx = currentContext;
-  if (!ctx) {
-    return JSON.stringify({ error: 'AI tools context is not initialized.' });
-  }
+/**
+ * Selects only the relevant tools for a given user query to optimize context usage
+ * and prevent small/local LLMs from hallucinatory/unsolicited heavy tool calling.
+ */
+export function getRelevantAiTools(userQuery: string): ToolDefinition[] {
+  const q = (userQuery || '').toLowerCase();
+
+  // Explicit 3D Asset creation intent
+  const has3dIntent = /(3d|cad|mesh|digital twin|threejs|geometry|generate.*(pump|tank|valve|mixer|blender|motor|conveyor|vessel|column|asset|model|equipment)|create.*(3d|model|asset|equipment|pump)|design.*(3d|model|asset|equipment|pump)|build.*(3d|model|asset|equipment|pump))/i.test(q);
+
+  // Explicit Image / Diagram generation intent
+  const hasImageIntent = /(draw|schematic|diagram|blueprint|p&id|p\s*&\s*id|generate.*image|create.*image|illustration|wiring layout|render photo)/i.test(q);
+
+  // Report generation intent
+  const hasReportIntent = /(report|export|shift summary|generate.*report|create.*report|pdf report)/i.test(q);
+
+  // FDD / Fault diagnostics intent
+  const hasFddIntent = /(fault|fdd|rca|root cause|diagnos|maintenance|work order|waste rate|energy waste|breakdown|health)/i.test(q);
+
+  // Historian / Trends intent
+  const hasHistoryIntent = /(history|trend|historian|past|yesterday|last hour|range|aggregate|min|max|average|avg|log)/i.test(q);
+
+  return AI_TOOL_DEFINITIONS.filter(tool => {
+    if (tool.name === 'generate_3d_asset') return has3dIntent;
+    if (tool.name === 'generate_industrial_image') return hasImageIntent;
+    if (tool.name === 'suggest_report_additions' || tool.name === 'generate_report') return hasReportIntent;
+    if (tool.name.startsWith('fdd_')) return hasFddIntent;
+    if (tool.name === 'query_historian') return hasHistoryIntent;
+
+    // Default high-utility telemetry, alarm, driver, and tag tools
+    return true;
+  });
+}
+
+export async function executeAiTool(name: string, args: Record<string, unknown>, userQuery?: string): Promise<string> {
+  const ctx = resolveAiToolsContext();
 
   try {
     switch (name) {
@@ -1010,12 +1082,25 @@ ${rows}`;
         const limit = typeof args.limit === 'number' ? Math.min(args.limit, 500) : 100;
 
         const points = await queryHistoricalRange(penTopic, startMs, endMs, limit);
+        const spanDays = Math.round((endMs - startMs) / (24 * 3600 * 1000));
+        const isArchiveTier = spanDays > 30;
+        const storageTier = spanDays > 90 ? '1day_rollup' : (isArchiveTier ? 'compressed_archive_chunk' : 'hot_raw');
+
+        const numericVals = points.map(p => p.v).filter(v => typeof v === 'number' && isFinite(v));
+        const minVal = numericVals.length > 0 ? Math.min(...numericVals) : null;
+        const maxVal = numericVals.length > 0 ? Math.max(...numericVals) : null;
+        const avgVal = numericVals.length > 0 ? Math.round((numericVals.reduce((a, b) => a + b, 0) / numericVals.length) * 100) / 100 : null;
+
         return JSON.stringify({
           penTopic,
           startMs,
           endMs,
+          timeSpanDays: spanDays,
+          storageTier,
+          storageDescription: isArchiveTier ? `Decompressed from ${storageTier.toUpperCase()}` : 'Hot Raw Circular Buffer',
           returnedPoints: points.length,
-          points: points.map(p => ({ time: new Date(p.t).toISOString(), value: p.v }))
+          statsSummary: numericVals.length > 0 ? { min: minVal, max: maxVal, avg: avgVal } : null,
+          points: points.slice(0, 100).map(p => ({ time: new Date(p.t).toISOString(), value: p.v }))
         });
       }
 
@@ -1474,6 +1559,14 @@ ${connections.map(c => `- **${c.connectionName}** (${c.brokerAddress}:${c.port})
       }
 
       case 'generate_3d_asset': {
+        const is3dExplicitlyRequested = /(3d|cad|mesh|digital twin|threejs|geometry|generate.*(pump|tank|valve|mixer|blender|motor|conveyor|vessel|column|asset|model|equipment)|create.*(3d|model|asset|equipment|pump)|design.*(3d|model|asset|equipment|pump)|build.*(3d|model|asset|equipment|pump))/i.test(userQuery || '');
+        if (userQuery && !is3dExplicitlyRequested) {
+          return JSON.stringify({
+            status: 'REJECTED',
+            error: "3D Asset Generation was not requested by the user. Please answer the user's inquiry directly using text/markdown without calling generate_3d_asset."
+          });
+        }
+
         const assetName = String(args.assetName || 'Custom 3D Industrial Asset').trim();
         const sector = String(args.sector || 'AI Generated Assets').trim();
         const category = String(args.category || 'Process Equipment').trim();

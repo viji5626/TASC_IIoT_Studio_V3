@@ -313,6 +313,24 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
                 Documentation & View
               </div>
 
+              {/* AI Automation Code Workbench (RAD) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsToolsMenuOpen(false);
+                  setCurrentView(AppView.AI_WORKBENCH);
+                }}
+                className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-white flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center space-x-2">
+                  <i className="fas fa-microchip text-indigo-400 w-4 text-center text-xs"></i>
+                  <span>AI Automation Code Workbench</span>
+                </div>
+                <span className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-1.5 py-0.2 rounded font-mono">
+                  RAD
+                </span>
+              </button>
+
               {/* User Manual */}
               <button
                 type="button"

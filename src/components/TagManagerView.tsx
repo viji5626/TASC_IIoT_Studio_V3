@@ -10,6 +10,8 @@ import {
 import { CoachMarkOverlay } from './CoachMarkOverlay';
 import { isTourSuppressed } from '../utils/tourRegistry';
 
+import { AssetHierarchyManagerView } from './assets/AssetHierarchyManagerView';
+
 interface TagManagerViewProps {
   onBack: () => void;
   appState: AppState;
@@ -18,6 +20,7 @@ interface TagManagerViewProps {
   productEdition?: string;
 }
 
+type MainViewMode = 'assets' | 'mqtt_tags';
 type TabType = 'all' | 'detected_read' | 'detected_write' | 'imported_read' | 'imported_write';
 
 export const TagManagerView: React.FC<TagManagerViewProps> = ({
@@ -25,6 +28,7 @@ export const TagManagerView: React.FC<TagManagerViewProps> = ({
   appState,
   onUpdateAppState
 }) => {
+  const [mainViewMode, setMainViewMode] = useState<MainViewMode>('assets');
   const [isMqttTagTourOpen, setIsMqttTagTourOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -324,16 +328,44 @@ export const TagManagerView: React.FC<TagManagerViewProps> = ({
             <div className="flex items-center space-x-2">
               <h1 className="text-lg font-bold text-white tracking-tight flex items-center space-x-2">
                 <i className="fas fa-tags text-emerald-400"></i>
-                <span>MQTT Tag Manager</span>
+                <span>Asset & Tag Management</span>
               </h1>
-              <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                Registry
+              <span className="bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                ISA-95 Unified
               </span>
             </div>
             <p className="text-xs text-slate-400">
-              Centralized payload parsing & generation logic repository
+              ISA-95 equipment hierarchy & centralized tag configuration
             </p>
           </div>
+        </div>
+
+        {/* Center Mode Selector */}
+        <div className="flex items-center space-x-1.5 bg-slate-800/80 p-1 rounded-xl border border-slate-700">
+          <button
+            type="button"
+            onClick={() => setMainViewMode('assets')}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center space-x-1.5 ${
+              mainViewMode === 'assets'
+                ? 'bg-gradient-to-r from-sky-500 to-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <i className="fas fa-sitemap text-sky-300" />
+            <span>Asset Hierarchy (ISA-95)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMainViewMode('mqtt_tags')}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center space-x-1.5 ${
+              mainViewMode === 'mqtt_tags'
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 font-bold shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <i className="fas fa-tags text-emerald-400" />
+            <span>MQTT Tags Registry</span>
+          </button>
         </div>
 
         {/* Top Header Action Buttons */}
@@ -380,15 +412,17 @@ export const TagManagerView: React.FC<TagManagerViewProps> = ({
       </header>
 
       {/* Main Body */}
-      <main className="flex-1 p-4 sm:p-6 space-y-6 max-w-7xl w-full mx-auto">
-
-        {/* Notification Toast */}
-        {toastMessage && (
-          <div className="fixed top-16 right-6 z-50 bg-emerald-950/90 border border-emerald-500/50 text-emerald-200 px-4 py-3 rounded-2xl shadow-2xl text-xs font-semibold flex items-center space-x-2 animate-in slide-in-from-top duration-200 backdrop-blur-md">
-            <i className="fas fa-check-circle text-emerald-400 text-sm"></i>
-            <span>{toastMessage}</span>
-          </div>
-        )}
+      {mainViewMode === 'assets' ? (
+        <AssetHierarchyManagerView appState={appState} onUpdateAppState={onUpdateAppState} />
+      ) : (
+        <main className="flex-1 p-4 sm:p-6 space-y-6 max-w-7xl w-full mx-auto">
+          {/* Notification Toast */}
+          {toastMessage && (
+            <div className="fixed top-16 right-6 z-50 bg-emerald-950/90 border border-emerald-500/50 text-emerald-200 px-4 py-3 rounded-2xl shadow-2xl text-xs font-semibold flex items-center space-x-2 animate-in slide-in-from-top duration-200 backdrop-blur-md">
+              <i className="fas fa-check-circle text-emerald-400 text-sm"></i>
+              <span>{toastMessage}</span>
+            </div>
+          )}
 
         {/* Metrics Summary Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -797,6 +831,7 @@ export const TagManagerView: React.FC<TagManagerViewProps> = ({
           </div>
         </div>
       </main>
+      )}
 
       {/* CREATE / EDIT TAG MODAL */}
       {isCreateModalOpen && (

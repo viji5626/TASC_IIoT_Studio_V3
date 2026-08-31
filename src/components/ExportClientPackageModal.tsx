@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AppState } from '../types';
 import { generateClientPackage } from '../utils/clientSecurity';
+import { operatorAuthClient } from '../services/operatorAuthClientService';
 
 interface ExportClientPackageModalProps {
   isOpen: boolean;
@@ -39,13 +40,18 @@ const ExportClientPackageModal: React.FC<ExportClientPackageModalProps> = ({
         panels: appState.panels
       };
 
+      // Fetch operator credentials from server to bundle in the package
+      // Non-blocking: if credentials aren't configured, proceeds without them
+      const operatorCreds = await operatorAuthClient.exportForPackaging().catch(() => null);
+
       const signedPackage = await generateClientPackage(
         packageData,
         clientName,
         notes,
         expiresAt,
         preferredView,
-        clearPassword
+        clearPassword,
+        operatorCreds
       );
 
       const jsonString = JSON.stringify(signedPackage, null, 2);

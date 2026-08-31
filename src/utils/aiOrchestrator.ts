@@ -1,8 +1,9 @@
 import { AiProviderAdapter, ChatMessage, ImageAttachment } from './aiProviders/types';
-import { AI_TOOL_DEFINITIONS, executeAiTool, getLiveContextSnapshot, getAiToolsContext } from './aiTools';
+import { AI_TOOL_DEFINITIONS, getRelevantAiTools, executeAiTool, getLiveContextSnapshot, getAiToolsContext } from './aiTools';
 import { TASC_SYSTEM_KNOWLEDGE } from './aiKnowledgeBase';
-import { gatherMultiAgentEvidence } from './aiMultiAgentEngine';
+import { gatherMultiAgentEvidence, emitAgentActivity } from './aiMultiAgentEngine';
 import { recordQueryPattern } from './aiMemoryStore';
+import { selectAdaptiveModel, verifyResponseRelevancy, AdaptiveRoutingDecision } from './aiAdaptiveRouter';
 
 export const MAX_TOOL_ITERATIONS = 6;
 
@@ -69,6 +70,7 @@ RESPONSE DISCIPLINE (MANDATORY — FOLLOW STRICTLY):
 7. TABLES: When listing 3+ items, ALWAYS use a markdown table. Keep columns minimal and relevant.
 8. NO FILLER PHRASES: Do not say "Sure!", "Great question!", "Let me help you with that!", "Absolutely!", or any filler. Start directly with the answer.
 9. DO NOT OUTPUT INTERNAL SCRATCHPAD OR THINKING PROCESS AS PART OF THE FINAL ANSWER. Always give the final user answer directly.
+10. STRICT 3D & VISUAL GENERATION RULE: NEVER invoke 'generate_3d_asset' or 'generate_industrial_image' unless the user EXPLICITLY asks to generate, design, or create a 3D model/equipment or draw a schematic diagram. For answering general questions, summaries, alarms, tags, drivers, or general information, ALWAYS answer directly in text and markdown tables without generating 3D models or images.
 
 ==================================================
 REPORT GENERATION WORKFLOW (MANDATORY):
@@ -116,13 +118,20 @@ export function sanitizeModelResponseText(text: string): { cleanText: string; th
   };
 }
 
+export interface RunAiTurnOptions {
+  availableModels?: string[];
+  isAutoAdaptive?: boolean;
+  adapterFactory?: (modelName: string, tierConfig?: { temperature: number; contextLength: number }) => AiProviderAdapter;
+}
+
 export async function runAiTurn(
   userMessage: string,
   adapter: AiProviderAdapter,
   onDelta: (delta: string) => void,
   onToolActivity: (toolName: string | null) => void,
   signal?: AbortSignal,
-  images?: ImageAttachment[]
+  images?: ImageAttachment[],
+  options?: RunAiTurnOptions
 ): Promise<void> {
   const turnStartMs = Date.now();
   const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -139,7 +148,36 @@ export async function runAiTurn(
     }
   }
 
-  // 2. Update dynamic system prompt with fresh live snapshot & specialist evidence
+  // 2. Pre-Flight Auto-Adaptive Model & Hyperparameter Routing
+  let activeAdapter = adapter;
+  let routingDecision: AdaptiveRoutingDecision | null = null;
+  const isAutoMode = options?.isAutoAdaptive || adapter.model === 'auto' || adapter.model === 'auto-adaptive';
+
+  if (isAutoMode) {
+    routingDecision = selectAdaptiveModel(
+      adapter.id as any,
+      adapter.model || 'auto',
+      userMessage,
+      options?.availableModels || [],
+      Boolean(images && images.length > 0)
+    );
+
+    emitAgentActivity(
+      'supervisor',
+      'Auto-Adaptive Router',
+      'completed',
+      `${routingDecision.tierLabel} → ${routingDecision.selectedModel} (${routingDecision.reason})`
+    );
+
+    if (options?.adapterFactory && routingDecision.selectedModel) {
+      activeAdapter = options.adapterFactory(routingDecision.selectedModel, {
+        temperature: routingDecision.temperature,
+        contextLength: routingDecision.contextLength
+      });
+    }
+  }
+
+  // 3. Update dynamic system prompt with fresh live snapshot & specialist evidence
   const dynamicSystemPrompt = buildDynamicSystemPrompt(multiAgentEvidence);
   if (chatSession.length === 0 || chatSession[0].role !== 'system') {
     chatSession = [{ role: 'system', content: dynamicSystemPrompt }, ...chatSession.filter(m => m.role !== 'system')];
@@ -147,7 +185,7 @@ export async function runAiTurn(
     chatSession[0].content = dynamicSystemPrompt;
   }
 
-  // 3. Append user message if provided
+  // 4. Append user message if provided
   if (userMessage.trim() || (images && images.length > 0)) {
     chatSession.push({
       role: 'user',
@@ -157,9 +195,8 @@ export async function runAiTurn(
     });
   }
 
-
-  // Sliding window: trim history to prevent context overflow and drift.
-  const MAX_HISTORY_MESSAGES = 24;
+  // Sliding window: trim history to fit model context
+  const MAX_HISTORY_MESSAGES = routingDecision?.contextLength && routingDecision.contextLength <= 2048 ? 12 : 24;
   if (chatSession.length > MAX_HISTORY_MESSAGES + 1) {
     const systemMsg = chatSession[0];
     const recentMessages = chatSession.slice(-MAX_HISTORY_MESSAGES);
@@ -167,6 +204,7 @@ export async function runAiTurn(
   }
 
   let iterations = 0;
+  let hasEscalated = false;
 
   while (iterations < MAX_TOOL_ITERATIONS) {
     iterations++;
@@ -182,24 +220,34 @@ export async function runAiTurn(
     }
 
     let currentTurnText = '';
+    let currentTurnReasoning = '';
     let pendingToolCalls: Array<{ id: string; name: string; arguments: string }> | undefined = undefined;
 
     try {
-      const stream = adapter.sendStream(chatSession, AI_TOOL_DEFINITIONS, signal);
+      const relevantTools = getRelevantAiTools(userMessage);
+      const stream = activeAdapter.sendStream(chatSession, relevantTools, signal);
 
       for await (const chunk of stream) {
         if (signal?.aborted) {
           chatSession.push({
             role: 'assistant',
-            content: currentTurnText + ' [Cancelled]',
+            content: (currentTurnText || currentTurnReasoning) + ' [Cancelled]',
             timestamp: timeString,
             responseTimeMs: Date.now() - turnStartMs
           });
           return;
         }
 
-        if (chunk.delta) {
-          currentTurnText += chunk.delta;
+        if (chunk.reasoningDelta) {
+          currentTurnReasoning += chunk.reasoningDelta;
+          if (!currentTurnText) {
+            onDelta(`💭 *Thinking...*\n\n${currentTurnReasoning}`);
+          }
+        }
+
+        const textChunk = chunk.delta || (chunk as any).textDelta;
+        if (textChunk) {
+          currentTurnText += textChunk;
           const { cleanText } = sanitizeModelResponseText(currentTurnText);
           onDelta(cleanText || currentTurnText);
         }
@@ -212,25 +260,56 @@ export async function runAiTurn(
       if (err.name === 'AbortError') {
         chatSession.push({
           role: 'assistant',
-          content: currentTurnText + ' [Cancelled]',
+          content: (currentTurnText || currentTurnReasoning) + ' [Cancelled]',
           timestamp: timeString,
           responseTimeMs: Date.now() - turnStartMs
         });
         return;
       }
+
+      // OOM Auto-Recovery: GPU out-of-memory → retry with smallest available model in CPU mode
+      const isOomError = err.message && (
+        err.message.includes('[OOM]') ||
+        err.message.toLowerCase().includes('out-of-memory') ||
+        err.message.toLowerCase().includes('alloc_buffer') ||
+        err.message.toLowerCase().includes('ggml_backend') ||
+        err.message.toLowerCase().includes('cuda_host') ||
+        err.message.toLowerCase().includes('failed to allocate')
+      );
+
+      if (isOomError && !hasEscalated && options?.adapterFactory && (options?.availableModels?.length || 0) > 0) {
+        hasEscalated = true;
+        const smallestModel = options.availableModels!.find(m => {
+          const l = m.toLowerCase();
+          return l.includes('1b') || l.includes('1.5b') || l.includes('2b') || l.includes('3b') || l.includes('mini') || l.includes('phi');
+        }) || options.availableModels![0];
+
+        emitAgentActivity(
+          'supervisor',
+          'OOM Recovery',
+          'running',
+          `⚠️ GPU memory exhausted. Auto-switching to lightweight model "${smallestModel}" in CPU mode...`
+        );
+
+        onDelta(`⚠️ **GPU Memory Error** — The selected model is too large for your GPU.\nAuto-switching to a smaller model (${smallestModel}) in CPU-only mode...\n\n`);
+        activeAdapter = options.adapterFactory(smallestModel, { temperature: 0.1, contextLength: 2048 });
+        // Remove the failed user message echo and retry
+        currentTurnText = '';
+        currentTurnReasoning = '';
+        continue;
+      }
+
       throw err;
     }
 
     // If model made tool calls, execute them and continue the multi-turn loop
     if (pendingToolCalls && pendingToolCalls.length > 0) {
-      // Store tool-calling assistant message with content: '' to keep context clean for next turn
       chatSession.push({
         role: 'assistant',
         content: '',
         toolCalls: pendingToolCalls
       });
 
-      // Execute each tool call
       for (const call of pendingToolCalls) {
         onToolActivity(call.name);
         let parsedArgs: Record<string, unknown> = {};
@@ -240,7 +319,7 @@ export async function runAiTurn(
           parsedArgs = {};
         }
 
-        const toolResult = await executeAiTool(call.name, parsedArgs);
+        const toolResult = await executeAiTool(call.name, parsedArgs, userMessage);
 
         chatSession.push({
           role: 'tool',
@@ -251,10 +330,12 @@ export async function runAiTurn(
       }
 
       onToolActivity(null);
-      // Loop continues with tool outputs feeding back to model
     } else {
-      // Turn is complete with final text
+      // Turn is complete with text
       let rawFinalText = currentTurnText.trim();
+      if (!rawFinalText && currentTurnReasoning.trim()) {
+        rawFinalText = currentTurnReasoning.trim();
+      }
       if (!rawFinalText) {
         const lastToolMsg = [...chatSession].reverse().find(m => m.role === 'tool');
         if (lastToolMsg?.content) {
@@ -266,9 +347,28 @@ export async function runAiTurn(
 
       const { cleanText, thoughtProcess } = sanitizeModelResponseText(rawFinalText);
 
+      // Post-Generation Relevancy Verification Guard
+      const relevancy = verifyResponseRelevancy(userMessage, cleanText);
+
+      // If response failed integrity/relevancy and we haven't retried yet in auto mode, escalate once
+      if (relevancy.shouldEscalate && !hasEscalated && isAutoMode && options?.adapterFactory && (options?.availableModels?.length || 0) > 1) {
+        hasEscalated = true;
+        emitAgentActivity(
+          'supervisor',
+          'Relevancy Guard',
+          'running',
+          `Response flagged (${relevancy.reason}). Auto-escalating to high-precision reasoning model...`
+        );
+
+        // Pick highest capability model
+        const heavyModel = options!.availableModels!.find(m => m.includes('12b') || m.includes('14b') || m.includes('32b') || m.includes('mistral') || m.includes('gpt-4o') || m.includes('flash')) || options!.availableModels![0];
+        activeAdapter = options!.adapterFactory(heavyModel, { temperature: 0.2, contextLength: 8192 });
+        continue;
+      }
+
       chatSession.push({
         role: 'assistant',
-        content: cleanText || rawFinalText,
+        content: relevancy.cleanedText || cleanText || rawFinalText,
         thoughtProcess,
         timestamp: timeString,
         responseTimeMs: Date.now() - turnStartMs
