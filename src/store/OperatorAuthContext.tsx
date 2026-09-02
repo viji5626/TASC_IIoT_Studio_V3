@@ -118,7 +118,7 @@ export const OperatorAuthProvider: React.FC<Props> = ({ children }) => {
       // Session expired — force re-login
       setIsAuthenticated(false);
       setCurrentOperator(null);
-      operatorAuthClient.logout().catch(() => {});
+      operatorAuthClient.logout().catch(() => { });
       window.dispatchEvent(new CustomEvent('op_session_expired'));
     }, ms);
   }, []);
@@ -242,7 +242,7 @@ export const OperatorAuthProvider: React.FC<Props> = ({ children }) => {
         const parsed = JSON.parse(raw);
         if (parsed.userRole === 'admin') return true;
       }
-    } catch {}
+    } catch { }
 
     if (!isAuthenticated || !currentOperator) return false;
     return currentOperator.permissions[perm] === true;
