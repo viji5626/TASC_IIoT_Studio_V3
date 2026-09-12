@@ -11,6 +11,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useOperatorAuth } from '../../store/OperatorAuthContext';
+import { Turnstile } from '@marsidev/react-turnstile';
 
 interface Props {
   /** If true, shown as a re-auth dialog (session expired) rather than fresh login */
@@ -27,6 +28,7 @@ export const OperatorLoginModal: React.FC<Props> = ({ isReauth = false }) => {
   const [attemptsLeft, setAttemptsLeft] = useState<number | null>(null);
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [lockCountdown, setLockCountdown] = useState(0);
+  const [turnstileToken, setTurnstileToken] = useState<string>('');
 
   // Countdown timer for account lockout
   useEffect(() => {
@@ -44,10 +46,14 @@ export const OperatorLoginModal: React.FC<Props> = ({ isReauth = false }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (lockedUntil && Date.now() < lockedUntil) return;
+    if (!turnstileToken) {
+      setError('Please complete the CAPTCHA verification.');
+      return;
+    }
     setError('');
     setLoading(true);
 
-    const result = await login(username.trim(), password);
+    const result = await login(username.trim(), password, turnstileToken);
     setLoading(false);
 
     if (!result.success) {
@@ -159,9 +165,20 @@ export const OperatorLoginModal: React.FC<Props> = ({ isReauth = false }) => {
             </div>
           )}
 
+          {!isLocked && (
+            <div style={{ marginBottom: '18px', display: 'flex', justifyContent: 'center' }}>
+              <Turnstile
+                siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
+                onSuccess={(token) => setTurnstileToken(token)}
+                onError={() => setError('CAPTCHA verification failed. Please try again.')}
+                onExpire={() => setTurnstileToken('')}
+              />
+            </div>
+          )}
+
           <button
             type="submit"
-            disabled={loading || isLocked || !username || !password}
+            disabled={loading || isLocked || !username || !password || !turnstileToken}
             style={{
               width: '100%', padding: '12px',
               background: isLocked

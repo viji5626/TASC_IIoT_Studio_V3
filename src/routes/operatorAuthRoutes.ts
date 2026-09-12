@@ -80,20 +80,84 @@ import {
 } from '../services/auth/rateLimiterService';
 
 /**
+ * POST /api/auth/op/verify-captcha
+ * Generic endpoint to verify a Turnstile token for landing page actions.
+ * Body: { turnstileToken }
+ */
+operatorAuthRouter.post('/verify-captcha', async (req: Request, res: Response) => {
+  try {
+    const { turnstileToken } = req.body;
+    if (!turnstileToken) {
+      res.status(400).json({ error: 'turnstileToken is required.' });
+      return;
+    }
+
+    const secret = process.env.TURNSTILE_SECRET_KEY;
+    if (!secret) {
+      console.warn("[Auth] TURNSTILE_SECRET_KEY not configured. Bypassing captcha.");
+      res.json({ success: true });
+      return;
+    }
+
+    const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      signal: AbortSignal.timeout(10000),
+      body: new URLSearchParams({
+        secret: secret,
+        response: turnstileToken,
+        remoteip: extractClientIp(req),
+      }),
+    });
+
+    if (!r.ok) throw new Error(`siteverify ${r.status}`);
+    const result: any = await r.json();
+
+    if (!result.success) {
+      res.status(403).json({ error: 'Captcha validation failed.' });
+      return;
+    }
+
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * POST /api/auth/op/login
  * Authenticate with username + password.
- * Body: { username, password }
+ * Body: { username, password, turnstileToken }
  * Returns: { token, user, expiresAt, sessionTimeoutMinutes }
  */
-operatorAuthRouter.post('/login', (req: Request, res: Response) => {
+operatorAuthRouter.post('/login', async (req: Request, res: Response) => {
   try {
-    const { username, password } = req.body;
-    if (!username || !password) {
-      res.status(400).json({ error: 'username and password are required.' });
+    const { username, password, turnstileToken } = req.body;
+    if (!username || !password || !turnstileToken) {
+      res.status(400).json({ error: 'username, password and turnstileToken are required.' });
       return;
     }
     const ip = extractClientIp(req);
     const userAgent = req.headers['user-agent'] as string | undefined;
+
+    const secret = process.env.TURNSTILE_SECRET_KEY;
+    if (secret) {
+      const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        signal: AbortSignal.timeout(10000),
+        body: new URLSearchParams({
+          secret: secret,
+          response: turnstileToken,
+          remoteip: ip,
+        }),
+      });
+      const result: any = await r.json();
+      if (!result.success) {
+        res.status(403).json({ error: 'Captcha validation failed.' });
+        return;
+      }
+    }
 
     // 1. Check Dual-Key Rate Limit (User + Subnet)
     const rateCheck = checkRateLimit(username, ip);

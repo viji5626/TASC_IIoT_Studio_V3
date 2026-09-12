@@ -9,6 +9,10 @@ import json
 import time
 import socket
 import threading
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', filename='tasc_ai_daemon_audit.log')
+audit_logger = logging.getLogger('Audit')
 
 # Import Local Modules
 try:
@@ -49,9 +53,20 @@ def handle_client(conn, addr):
                 start_time = time.time()
                 try:
                     req = json.loads(line)
+                    if not isinstance(req, dict):
+                        raise ValueError("Payload must be a JSON object")
+                        
                     cmd = req.get("command", "")
+                    if not isinstance(cmd, str):
+                        raise ValueError("Command must be a string")
+                        
                     payload = req.get("payload", {})
-                    req_id = req.get("requestId", str(int(time.time() * 1000)))
+                    if not isinstance(payload, dict):
+                        raise ValueError("Payload must be a dictionary")
+                        
+                    req_id = str(req.get("requestId", int(time.time() * 1000)))
+                    
+                    audit_logger.info(f"Received command: {cmd}, req_id: {req_id}")
                     
                     if cmd == "HEALTH_CHECK" or cmd == "PING":
                         res = {

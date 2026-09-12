@@ -125,7 +125,7 @@ export const operatorAuthClient = {
 
   // ── Login / Logout ─────────────────────────────────────────────────────────
 
-  async login(username: string, password: string): Promise<{
+  async login(username: string, password: string, turnstileToken: string): Promise<{
     token: string;
     user: Omit<OperatorUser, 'passwordHash' | 'passwordSalt'>;
     expiresAt: string;
@@ -136,7 +136,7 @@ export const operatorAuthClient = {
       user: Omit<OperatorUser, 'passwordHash' | 'passwordSalt'>;
       expiresAt: string;
       sessionTimeoutMinutes: number;
-    }>('/login', { method: 'POST', body: JSON.stringify({ username, password }) }, false);
+    }>('/login', { method: 'POST', body: JSON.stringify({ username, password, turnstileToken }) }, false);
     storeToken(data.token);
     return data;
   },

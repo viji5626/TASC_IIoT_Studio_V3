@@ -4,6 +4,7 @@ import { verifyClientPackage, DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_PASSWORD } f
 import { getCommercialSavedPackage, getCommunitySavedPackage, SavedPackageInfo } from '../utils/editionStorage';
 import { operatorAuthClient } from '../services/operatorAuthClientService';
 import AppLogo from './AppLogo';
+import { Turnstile } from '@marsidev/react-turnstile';
 
 interface LandingPageProps {
   appState: AppState;
@@ -35,6 +36,26 @@ const LandingPage: React.FC<LandingPageProps> = ({
   const [isVerifying, setIsVerifying] = useState(false);
   const [dragActive, setDragActive] = useState(false);
 
+  const [adminTurnstileToken, setAdminTurnstileToken] = useState<string>('');
+  const [importTurnstileToken, setImportTurnstileToken] = useState<string>('');
+  const [communityTurnstileToken, setCommunityTurnstileToken] = useState<string>('');
+  const [showCommunityCaptchaModal, setShowCommunityCaptchaModal] = useState(false);
+  const [communityCallback, setCommunityCallback] = useState<(() => void) | null>(null);
+
+  const verifyCaptchaToken = async (token: string): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/auth/op/verify-captcha', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ turnstileToken: token })
+      });
+      const data = await res.json();
+      return data.success === true;
+    } catch {
+      return false;
+    }
+  };
+
   // Live detection of both Commercial and Community browser saves
   const [commercialPackage, setCommercialPackage] = useState<SavedPackageInfo | null>(() => getCommercialSavedPackage());
   const [communityPackage, setCommunityPackage] = useState<SavedPackageInfo | null>(() => getCommunitySavedPackage());
@@ -49,10 +70,23 @@ const LandingPage: React.FC<LandingPageProps> = ({
   const hasCommercialSaved = !!commercialPackage;
   const hasCommunitySaved = !!communityPackage;
 
-  const handleAdminSubmit = (e: React.FormEvent) => {
+  const handleAdminSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdminError('');
 
+    if (!adminTurnstileToken) {
+      setAdminError('Please complete the CAPTCHA verification.');
+      return;
+    }
+
+    const isValid = await verifyCaptchaToken(adminTurnstileToken);
+    if (!isValid) {
+      setAdminError('CAPTCHA verification failed. Please try again.');
+      setAdminTurnstileToken('');
+      return;
+    }
+
+    setIsVerifying(true);
     const isUserValid = adminUsername.trim() === DEFAULT_ADMIN_USERNAME;
     const isPassValid = adminPassword === DEFAULT_ADMIN_PASSWORD || (appState.editPin && adminPassword === appState.editPin);
 
@@ -62,12 +96,27 @@ const LandingPage: React.FC<LandingPageProps> = ({
     } else {
       setAdminError('Invalid credentials. Please verify username and password.');
     }
+    setIsVerifying(false);
   };
 
   const processFile = async (file: File) => {
     if (!file) return;
     setIsVerifying(true);
     setImportError('');
+
+    if (!importTurnstileToken) {
+      setImportError('Please complete the CAPTCHA verification before selecting a file.');
+      setIsVerifying(false);
+      return;
+    }
+
+    const isValidCaptcha = await verifyCaptchaToken(importTurnstileToken);
+    if (!isValidCaptcha) {
+      setImportError('CAPTCHA verification failed. Please try again.');
+      setImportTurnstileToken('');
+      setIsVerifying(false);
+      return;
+    }
 
     try {
       const text = await file.text();
@@ -261,8 +310,11 @@ const LandingPage: React.FC<LandingPageProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      if (onLoadSavedCommunitySetup) onLoadSavedCommunitySetup(false);
-                      else onSelectCommunityMode();
+                      setCommunityCallback(() => () => {
+                        if (onLoadSavedCommunitySetup) onLoadSavedCommunitySetup(false);
+                        else onSelectCommunityMode();
+                      });
+                      setShowCommunityCaptchaModal(true);
                     }}
                     className="w-full py-2.5 px-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/20 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer"
                   >
@@ -271,7 +323,10 @@ const LandingPage: React.FC<LandingPageProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={onSelectCommunityMode}
+                    onClick={() => {
+                      setCommunityCallback(() => onSelectCommunityMode);
+                      setShowCommunityCaptchaModal(true);
+                    }}
                     className="w-full py-1 px-2 text-emerald-400 hover:text-emerald-300 font-semibold text-[10px] flex items-center justify-center space-x-1 transition-colors cursor-pointer"
                   >
                     <i className="fas fa-plus text-[10px]"></i>
@@ -281,7 +336,10 @@ const LandingPage: React.FC<LandingPageProps> = ({
               ) : (
                 <button
                   type="button"
-                  onClick={onSelectCommunityMode}
+                  onClick={() => {
+                    setCommunityCallback(() => onSelectCommunityMode);
+                    setShowCommunityCaptchaModal(true);
+                  }}
                   className="w-full py-2.5 px-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/20 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer"
                 >
                   <span>Start Community Edition</span>
@@ -642,10 +700,50 @@ const LandingPage: React.FC<LandingPageProps> = ({
               </div>
             )}
 
+            <div style={{ marginBottom: '18px', display: 'flex', justifyContent: 'center' }}>
+              <Turnstile
+                siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
+                onSuccess={(token) => setImportTurnstileToken(token)}
+                onError={() => setImportError('CAPTCHA verification failed.')}
+                onExpire={() => setImportTurnstileToken('')}
+              />
+            </div>
+
             <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-[11px] text-slate-400 flex items-center space-x-2">
               <i className="fas fa-shield-halved text-sky-400 text-sm shrink-0"></i>
               <span>Client runtime mode prevents modification of broker addresses, topics, or engineering settings.</span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* COMMUNITY CAPTCHA MODAL */}
+      {showCommunityCaptchaModal && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-150 overflow-y-auto touch-scroll">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm max-h-[92dvh] overflow-y-auto p-4 sm:p-8 space-y-4 shadow-2xl relative text-slate-100 my-auto text-center">
+            <h3 className="text-base font-bold text-teal-400">Security Verification</h3>
+            <p className="text-xs text-slate-400">Please complete the CAPTCHA to proceed.</p>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <Turnstile
+                siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
+                onSuccess={async (token) => {
+                  setCommunityTurnstileToken(token);
+                  const isValid = await verifyCaptchaToken(token);
+                  if (isValid && communityCallback) {
+                    setShowCommunityCaptchaModal(false);
+                    communityCallback();
+                  }
+                }}
+                onError={() => alert('CAPTCHA verification failed.')}
+                onExpire={() => setCommunityTurnstileToken('')}
+              />
+            </div>
+            <button 
+              onClick={() => { setShowCommunityCaptchaModal(false); setCommunityCallback(null); }}
+              className="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition-colors w-full mt-2"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
@@ -713,8 +811,18 @@ const LandingPage: React.FC<LandingPageProps> = ({
                 </div>
               )}
 
+              <div style={{ marginBottom: '18px', display: 'flex', justifyContent: 'center' }}>
+                <Turnstile
+                  siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
+                  onSuccess={(token) => setAdminTurnstileToken(token)}
+                  onError={() => setAdminError('CAPTCHA verification failed. Please try again.')}
+                  onExpire={() => setAdminTurnstileToken('')}
+                />
+              </div>
+
               <button
                 type="submit"
+                disabled={isVerifying || !adminTurnstileToken}
                 className="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs uppercase tracking-wider shadow-lg shadow-amber-500/20 transition-all active:scale-95 flex items-center justify-center space-x-2 mt-2 cursor-pointer"
               >
                 <i className="fas fa-right-to-bracket text-sm"></i>
