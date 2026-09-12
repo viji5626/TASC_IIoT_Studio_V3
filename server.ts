@@ -130,7 +130,20 @@ async function startServer() {
   const app = express();
   
   // Phase 1: Security Headers
-  app.use(helmet());
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://challenges.cloudflare.com"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "blob:"],
+        connectSrc: ["'self'", "ws:", "wss:", "http:", "https:"],
+        frameSrc: ["'self'", "https://challenges.cloudflare.com"],
+        workerSrc: ["'self'", "blob:"],
+        fontSrc: ["'self'"]
+      }
+    }
+  }));
   
   // Phase 1: Rate Limiting
   const apiLimiter = rateLimit({
