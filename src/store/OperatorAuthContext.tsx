@@ -51,7 +51,7 @@ export interface OperatorAuthContextType {
   isLoading: boolean;       // true during initial status check
 
   // Auth actions
-  login(username: string, password: string, turnstileToken: string): Promise<{
+  login(username: string, password: string): Promise<{
     success: boolean;
     error?: string;
     attemptsLeft?: number;
@@ -194,9 +194,9 @@ export const OperatorAuthProvider: React.FC<Props> = ({ children }) => {
 
   // ── Auth Actions ─────────────────────────────────────────────────────────────
 
-  const login = useCallback(async (username: string, password: string, turnstileToken: string) => {
+  const login = useCallback(async (username: string, password: string) => {
     try {
-      const data = await operatorAuthClient.login(username, password, turnstileToken);
+      const data = await operatorAuthClient.login(username, password);
       setCurrentOperator(data.user as any);
       setIsAuthenticated(true);
       setSessionTimeoutMinutes(data.sessionTimeoutMinutes);
