@@ -40,6 +40,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
   const [importTurnstileToken, setImportTurnstileToken] = useState<string>('');
   const [communityTurnstileToken, setCommunityTurnstileToken] = useState<string>('');
   const [showCommunityCaptchaModal, setShowCommunityCaptchaModal] = useState(false);
+  const [communityCaptchaError, setCommunityCaptchaError] = useState<string>('');
   const [communityCallback, setCommunityCallback] = useState<(() => void) | null>(null);
 
   const verifyCaptchaToken = async (token: string): Promise<boolean> => {
@@ -723,23 +724,32 @@ const LandingPage: React.FC<LandingPageProps> = ({
           <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm max-h-[92dvh] overflow-y-auto p-4 sm:p-8 space-y-4 shadow-2xl relative text-slate-100 my-auto text-center">
             <h3 className="text-base font-bold text-teal-400">Security Verification</h3>
             <p className="text-xs text-slate-400">Please complete the CAPTCHA to proceed.</p>
+            {communityCaptchaError && (
+              <div className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-xl text-center font-medium animate-in shake">
+                <i className="fas fa-circle-exclamation mr-1.5"></i>
+                {communityCaptchaError}
+              </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'center' }}>
               <Turnstile
                 siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
                 onSuccess={async (token) => {
                   setCommunityTurnstileToken(token);
+                  setCommunityCaptchaError('');
                   const isValid = await verifyCaptchaToken(token);
                   if (isValid && communityCallback) {
                     setShowCommunityCaptchaModal(false);
                     communityCallback();
+                  } else {
+                    setCommunityCaptchaError('Backend validation failed. Please check your Secret Key in the backend server env.');
                   }
                 }}
-                onError={() => alert('CAPTCHA verification failed.')}
+                onError={() => setCommunityCaptchaError('CAPTCHA verification failed.')}
                 onExpire={() => setCommunityTurnstileToken('')}
               />
             </div>
             <button 
-              onClick={() => { setShowCommunityCaptchaModal(false); setCommunityCallback(null); }}
+              onClick={() => { setShowCommunityCaptchaModal(false); setCommunityCallback(null); setCommunityCaptchaError(''); }}
               className="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition-colors w-full mt-2"
             >
               Cancel
