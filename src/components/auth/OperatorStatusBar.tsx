@@ -25,10 +25,6 @@ export const OperatorStatusBar: React.FC = () => {
   const { userRole, setCurrentView } = useAppContext();
   const [timeRemaining, setTimeRemaining] = useState('');
 
-  // Don't render in Engineering Edition
-  if (userRole === 'admin') return null;
-  if (!isAuthenticated || !currentOperator) return null;
-
   // Session countdown
   useEffect(() => {
     if (!sessionExpiresAt) return;
@@ -43,6 +39,9 @@ export const OperatorStatusBar: React.FC = () => {
     const id = setInterval(update, 30000); // refresh every 30s
     return () => clearInterval(id);
   }, [sessionExpiresAt]);
+
+  // Show in both Client and Engineering editions when operator is authenticated
+  if (!isAuthenticated || !currentOperator) return null;
 
   const roleColor = ROLE_COLORS[currentOperator.role] ?? '#94a3b8';
   const isExpiringSoon = sessionExpiresAt && (new Date(sessionExpiresAt).getTime() - Date.now()) < 15 * 60 * 1000;
@@ -75,9 +74,13 @@ export const OperatorStatusBar: React.FC = () => {
 
       {/* Name + Role */}
       <div
-        style={{ cursor: 'pointer' }}
-        onClick={() => setCurrentView(AppView.CREDENTIALS)}
-        title="Open Credential Management"
+        style={{ cursor: currentOperator.role === 'admin' ? 'pointer' : 'default' }}
+        onClick={() => {
+          if (currentOperator.role === 'admin') {
+            setCurrentView(AppView.CREDENTIALS);
+          }
+        }}
+        title={currentOperator.role === 'admin' ? "Open Credential Management" : undefined}
       >
         <div style={{ color: '#e2e8f0', fontSize: '12px', fontWeight: 600, lineHeight: 1.2 }}>
           {currentOperator.displayName}
@@ -104,7 +107,7 @@ export const OperatorStatusBar: React.FC = () => {
           fontSize: '10px', fontWeight: 600,
           title: 'Session time remaining'
         }}>
-          ⏱ {timeRemaining}
+          <i className="fas fa-stopwatch" /> {timeRemaining}
         </div>
       )}
 
@@ -121,7 +124,7 @@ export const OperatorStatusBar: React.FC = () => {
         onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(239,68,68,0.15)'; }}
         onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
       >
-        ↩ Out
+        <i className="fas fa-right-from-bracket" /> Out
       </button>
     </div>
   );

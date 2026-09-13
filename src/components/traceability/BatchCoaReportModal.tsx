@@ -157,13 +157,13 @@ export const BatchCoaReportModal: React.FC<BatchCoaReportModalProps> = ({
               <div className="p-2 rounded border border-slate-300 bg-slate-50 text-[10px] space-y-1">
                 <p className="font-bold text-slate-900">Lead Formulation Chemist / Operator</p>
                 <p className="font-mono text-slate-700">Name: {batch.leadOperator}</p>
-                <p className="text-emerald-800 font-bold font-mono">✓ Signed Digitally (SHA-256 Validated)</p>
+                <p className="text-emerald-800 font-bold font-mono"><i className="fas fa-check-circle" /> Signed Digitally (SHA-256 Validated)</p>
               </div>
 
               <div className="p-2 rounded border border-slate-300 bg-slate-50 text-[10px] space-y-1">
                 <p className="font-bold text-slate-900">Quality Assurance Director / Approver</p>
                 <p className="font-mono text-slate-700">Name: {batch.qaApprover || batch.supervisorName}</p>
-                <p className="text-emerald-800 font-bold font-mono">✓ Authorized for Commercial Release</p>
+                <p className="text-emerald-800 font-bold font-mono"><i className="fas fa-check-circle" /> Authorized for Commercial Release</p>
               </div>
             </div>
           </div>

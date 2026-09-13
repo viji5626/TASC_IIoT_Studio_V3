@@ -11,6 +11,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useOperatorAuth } from '../../store/OperatorAuthContext';
+import { useAppContext } from '../../store/AppContext';
+
 
 interface Props {
   /** If true, shown as a re-auth dialog (session expired) rather than fresh login */
@@ -19,6 +21,7 @@ interface Props {
 
 export const OperatorLoginModal: React.FC<Props> = ({ isReauth = false }) => {
   const { login } = useOperatorAuth();
+  const { handleClearClientSavedSetup } = useAppContext();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
@@ -77,7 +80,7 @@ export const OperatorLoginModal: React.FC<Props> = ({ isReauth = false }) => {
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '28px' }}>
           <div style={{ fontSize: '36px', marginBottom: '12px' }}>
-            {isReauth ? '🔄' : '🔐'}
+            {isReauth ? <i className="fas fa-rotate-right" /> : <i className="fas fa-lock" />}
           </div>
           <h2 style={{ color: '#f0f4ff', fontSize: '20px', fontWeight: 700, margin: '0 0 6px' }}>
             {isReauth ? 'Session Expired — Re-authenticate' : 'Operator Login'}
@@ -192,6 +195,26 @@ export const OperatorLoginModal: React.FC<Props> = ({ isReauth = false }) => {
                 <span>Sign In & Authenticate</span>
               </>
             )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleClearClientSavedSetup()}
+            disabled={loading}
+            style={{
+              width: '100%', padding: '12px', marginTop: '12px',
+              background: 'transparent',
+              border: '1px solid rgba(148,163,184,0.3)', borderRadius: '9px',
+              color: '#94a3b8', fontSize: '13px', fontWeight: 600,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseOver={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'rgba(148,163,184,0.6)'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+            onMouseOut={e => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.borderColor = 'rgba(148,163,184,0.3)'; e.currentTarget.style.background = 'transparent'; }}
+          >
+            <i className="fas fa-arrow-left" />
+            <span>Cancel & Return to Main Menu</span>
           </button>
         </form>
 

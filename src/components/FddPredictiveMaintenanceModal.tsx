@@ -615,7 +615,7 @@ export const FddPredictiveMaintenanceModal: React.FC<FddPredictiveMaintenanceMod
                             }}
                             className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 transition-colors flex items-center space-x-1.5 cursor-pointer"
                           >
-                            <i className="fas fa-clipboard-plus text-sky-400"></i>
+                            <i className="fas fa-notes-medical text-sky-400"></i>
                             <span>Create Work Order</span>
                           </button>
                         </div>

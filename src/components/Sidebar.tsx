@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AppView, Dashboard } from '../types';
+import { AppView, Dashboard, ClientRuntimeFeatures, ClientSecuritySettings } from '../types';
 import { getAppTheme } from '../utils/theme';
 import AppLogo from './AppLogo';
 import { useDeviceCapability } from '../utils/deviceDetection';
@@ -25,6 +25,8 @@ interface SidebarProps {
   onRequestClearAll?: () => void;
   onLoadHatcheryDemo?: () => void;
   onOpenTour?: () => void;
+  clientFeatures?: ClientRuntimeFeatures;
+  clientSecurity?: ClientSecuritySettings;
 }
 
 interface MenuItemDef {
@@ -53,7 +55,9 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   onSwitchRole,
   onRequestClearAll,
   onLoadHatcheryDemo,
-  onOpenTour
+  onOpenTour,
+  clientFeatures,
+  clientSecurity
 }) => {
   const { isDesktop, isMobile } = useDeviceCapability();
   const [activeDashMenuId, setActiveDashMenuId] = useState<string | null>(null);
@@ -76,6 +80,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   const isClient = userRole === 'client';
   const isCommunity = userRole === 'community';
   const activeThemeObj = getAppTheme(currentTheme);
+  const isRbacEnabled = !isClient || clientSecurity?.requireOperatorLogin !== false;
 
   const handleItemClick = (item: MenuItemDef) => {
     if (item.id === 'netbird_vpn') {
@@ -94,6 +99,17 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
     }
   };
 
+  const currentFeatures = clientFeatures || {
+    enableHistorian: true,
+    enableReporting: true,
+    enableOee: true,
+    enableTraceability: true,
+    enableAiAssistant: true,
+    enableAiWorkbench: true,
+    enableFdd: true,
+    enableVpn: true
+  };
+
   // Group definitions (Desktop Workstation tools are hidden on mobile)
   const workstationItems: MenuItemDef[] = isDesktop ? [
     { id: AppView.SCADA_3D, icon: 'fa-cube', label: '3D SCADA Studio', badge: '3D', badgeColor: 'bg-indigo-500/20 text-indigo-300' }
@@ -101,13 +117,13 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
 
   const dataItems: MenuItemDef[] = isClient ? [
     { id: AppView.CONNECTIONS, icon: 'fa-network-wired', label: 'All Connections' },
-    { 
+    ...(currentFeatures.enableVpn !== false ? [{ 
       id: 'netbird_vpn', 
       icon: 'fa-shield-halved', 
       label: 'NetBird P2P VPN', 
       badge: vpnState === 'connected' ? 'ACTIVE' : vpnState === 'blocked_concurrent_session' ? 'IN USE' : 'WASM', 
       badgeColor: vpnState === 'connected' ? 'bg-emerald-500/20 text-emerald-300' : vpnState === 'blocked_concurrent_session' ? 'bg-rose-500/20 text-rose-300' : 'bg-cyan-500/20 text-cyan-300' 
-    }
+    }] : [])
   ] : isDesktop ? [
     { id: AppView.CONNECTIONS, icon: 'fa-network-wired', label: 'All Connections' },
     { id: AppView.ADD_CONNECTION, icon: 'fa-server', label: 'MQTT Broker Settings' },
@@ -141,11 +157,11 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   ];
 
   const analysisItems: MenuItemDef[] = isClient ? [
-    { id: AppView.OEE_STUDIO, icon: 'fa-gauge-high', label: 'OEE & Downtime Studio', badge: 'OEE', badgeColor: 'bg-emerald-500/20 text-emerald-300' },
-    { id: AppView.TRACEABILITY_STUDIO, icon: 'fa-barcode', label: 'Batch & Lot Traceability', badge: 'Trace', badgeColor: 'bg-cyan-500/20 text-cyan-300' },
-    { id: AppView.HISTORIAN_TREND, icon: 'fa-chart-line', label: 'Historian & Trends' },
-    { id: AppView.REPORTING, icon: 'fa-chart-bar', label: 'Reports' },
-    { id: AppView.AI_WORKBENCH, icon: 'fa-microchip', label: 'AI Code Workbench', badge: 'RAD', badgeColor: 'bg-indigo-500/20 text-indigo-300' }
+    ...(currentFeatures.enableOee !== false ? [{ id: AppView.OEE_STUDIO, icon: 'fa-gauge-high', label: 'OEE & Downtime Studio', badge: 'OEE', badgeColor: 'bg-emerald-500/20 text-emerald-300' }] : []),
+    ...(currentFeatures.enableTraceability !== false ? [{ id: AppView.TRACEABILITY_STUDIO, icon: 'fa-barcode', label: 'Batch & Lot Traceability', badge: 'Trace', badgeColor: 'bg-cyan-500/20 text-cyan-300' }] : []),
+    ...(currentFeatures.enableHistorian !== false ? [{ id: AppView.HISTORIAN_TREND, icon: 'fa-chart-line', label: 'Historian & Trends' }] : []),
+    ...(currentFeatures.enableReporting !== false ? [{ id: AppView.REPORTING, icon: 'fa-chart-bar', label: 'Reports' }] : []),
+    ...(currentFeatures.enableAiWorkbench !== false ? [{ id: AppView.AI_WORKBENCH, icon: 'fa-microchip', label: 'AI Code Workbench', badge: 'RAD', badgeColor: 'bg-indigo-500/20 text-indigo-300' }] : [])
   ] : isDesktop ? [
     { id: AppView.OEE_STUDIO, icon: 'fa-gauge-high', label: 'OEE & Downtime Studio', badge: 'OEE', badgeColor: 'bg-emerald-500/20 text-emerald-300' },
     { id: AppView.TRACEABILITY_STUDIO, icon: 'fa-barcode', label: 'Batch & Lot Traceability', badge: 'Trace', badgeColor: 'bg-cyan-500/20 text-cyan-300' },
@@ -163,7 +179,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
 
   const systemItems: MenuItemDef[] = isClient ? [
     { id: AppView.SETTINGS, icon: 'fa-gear', label: 'App Settings' },
-    { id: AppView.CREDENTIALS, icon: 'fa-shield-halved', label: 'Credential Management' }
+    ...(isRbacEnabled ? [{ id: AppView.CREDENTIALS, icon: 'fa-shield-halved', label: 'Credential Management' }] : [])
   ] : [
     { id: AppView.SETTINGS, icon: 'fa-gear', label: 'App Settings' },
     { id: AppView.BACKUP, icon: 'fa-cloud-arrow-up', label: 'Backup & Restore', isLocked: isCommunity },
@@ -267,8 +283,22 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
             <i className="fas fa-xmark text-base"></i>
           </button>
 
-          <AppLogo size="lg" accentColor={activeThemeObj.primary} className="mb-1.5" isCommunity={isCommunity} />
-          <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">TASC IIoT Studio</h2>
+          <button
+            type="button"
+            className="flex flex-col items-center hover:opacity-80 transition-opacity cursor-pointer"
+            title="Go to Home Dashboard"
+            onClick={() => {
+              onClose();
+              const homeDash = dashboards?.find(d => d.isHome) || dashboards?.[0];
+              if (homeDash) {
+                onSelectDashboard(homeDash.dashboardId);
+              }
+              onNavigate(AppView.DASHBOARD);
+            }}
+          >
+            <AppLogo size="lg" accentColor={activeThemeObj.primary} className="mb-1.5" isCommunity={isCommunity} />
+            <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">TASC IIoT Studio</h2>
+          </button>
 
           {isCommunity ? (
             <div className="mt-1.5 text-center w-full space-y-1">

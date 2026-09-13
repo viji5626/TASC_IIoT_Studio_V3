@@ -473,12 +473,29 @@ export interface TagRegistryEntry {
   updatedAt?: string;
 }
 
+export interface ClientRuntimeFeatures {
+  enableHistorian?: boolean;
+  enableReporting?: boolean;
+  enableOee?: boolean;
+  enableTraceability?: boolean;
+  enableAiAssistant?: boolean;
+  enableAiWorkbench?: boolean;
+  enableFdd?: boolean;
+  enableVpn?: boolean;
+}
+
+export interface ClientSecuritySettings {
+  requireOperatorLogin?: boolean;
+  enableAuditTrail?: boolean;
+}
+
 export interface AppState {
   connections: MqttConnection[];
   dashboards: Dashboard[];
   panels: Panel[];
   editPin?: string;
   runtimePinTimeoutMinutes?: number; // Auto-lock timeout in minutes (default: 2)
+  clientSecurity?: ClientSecuritySettings;
   clearPassword?: string;
   isLocked?: boolean;
   isLockedPackage?: boolean;
@@ -489,6 +506,7 @@ export interface AppState {
   customTags?: TagRegistryEntry[];
   packageOrigin?: 'community' | 'commercial' | 'engineering';
   currency?: '$' | '₹';
+  clientFeatures?: ClientRuntimeFeatures;
 
   // Centralized Historian & Persistence Settings
   historianConfig?: HistorianConfig;

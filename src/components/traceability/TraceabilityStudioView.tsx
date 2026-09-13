@@ -314,7 +314,7 @@ export const TraceabilityStudioView: React.FC<TraceabilityStudioViewProps> = ({
                       </span>
                     </td>
                     <td className="py-2.5 px-3 text-emerald-400 text-[10px]">
-                      ✓ SHA-256 VALIDATED
+                      <i className="fas fa-check-circle" /> SHA-256 VALIDATED
                     </td>
                   </tr>
                 ))}

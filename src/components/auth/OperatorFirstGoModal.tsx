@@ -37,7 +37,31 @@ export const OperatorFirstGoModal: React.FC = () => {
     setLoading(true);
     const result = await initAdmin(username.trim(), displayName.trim() || username.trim(), password);
     setLoading(false);
-    if (!result.success) setError(result.error ?? 'Failed to create admin account.');
+    
+    if (!result.success) {
+      setError(result.error ?? 'Failed to create admin account.');
+    } else {
+      // Auto-download credentials file
+      const content = `TASC IIoT Studio - Initial Administrator Credentials
+Date: ${new Date().toLocaleString()}
+
+Username: ${username.trim()}
+Password: ${password}
+Rights: Administrator (Full System Access)
+
+⚠️ KEEP THIS FILE SECURE.
+These credentials are required to manage operators, configure system settings, and access the Engineering Studio.`;
+
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'TASC_Admin_Credentials.txt';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
   };
 
   return (
@@ -78,19 +102,19 @@ export const OperatorFirstGoModal: React.FC = () => {
             width: '64px', height: '64px', borderRadius: '16px',
             background: 'linear-gradient(135deg, #1d4ed8, #7c3aed)',
             marginBottom: '16px', fontSize: '28px'
-          }}>🔐</div>
+          }}><i className="fas fa-lock" style={{ color: '#fff' }} /></div>
           <h1 style={{ color: '#f0f4ff', fontSize: '22px', fontWeight: 700, margin: '0 0 8px' }}>
             Welcome to TASC IIoT Studio
           </h1>
           <p style={{ color: '#64748b', fontSize: '13px', margin: 0, lineHeight: 1.5 }}>
-            First-time setup: Create your Administrator account to secure this Client Edition.
+            First-time setup: Create your Administrator account to secure the system.
           </p>
           <div style={{
             marginTop: '12px', padding: '8px 14px',
             background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
             borderRadius: '8px', color: '#fca5a5', fontSize: '11px'
           }}>
-            ⚠️ This Admin account controls all user access. Store your password securely.
+            <i className="fas fa-triangle-exclamation" /> This Admin account controls all user access. Store your password securely.
           </div>
         </div>
 

@@ -85,7 +85,7 @@ export const PermissionDeniedToast: React.FC = () => {
           }}
         >
           <div style={{ fontSize: '18px', flexShrink: 0, marginTop: '1px' }}>
-            {toast.type === 'denied' ? '🚫' : '🔐'}
+            {toast.type === 'denied' ? <i className="fas fa-ban text-rose-500" /> : <i className="fas fa-lock text-amber-500" />}
           </div>
           <div>
             <div style={{ color: '#fca5a5', fontSize: '13px', fontWeight: 700, marginBottom: '3px' }}>

@@ -221,7 +221,7 @@ export const RecallExplorerModal: React.FC<RecallExplorerModalProps> = ({
                     <span className="text-base font-mono font-bold text-emerald-400">{query}</span>
                   </div>
                   <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold">
-                    ✓ Verified Authentic Lot
+                    <i className="fas fa-check-circle" /> Verified Authentic Lot
                   </span>
                 </div>
 

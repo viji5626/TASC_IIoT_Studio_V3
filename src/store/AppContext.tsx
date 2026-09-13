@@ -396,24 +396,35 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
 
   // ── Publish with Dual Auth Gate ───────────────────────────────────────────────
   // Engineering Edition (userRole === 'admin'): existing editPin/PinModal gate — UNCHANGED
-  // Client Edition: Operator RBAC permission check + full audit trail
+  // Client Edition with Operator RBAC: Operator RBAC permission check + audit trail
+  // Client Edition without Operator RBAC: Quick keypad PIN (editPin) gate (or direct write) + optional audit trail
   const handlePublish = useCallback((topic: string, payload: string | number, widgetName?: string, dashboardName?: string) => {
-    // ENGINEERING EDITION PATH — keep original behavior
-    if (userRole === 'admin') {
+    const isRbacEnabled = userRole === 'client'
+      ? appState.clientSecurity?.requireOperatorLogin !== false
+      : false;
+
+    // PATH 1: Keypad PIN / Open Access Gate (Engineering Edition OR Client Edition without Operator Login)
+    if (!isRbacEnabled) {
       if (appState.editPin && !isRuntimeUnlocked) {
         setPinModalMode('enter');
         setPendingAction(() => () => {
           setIsRuntimeUnlocked(true);
           executePublish(topic, payload);
+          if (appState.clientSecurity?.enableAuditTrail !== false) {
+            operatorAuthClient.logAuditEvent('mqtt_write', { topic, payload: String(payload), widgetName, dashboardName });
+          }
         });
         setIsPinModalOpen(true);
         return;
       }
       executePublish(topic, payload);
+      if (appState.clientSecurity?.enableAuditTrail !== false) {
+        operatorAuthClient.logAuditEvent('mqtt_write', { topic, payload: String(payload), widgetName, dashboardName });
+      }
       return;
     }
 
-    // CLIENT EDITION PATH — Operator RBAC
+    // PATH 2: CLIENT EDITION — Operator RBAC
     if (!operatorAuthCtx || !operatorAuthCtx.isAuthenticated) {
       // No operator session — dispatch event so App.tsx can show login modal
       window.dispatchEvent(new CustomEvent('op_login_required'));
@@ -421,47 +432,83 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     }
     if (!operatorAuthCtx.hasPermission('write')) {
       // Log denied attempt and dispatch notification event
-      operatorAuthClient.logAuditEvent('mqtt_write_denied', { topic, payload: String(payload), permissionMissing: 'write', widgetName });
+      if (appState.clientSecurity?.enableAuditTrail !== false) {
+        operatorAuthClient.logAuditEvent('mqtt_write_denied', { topic, payload: String(payload), permissionMissing: 'write', widgetName });
+      }
       window.dispatchEvent(new CustomEvent('op_permission_denied', { detail: { permission: 'write', username: operatorAuthCtx.currentOperator?.displayName } }));
       return;
     }
     // ✅ Authorized — execute and audit
     executePublish(topic, payload);
-    operatorAuthClient.logAuditEvent('mqtt_write', { topic, payload: String(payload), widgetName, dashboardName });
-  }, [userRole, appState.editPin, isRuntimeUnlocked, operatorAuthCtx, executePublish, setIsRuntimeUnlocked, setPendingAction, setIsPinModalOpen, setPinModalMode]);
+    if (appState.clientSecurity?.enableAuditTrail !== false) {
+      operatorAuthClient.logAuditEvent('mqtt_write', { topic, payload: String(payload), widgetName, dashboardName });
+    }
+  }, [userRole, appState.clientSecurity, appState.editPin, isRuntimeUnlocked, operatorAuthCtx, executePublish, setIsRuntimeUnlocked, setPendingAction, setIsPinModalOpen, setPinModalMode]);
 
   // ── Alarm Acknowledge with Dual Auth Gate ─────────────────────────────────────
-  // Engineering Edition: direct pass-through to alarmEngine (unchanged)
-  // Client Edition: RBAC check + audit trail
+  // Engineering Edition / Client without RBAC: direct pass-through or quick PIN
+  // Client Edition with RBAC: RBAC check + audit trail
   const handleAcknowledgeAlarmGated = useCallback((alarmKey: string) => {
-    if (userRole === 'admin') {
-      // Engineering Edition — no RBAC check
+    const isRbacEnabled = userRole === 'client'
+      ? appState.clientSecurity?.requireOperatorLogin !== false
+      : false;
+
+    // PATH 1: Engineering Edition OR Client Edition without Operator Login
+    if (!isRbacEnabled) {
+      if (userRole === 'client' && appState.editPin && !isRuntimeUnlocked) {
+        setPinModalMode('enter');
+        setPendingAction(() => () => {
+          setIsRuntimeUnlocked(true);
+          handleAcknowledgeAlarm(alarmKey);
+          if (appState.clientSecurity?.enableAuditTrail !== false) {
+            const alarm = activeAlarms.find(a => a.alarmKey === alarmKey);
+            operatorAuthClient.logAuditEvent('alarm_ack', {
+              alarmId: alarmKey,
+              alarmMessage: alarm?.condition ?? alarmKey
+            });
+          }
+        });
+        setIsPinModalOpen(true);
+        return;
+      }
       handleAcknowledgeAlarm(alarmKey);
+      if (appState.clientSecurity?.enableAuditTrail !== false) {
+        const alarm = activeAlarms.find(a => a.alarmKey === alarmKey);
+        operatorAuthClient.logAuditEvent('alarm_ack', {
+          alarmId: alarmKey,
+          alarmMessage: alarm?.condition ?? alarmKey
+        });
+      }
       return;
     }
-    // Client Edition
+
+    // PATH 2: Client Edition with RBAC
     if (!operatorAuthCtx || !operatorAuthCtx.isAuthenticated) {
       window.dispatchEvent(new CustomEvent('op_login_required'));
       return;
     }
     if (!operatorAuthCtx.hasPermission('ackAlarms')) {
       const alarm = activeAlarms.find(a => a.alarmKey === alarmKey);
-      operatorAuthClient.logAuditEvent('alarm_ack_denied', {
-        alarmId: alarmKey,
-        alarmMessage: alarm?.condition ?? alarmKey,
-        permissionMissing: 'ackAlarms'
-      });
+      if (appState.clientSecurity?.enableAuditTrail !== false) {
+        operatorAuthClient.logAuditEvent('alarm_ack_denied', {
+          alarmId: alarmKey,
+          alarmMessage: alarm?.condition ?? alarmKey,
+          permissionMissing: 'ackAlarms'
+        });
+      }
       window.dispatchEvent(new CustomEvent('op_permission_denied', { detail: { permission: 'ackAlarms', username: operatorAuthCtx.currentOperator?.displayName } }));
       return;
     }
     // ✅ Authorized — ack and audit
     const alarm = activeAlarms.find(a => a.alarmKey === alarmKey);
     handleAcknowledgeAlarm(alarmKey);
-    operatorAuthClient.logAuditEvent('alarm_ack', {
-      alarmId: alarmKey,
-      alarmMessage: alarm?.condition ?? alarmKey
-    });
-  }, [userRole, operatorAuthCtx, handleAcknowledgeAlarm, activeAlarms]);
+    if (appState.clientSecurity?.enableAuditTrail !== false) {
+      operatorAuthClient.logAuditEvent('alarm_ack', {
+        alarmId: alarmKey,
+        alarmMessage: alarm?.condition ?? alarmKey
+      });
+    }
+  }, [userRole, appState.clientSecurity, appState.editPin, isRuntimeUnlocked, operatorAuthCtx, handleAcknowledgeAlarm, activeAlarms, setPinModalMode, setPendingAction, setIsRuntimeUnlocked, setIsPinModalOpen]);
 
 
   // CRUD Handlers

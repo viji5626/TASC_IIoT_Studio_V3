@@ -1203,7 +1203,7 @@ export const LineGraph: React.FC<LineGraphProps> = ({
             </span>
             <span className="text-slate-600">|</span>
             <span className="flex items-center space-x-1">
-              <i className="fas fa-chart-line-up text-indigo-400 text-[10px]"></i>
+              <i className="fas fa-arrow-trend-up text-indigo-400 text-[10px]"></i>
               <strong className="text-indigo-300">Δv:</strong>
               <span className={deltaVal !== null ? (deltaVal >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold') : ''}>
                 {deltaVal !== null ? `${deltaVal >= 0 ? '+' : ''}${formatNumberReadable(deltaVal)} ${unit || ''} (${deltaPct !== null ? `${deltaPct >= 0 ? '+' : ''}${deltaPct.toFixed(1)}%` : ''})` : '---'}

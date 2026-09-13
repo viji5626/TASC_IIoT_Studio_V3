@@ -255,6 +255,9 @@ function AppContent() {
             productEdition: ProductEdition.CLIENT_RUNTIME,
             packageOrigin: 'commercial',
             isLockedPackage: true,
+            clientSecurity: newAppState.clientSecurity,
+            editPin: newAppState.editPin,
+            runtimePinTimeoutMinutes: newAppState.runtimePinTimeoutMinutes,
             clientInfo: {
               clientName,
               expiresAt,
@@ -283,17 +286,22 @@ function AppContent() {
     );
   }
 
+  // ── Operator RBAC Requirement Check ───────────────────────────────────────────
+  // Client Edition enforces Operator RBAC unless disabled in package clientSecurity
+  const isClientRbacRequired = userRole === 'client' && appState.clientSecurity?.requireOperatorLogin !== false;
+  const requireAdminSetup = (userRole === 'admin' || isClientRbacRequired) && !operatorAuth.isLoading && operatorAuth.requireSetup;
+
+  // ── First-Boot Admin Generation ───────────────────────────────────────────────
+  // Forces creation of the initial Admin account if no users exist and RBAC is enabled
+  if (requireAdminSetup) {
+    return <OperatorFirstGoModal />;
+  }
+
   // ── Operator Auth Gate (Client Edition only) ──────────────────────────────────
-  // Engineering Edition (userRole === 'admin') bypasses this entire block.
-  if (userRole === 'client' && !operatorAuth.isLoading) {
-    // First-boot: no admin created yet — force setup before anything else
-    if (operatorAuth.requireSetup) {
-      return <OperatorFirstGoModal />;
-    }
-    // Initialized but no active session — show login gate
-    if (!operatorAuth.isAuthenticated) {
-      return <OperatorLoginModal />;
-    }
+  // Initialized but no active session — show login gate if RBAC is required.
+  // Engineering Edition (userRole === 'admin') and clients with requireOperatorLogin === false bypass this.
+  if (isClientRbacRequired && !operatorAuth.isLoading && !operatorAuth.isAuthenticated) {
+    return <OperatorLoginModal />;
   }
 
   const activeMqttConnection = activeConnection;
@@ -394,6 +402,12 @@ function AppContent() {
 
         {currentView === AppView.CONNECTIONS && (
           <div className="flex-grow p-6 overflow-y-auto max-w-3xl mx-auto w-full space-y-6">
+            <button
+              onClick={() => setCurrentView(AppView.DASHBOARD)}
+              className="text-slate-400 hover:text-white transition-colors mb-2 flex items-center text-sm"
+            >
+              <i className="fas fa-arrow-left mr-2"></i> Back to Dashboard
+            </button>
             <div className="flex justify-between items-center">
               <div>
                 <h1 className="text-xl font-bold text-white">MQTT Connections</h1>
@@ -682,7 +696,7 @@ function AppContent() {
         )}
 
         {currentView === AppView.CREDENTIALS && (
-          <CredentialManagementView />
+          <CredentialManagementView onBack={() => setCurrentView(AppView.DASHBOARD)} />
         )}
 
         {currentView === AppView.AI_ASSISTANT && (
@@ -758,6 +772,8 @@ function AppContent() {
         onRequestClearAll={handleRequestClearAll}
         onLoadHatcheryDemo={handleLoadHatcheryDemo}
         onOpenTour={() => setIsTourOpen(true)}
+        clientFeatures={appState.clientFeatures}
+        clientSecurity={appState.clientSecurity}
       />
 
       <ModalRegistry
@@ -834,11 +850,11 @@ function AppContent() {
 
 export function App() {
   return (
-    <AppContextProvider>
-      <OperatorAuthProvider>
+    <OperatorAuthProvider>
+      <AppContextProvider>
         <AppContent />
-      </OperatorAuthProvider>
-    </AppContextProvider>
+      </AppContextProvider>
+    </OperatorAuthProvider>
   );
 }
 

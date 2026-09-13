@@ -1,4 +1,4 @@
-import { MqttConnection, Dashboard, Panel } from '../types';
+import { MqttConnection, Dashboard, Panel, ClientRuntimeFeatures, ClientSecuritySettings } from '../types';
 import type { PackagedOperatorCredentials } from '../types/auth';
 
 export interface ClientPackageData {
@@ -22,6 +22,10 @@ export interface ClientPackage {
   version: string;
   /** Optional operator credentials block — independently signed. Client Edition imports this on package load. */
   operatorCredentials?: PackagedOperatorCredentials;
+  clientFeatures?: ClientRuntimeFeatures;
+  clientSecurity?: ClientSecuritySettings;
+  editPin?: string;
+  runtimePinTimeoutMinutes?: number;
 }
 
 // Master secret salt used for HMAC/SHA-256 integrity verification
@@ -41,36 +45,61 @@ export async function computeSHA256(text: string): Promise<string> {
 /**
  * Creates canonical string representation of payload for hash comparison
  */
-function getCanonicalString(data: ClientPackageData, clientName: string, generatedAt: string, expiresAt?: string, clearPassword?: string): string {
-  const payloadStr = JSON.stringify({
+function getCanonicalString(
+  data: ClientPackageData,
+  clientName: string,
+  generatedAt: string,
+  expiresAt?: string,
+  clearPassword?: string,
+  clientFeatures?: ClientRuntimeFeatures,
+  clientSecurity?: ClientSecuritySettings,
+  editPin?: string,
+  runtimePinTimeoutMinutes?: number
+): string {
+  const payload: Record<string, any> = {
     clientName: clientName.trim(),
     generatedAt,
     expiresAt: expiresAt || '',
     clearPassword: clearPassword || '',
-    connections: data.connections.map(c => ({
-      connectionId: c.connectionId,
-      brokerAddress: c.brokerAddress,
-      port: c.port,
-      protocol: c.protocol,
-      username: c.username || '',
-      password: c.password || ''
-    })),
-    dashboards: data.dashboards.map(d => ({
-      dashboardId: d.dashboardId,
-      dashboardName: d.dashboardName,
-      connectionId: d.connectionId,
-      prefixTopic: d.prefixTopic || ''
-    })),
-    panels: data.panels.map(p => ({
-      panelId: p.panelId,
-      dashboardId: p.dashboardId,
-      panelName: p.panelName,
-      type: p.type,
-      topic: p.topic || '',
-      publishTopic: p.publishTopic || ''
-    }))
-  });
+    clientFeatures: clientFeatures || {}
+  };
 
+  if (clientSecurity) {
+    payload.clientSecurity = clientSecurity;
+  }
+  if (editPin) {
+    payload.editPin = editPin;
+  }
+  if (runtimePinTimeoutMinutes !== undefined) {
+    payload.runtimePinTimeoutMinutes = runtimePinTimeoutMinutes;
+  }
+
+  payload.connections = data.connections.map(c => ({
+    connectionId: c.connectionId,
+    brokerAddress: c.brokerAddress,
+    port: c.port,
+    protocol: c.protocol,
+    username: c.username || '',
+    password: c.password || ''
+  }));
+
+  payload.dashboards = data.dashboards.map(d => ({
+    dashboardId: d.dashboardId,
+    dashboardName: d.dashboardName,
+    connectionId: d.connectionId,
+    prefixTopic: d.prefixTopic || ''
+  }));
+
+  payload.panels = data.panels.map(p => ({
+    panelId: p.panelId,
+    dashboardId: p.dashboardId,
+    panelName: p.panelName,
+    type: p.type,
+    topic: p.topic || '',
+    publishTopic: p.publishTopic || ''
+  }));
+
+  const payloadStr = JSON.stringify(payload);
   return `${payloadStr}::SALT::${SIGNATURE_SALT}`;
 }
 
@@ -84,10 +113,24 @@ export async function generateClientPackage(
   expiresAt?: string,
   preferredWorkstationMode?: 'hmi',
   clearPassword?: string,
-  operatorCredentials?: PackagedOperatorCredentials | null
+  operatorCredentials?: PackagedOperatorCredentials | null,
+  clientFeatures?: ClientRuntimeFeatures,
+  clientSecurity?: ClientSecuritySettings,
+  editPin?: string,
+  runtimePinTimeoutMinutes?: number
 ): Promise<ClientPackage> {
   const generatedAt = new Date().toISOString();
-  const canonicalStr = getCanonicalString(data, clientName, generatedAt, expiresAt, clearPassword);
+  const canonicalStr = getCanonicalString(
+    data,
+    clientName,
+    generatedAt,
+    expiresAt,
+    clearPassword,
+    clientFeatures,
+    clientSecurity,
+    editPin,
+    runtimePinTimeoutMinutes
+  );
   const signature = await computeSHA256(canonicalStr);
 
   const pkg: ClientPackage = {
@@ -99,6 +142,10 @@ export async function generateClientPackage(
     expiresAt: expiresAt || '',
     clearPassword: clearPassword || '',
     preferredWorkstationMode: preferredWorkstationMode || 'hmi',
+    clientFeatures,
+    clientSecurity,
+    editPin,
+    runtimePinTimeoutMinutes,
     connections: data.connections,
     dashboards: data.dashboards,
     panels: data.panels,
@@ -126,6 +173,10 @@ export async function verifyClientPackage(pkg: any): Promise<{
   expiresAt?: string;
   clearPassword?: string;
   preferredWorkstationMode?: 'hmi';
+  clientFeatures?: ClientRuntimeFeatures;
+  clientSecurity?: ClientSecuritySettings;
+  editPin?: string;
+  runtimePinTimeoutMinutes?: number;
   /** Operator credentials block extracted from package — verified independently server-side on import */
   operatorCredentials?: PackagedOperatorCredentials;
 }> {
@@ -154,7 +205,17 @@ export async function verifyClientPackage(pkg: any): Promise<{
       panels: pkg.panels
     };
 
-    const expectedCanonicalStr = getCanonicalString(packageData, pkg.clientName, pkg.generatedAt, pkg.expiresAt, pkg.clearPassword);
+    const expectedCanonicalStr = getCanonicalString(
+      packageData,
+      pkg.clientName,
+      pkg.generatedAt,
+      pkg.expiresAt,
+      pkg.clearPassword,
+      pkg.clientFeatures,
+      pkg.clientSecurity,
+      pkg.editPin,
+      pkg.runtimePinTimeoutMinutes
+    );
     const expectedSignature = await computeSHA256(expectedCanonicalStr);
 
     if (pkg.signature !== expectedSignature) {
@@ -173,6 +234,10 @@ export async function verifyClientPackage(pkg: any): Promise<{
       expiresAt: pkg.expiresAt,
       clearPassword: pkg.clearPassword,
       preferredWorkstationMode: pkg.preferredWorkstationMode || 'hmi',
+      clientFeatures: pkg.clientFeatures,
+      clientSecurity: pkg.clientSecurity ?? { requireOperatorLogin: true, enableAuditTrail: true },
+      editPin: pkg.editPin,
+      runtimePinTimeoutMinutes: pkg.runtimePinTimeoutMinutes,
       packageData,
       operatorCredentials: pkg.operatorCredentials ?? undefined
     };
@@ -185,6 +250,10 @@ export async function verifyClientPackage(pkg: any): Promise<{
       isSignedPackage: false,
       clientName: pkg.clientName || 'Imported Config',
       preferredWorkstationMode: pkg.preferredWorkstationMode || 'hmi',
+      clientFeatures: pkg.clientFeatures,
+      clientSecurity: pkg.clientSecurity,
+      editPin: pkg.editPin,
+      runtimePinTimeoutMinutes: pkg.runtimePinTimeoutMinutes,
       packageData: {
         connections: pkg.connections,
         dashboards: pkg.dashboards,

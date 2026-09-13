@@ -27,6 +27,14 @@
 import { Router, Request, Response } from 'express';
 import { operatorAuthService } from '../services/auth/operatorAuthService';
 import { requireAuth, requirePermission, getClientIp } from '../middleware/operatorAuthMiddleware';
+import { 
+  checkRateLimit, 
+  recordFailedAttempt, 
+  recordSuccessfulLogin, 
+  getSecurityAuditTrail, 
+  unlockUserAccount,
+  extractClientIp 
+} from '../services/auth/rateLimiterService';
 import type { AuditExportFormat, AuditLogQuery } from '../types/auth';
 
 export const operatorAuthRouter = Router();
@@ -70,18 +78,6 @@ operatorAuthRouter.post('/init-admin', (req: Request, res: Response) => {
   }
 });
 
-import { 
-  checkRateLimit, 
-  recordFailedAttempt, 
-  recordSuccessfulLogin, 
-  getSecurityAuditTrail, 
-  unlockUserAccount,
-  extractClientIp 
-} from '../services/auth/rateLimiterService';
-
-/**
-  }
-});
 
 /**
  * POST /api/auth/op/login

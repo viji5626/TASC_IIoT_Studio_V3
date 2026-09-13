@@ -102,12 +102,14 @@ export const AssetHierarchyManagerView: React.FC<AssetHierarchyManagerViewProps>
     instanceName: string;
     addressPrefix: string;
     description: string;
+    tagAssignments: Record<string, { address: string; protocol: string }>;
   }>({
     classId: '',
     parentNodeId: '',
     instanceName: '',
     addressPrefix: '',
-    description: ''
+    description: '',
+    tagAssignments: {}
   });
 
   // Class Editor Modal (Create / Edit Equipment Class)
@@ -208,12 +210,21 @@ export const AssetHierarchyManagerView: React.FC<AssetHierarchyManagerViewProps>
   const handleContextInstantiateClass = (targetNode?: AssetNode) => {
     const target = targetNode || contextMenuNode || selectedNode;
     const firstClass = equipmentClasses[0];
+
+    const initialAssignments: Record<string, { address: string; protocol: string }> = {};
+    if (firstClass) {
+      firstClass.tags.forEach(t => {
+        initialAssignments[t.tagId] = { address: t.source?.address || '', protocol: t.source?.protocol || 'modbus' };
+      });
+    }
+
     setInstantiateConfig({
       classId: firstClass?.id || '',
       parentNodeId: target?.id || hierarchy[0]?.id || '',
       instanceName: firstClass ? `${firstClass.name.replace(/\s+Class$/, '')}_01` : 'New_Equipment',
       addressPrefix: '',
-      description: firstClass?.description || ''
+      description: firstClass?.description || '',
+      tagAssignments: initialAssignments
     });
     setIsInstantiateModalOpen(true);
     setContextMenuPos(null);
@@ -356,13 +367,17 @@ export const AssetHierarchyManagerView: React.FC<AssetHierarchyManagerViewProps>
     const parentPath = targetParent ? targetParent.name : 'Plant';
 
     const instantiatedTags: AssetTagDefinition[] = targetClass.tags.map(t => {
-      const addr = instantiateConfig.addressPrefix ? `${instantiateConfig.addressPrefix}${t.source.address}` : t.source.address;
+      const assignment = instantiateConfig.tagAssignments[t.tagId] || { address: '', protocol: 'modbus' };
+      const baseAddress = assignment.address;
+      const addr = instantiateConfig.addressPrefix ? `${instantiateConfig.addressPrefix}${baseAddress}` : baseAddress;
+      
       return {
         ...t,
         tagId: `tag_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
         path: `${parentPath}/${instantiateConfig.instanceName}/${t.tagName}`,
         source: {
           ...t.source,
+          protocol: assignment.protocol as any,
           address: addr
         }
       };
@@ -413,7 +428,7 @@ export const AssetHierarchyManagerView: React.FC<AssetHierarchyManagerViewProps>
           tagId: 'tpl_status',
           tagName: 'Status',
           dataType: 'Boolean',
-          source: { protocol: 'modbus', address: '10001', access: 'read' }
+          source: { protocol: 'modbus', address: '', access: 'read' }
         },
         {
           tagId: 'tpl_speed_sp',
@@ -422,14 +437,14 @@ export const AssetHierarchyManagerView: React.FC<AssetHierarchyManagerViewProps>
           unit: 'RPM',
           sourceType: 'static',
           staticConfig: { initialValue: 1450, persisted: true, storageTarget: 'local_storage' },
-          source: { protocol: 'memory', address: 'SP', access: 'read_write' }
+          source: { protocol: 'memory', address: '', access: 'read_write' }
         },
         {
           tagId: 'tpl_speed_pv',
           tagName: 'Speed_PV',
           dataType: 'Float',
           unit: 'RPM',
-          source: { protocol: 'modbus', address: '40001', access: 'read' },
+          source: { protocol: 'modbus', address: '', access: 'read' },
           historian: { enabled: true, logMode: 'periodic', intervalMs: 1000 },
           alarms: {
             enabled: true,
@@ -1006,12 +1021,18 @@ export const AssetHierarchyManagerView: React.FC<AssetHierarchyManagerViewProps>
                   <button
                     type="button"
                     onClick={() => {
+                      const initialAssignments: Record<string, { address: string; protocol: string }> = {};
+                      cls.tags.forEach(t => {
+                        initialAssignments[t.tagId] = { address: t.source?.address || '', protocol: t.source?.protocol || 'modbus' };
+                      });
+
                       setInstantiateConfig({
                         classId: cls.id,
                         parentNodeId: selectedNodeId || hierarchy[0]?.id || '',
                         instanceName: `${cls.name.replace(/\s+Class$/, '')}_01`,
                         addressPrefix: '',
-                        description: cls.description || ''
+                        description: cls.description || '',
+                        tagAssignments: initialAssignments
                       });
                       setIsInstantiateModalOpen(true);
                     }}
@@ -1260,11 +1281,18 @@ export const AssetHierarchyManagerView: React.FC<AssetHierarchyManagerViewProps>
                   value={instantiateConfig.classId}
                   onChange={e => {
                     const cls = equipmentClasses.find(c => c.id === e.target.value);
+                    const newAssignments: Record<string, { address: string; protocol: string }> = {};
+                    if (cls) {
+                      cls.tags.forEach(t => {
+                        newAssignments[t.tagId] = { address: t.source?.address || '', protocol: t.source?.protocol || 'modbus' };
+                      });
+                    }
                     setInstantiateConfig({
                       ...instantiateConfig,
                       classId: e.target.value,
                       instanceName: cls ? `${cls.name.replace(/\s+Class$/, '')}_01` : instantiateConfig.instanceName,
-                      description: cls?.description || ''
+                      description: cls?.description || '',
+                      tagAssignments: newAssignments
                     });
                   }}
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 font-bold focus:outline-none focus:border-indigo-500"
@@ -1316,22 +1344,98 @@ export const AssetHierarchyManagerView: React.FC<AssetHierarchyManagerViewProps>
                 />
               </div>
 
-              {/* Tags to be created summary */}
+              {/* Tag Assignment Table */}
               {(() => {
                 const targetCls = equipmentClasses.find(c => c.id === instantiateConfig.classId);
                 if (!targetCls) return null;
                 return (
-                  <div className="p-3 bg-slate-950/80 border border-indigo-950/50 rounded-xl space-y-1.5">
+                  <div className="flex flex-col space-y-2 mt-2">
                     <div className="text-[11px] font-bold text-indigo-300 uppercase flex items-center justify-between">
-                      <span>Tags to be generated ({targetCls.tags.length})</span>
-                      <span className="font-normal text-[10px] text-slate-400">Auto-synced with Historian & Alarms</span>
+                      <span>Tag Address Assignments ({targetCls.tags.length})</span>
                     </div>
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {targetCls.tags.map((t, idx) => (
-                        <span key={idx} className="bg-slate-900 text-slate-300 border border-slate-800 px-2 py-0.5 rounded text-[10px] font-mono">
-                          {t.tagName} ({t.dataType})
-                        </span>
-                      ))}
+                    <div className="border border-slate-800 rounded-lg overflow-hidden bg-slate-950 max-h-48 overflow-y-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-900 border-b border-slate-800 text-slate-400 font-bold text-[10px]">
+                            <th className="py-1.5 px-2">Tag Name</th>
+                            <th className="py-1.5 px-2">Protocol</th>
+                            <th className="py-1.5 px-2">Address / Driver Tag Binding</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800">
+                          {targetCls.tags.map((t) => {
+                            const assignment = instantiateConfig.tagAssignments[t.tagId] || { address: '', protocol: 'modbus' };
+                            return (
+                              <tr key={t.tagId} className="hover:bg-slate-900/50">
+                                <td className="py-1.5 px-2 font-mono text-slate-300">
+                                  {t.tagName}
+                                </td>
+                                <td className="py-1.5 px-2">
+                                  <select
+                                    value={assignment.protocol}
+                                    onChange={(e) => {
+                                      setInstantiateConfig({
+                                        ...instantiateConfig,
+                                        tagAssignments: {
+                                          ...instantiateConfig.tagAssignments,
+                                            [t.tagId]: { ...assignment, protocol: e.target.value }
+                                        }
+                                      })
+                                    }}
+                                    className="bg-slate-900 border border-slate-700 rounded px-1 py-1 text-slate-200 text-[10px]"
+                                  >
+                                    <option value="modbus">Modbus</option>
+                                    <option value="opcua">OPC UA</option>
+                                    <option value="mqtt">MQTT</option>
+                                    <option value="memory">Memory / SP</option>
+                                  </select>
+                                </td>
+                                <td className="py-1.5 px-2 flex space-x-1">
+                                  <input
+                                    type="text"
+                                    value={assignment.address}
+                                    onChange={(e) => {
+                                      setInstantiateConfig({
+                                        ...instantiateConfig,
+                                        tagAssignments: {
+                                          ...instantiateConfig.tagAssignments,
+                                            [t.tagId]: { ...assignment, address: e.target.value }
+                                        }
+                                      })
+                                    }}
+                                    placeholder="Enter address..."
+                                    className="flex-1 bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-100 font-mono text-xs focus:outline-none focus:border-indigo-500"
+                                  />
+                                  {appState.driverTags && appState.driverTags.length > 0 && (
+                                    <select
+                                      onChange={(e) => {
+                                        if (e.target.value) {
+                                          setInstantiateConfig({
+                                            ...instantiateConfig,
+                                            tagAssignments: {
+                                              ...instantiateConfig.tagAssignments,
+                                                [t.tagId]: { ...assignment, address: e.target.value }
+                                            }
+                                          })
+                                        }
+                                      }}
+                                      className="w-24 bg-slate-900 border border-slate-700 rounded px-1 py-1 text-slate-300 text-[10px]"
+                                      title="Select from Driver Tags"
+                                    >
+                                      <option value="">Driver Tags...</option>
+                                      {appState.driverTags.map(dt => (
+                                        <option key={dt.id} value={dt.address}>
+                                          {dt.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 );
@@ -1429,7 +1533,7 @@ export const AssetHierarchyManagerView: React.FC<AssetHierarchyManagerViewProps>
                         tagName: `Param_${editingClass.tags.length + 1}`,
                         dataType: 'Float' as const,
                         unit: '',
-                        source: { protocol: 'modbus' as const, address: '40001', access: 'read' as const }
+                        source: { protocol: 'modbus' as const, address: '', access: 'read' as const }
                       };
                       setEditingClass({
                         ...editingClass,
@@ -1450,8 +1554,7 @@ export const AssetHierarchyManagerView: React.FC<AssetHierarchyManagerViewProps>
                         <th className="py-2 px-2.5">Tag Name</th>
                         <th className="py-2 px-2.5">Data Type</th>
                         <th className="py-2 px-2.5">Unit</th>
-                        <th className="py-2 px-2.5">Protocol</th>
-                        <th className="py-2 px-2.5">Default Address</th>
+                        <th className="py-2 px-2.5">Default Protocol</th>
                         <th className="py-2 px-2.5 text-right">Remove</th>
                       </tr>
                     </thead>
@@ -1517,21 +1620,6 @@ export const AssetHierarchyManagerView: React.FC<AssetHierarchyManagerViewProps>
                               <option value="mqtt">MQTT</option>
                               <option value="memory">Memory / SP</option>
                             </select>
-                          </td>
-                          <td className="py-1.5 px-2.5">
-                            <input
-                              type="text"
-                              value={t.source.address}
-                              onChange={e => {
-                                const copy = [...editingClass.tags];
-                                copy[idx] = {
-                                  ...copy[idx],
-                                  source: { ...copy[idx].source, address: e.target.value }
-                                };
-                                setEditingClass({ ...editingClass, tags: copy });
-                              }}
-                              className="bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-slate-100 font-mono text-xs w-32"
-                            />
                           </td>
                           <td className="py-1.5 px-2.5 text-right">
                             <button

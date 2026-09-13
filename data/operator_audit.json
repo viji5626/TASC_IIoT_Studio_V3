@@ -20,5 +20,463 @@
         "manageUsers"
       ]
     }
+  },
+  {
+    "id": "evt_1789300734251_1da2",
+    "timestamp": "2026-09-13T11:58:54.252Z",
+    "username": "laptop-ck0m4vvh\\vijay",
+    "displayName": "laptop-ck0m4vvh\\vijay",
+    "action": "op_failed_login",
+    "success": false,
+    "ip": "127.0.0.1",
+    "details": {
+      "attemptCount": 1
+    }
+  },
+  {
+    "id": "evt_1789302290079_5c4c",
+    "timestamp": "2026-09-13T12:24:50.079Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "user_created",
+    "success": true,
+    "ip": null,
+    "details": {
+      "newUsername": "vijay",
+      "role": "admin",
+      "permissionsGranted": [
+        "read",
+        "write",
+        "ackAlarms",
+        "controlEquipment",
+        "exportReports",
+        "configSettings",
+        "manageUsers"
+      ]
+    }
+  },
+  {
+    "id": "evt_1789302335814_ef40",
+    "timestamp": "2026-09-13T12:25:35.814Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "op_login",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "sessionId": "a7a8fc03..."
+    }
+  },
+  {
+    "id": "evt_1789302349195_66bb",
+    "timestamp": "2026-09-13T12:25:49.195Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "credential_imported",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "sourcePkg": "testing_final",
+      "userCount": 1
+    }
+  },
+  {
+    "id": "evt_1789303737205_13d3",
+    "timestamp": "2026-09-13T12:48:57.205Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "credential_imported",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "sourcePkg": "ytyt",
+      "userCount": 1
+    }
+  },
+  {
+    "id": "evt_1789304636781_b7e7",
+    "timestamp": "2026-09-13T13:03:56.781Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "op_logout",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "sessionDurationMinutes": 39.1
+    }
+  },
+  {
+    "id": "evt_1789304685040_c292",
+    "timestamp": "2026-09-13T13:04:45.040Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "op_login",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "sessionId": "2aab530e..."
+    }
+  },
+  {
+    "id": "evt_1789306770161_64f5",
+    "timestamp": "2026-09-13T13:39:30.162Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "home/lights/living",
+      "payload": "1"
+    }
+  },
+  {
+    "id": "evt_1789306775139_6b2c",
+    "timestamp": "2026-09-13T13:39:35.139Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "home/lights/living",
+      "payload": "1"
+    }
+  },
+  {
+    "id": "evt_1789306781992_c5cb",
+    "timestamp": "2026-09-13T13:39:41.992Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "home/lights/living",
+      "payload": "1"
+    }
+  },
+  {
+    "id": "evt_1789306877923_3715",
+    "timestamp": "2026-09-13T13:41:17.923Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "home/lights/living",
+      "payload": "1"
+    }
+  },
+  {
+    "id": "evt_1789310753510_558e",
+    "timestamp": "2026-09-13T14:45:53.511Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "home/lights/living",
+      "payload": "1"
+    }
+  },
+  {
+    "id": "evt_1789310762341_ee8d",
+    "timestamp": "2026-09-13T14:46:02.341Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "home/lights/living",
+      "payload": "1"
+    }
+  },
+  {
+    "id": "evt_1789311160992_3fe6",
+    "timestamp": "2026-09-13T14:52:40.993Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "home/lights/living",
+      "payload": "1"
+    }
+  },
+  {
+    "id": "evt_1789311222359_d3b5",
+    "timestamp": "2026-09-13T14:53:42.360Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "home/lights/living",
+      "payload": "1"
+    }
+  },
+  {
+    "id": "evt_1789312059083_d4fa",
+    "timestamp": "2026-09-13T15:07:39.083Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "home/lights/living",
+      "payload": "1"
+    }
+  },
+  {
+    "id": "evt_1789312064299_6211",
+    "timestamp": "2026-09-13T15:07:44.299Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "home/ac/mode",
+      "payload": "HEAT"
+    }
+  },
+  {
+    "id": "evt_1789312406765_43af",
+    "timestamp": "2026-09-13T15:13:26.766Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "home/lights/living",
+      "payload": "1"
+    }
+  },
+  {
+    "id": "evt_1789312447509_6bfa",
+    "timestamp": "2026-09-13T15:14:07.509Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "home/lights/living",
+      "payload": "1"
+    }
+  },
+  {
+    "id": "evt_1789314727024_c1cb",
+    "timestamp": "2026-09-13T15:52:07.026Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "home/lights/living",
+      "payload": "1"
+    }
+  },
+  {
+    "id": "evt_1789314733429_0bf1",
+    "timestamp": "2026-09-13T15:52:13.429Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "water/pump_control",
+      "payload": "ON"
+    }
+  },
+  {
+    "id": "evt_1789315138243_3045",
+    "timestamp": "2026-09-13T15:58:58.243Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "home/lights/living",
+      "payload": "1"
+    }
+  },
+  {
+    "id": "evt_1789315151807_de68",
+    "timestamp": "2026-09-13T15:59:11.807Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "home/lights/all_off",
+      "payload": "OFF"
+    }
+  },
+  {
+    "id": "evt_1789315151810_c427",
+    "timestamp": "2026-09-13T15:59:11.810Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "home/lights/all_off",
+      "payload": "OFF"
+    }
+  },
+  {
+    "id": "evt_1789315529550_2f9b",
+    "timestamp": "2026-09-13T16:05:29.550Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "op_login",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "sessionId": "9dc85ba3..."
+    }
+  },
+  {
+    "id": "evt_1789315609708_822d",
+    "timestamp": "2026-09-13T16:06:49.708Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "home/lights/all_off",
+      "payload": "OFF"
+    }
+  },
+  {
+    "id": "evt_1789315623704_2483",
+    "timestamp": "2026-09-13T16:07:03.704Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "home/lights/living",
+      "payload": "1"
+    }
+  },
+  {
+    "id": "evt_1789315685832_f99c",
+    "timestamp": "2026-09-13T16:08:05.832Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "home/lights/living",
+      "payload": "0"
+    }
+  },
+  {
+    "id": "evt_1789315687130_4076",
+    "timestamp": "2026-09-13T16:08:07.131Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "home/lights/living",
+      "payload": "1"
+    }
+  },
+  {
+    "id": "evt_1789315688283_5a4f",
+    "timestamp": "2026-09-13T16:08:08.284Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "home/lights/living",
+      "payload": "0"
+    }
+  },
+  {
+    "id": "evt_1789315691898_09ad",
+    "timestamp": "2026-09-13T16:08:11.898Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "water/pump_control",
+      "payload": "ON"
+    }
+  },
+  {
+    "id": "evt_1789315693021_9257",
+    "timestamp": "2026-09-13T16:08:13.021Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "water/pump_control",
+      "payload": "OFF"
+    }
+  },
+  {
+    "id": "evt_1789315693666_21a5",
+    "timestamp": "2026-09-13T16:08:13.666Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "water/pump_control",
+      "payload": "ON"
+    }
+  },
+  {
+    "id": "evt_1789315694502_c29a",
+    "timestamp": "2026-09-13T16:08:14.502Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "mqtt_write",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "topic": "water/pump_control",
+      "payload": "OFF"
+    }
+  },
+  {
+    "id": "evt_1789316259102_df05",
+    "timestamp": "2026-09-13T16:17:39.102Z",
+    "username": "vijay",
+    "displayName": "Vijay Admin",
+    "action": "op_logout",
+    "success": true,
+    "ip": "127.0.0.1",
+    "details": {
+      "sessionDurationMinutes": 12.2
+    }
   }
 ]

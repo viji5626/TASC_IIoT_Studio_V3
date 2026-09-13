@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AppState } from '../types';
+import { AppState, ClientRuntimeFeatures } from '../types';
 import { generateClientPackage } from '../utils/clientSecurity';
 import { operatorAuthClient } from '../services/operatorAuthClientService';
 
@@ -24,6 +24,20 @@ const ExportClientPackageModal: React.FC<ExportClientPackageModalProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  const [requireOperatorLogin, setRequireOperatorLogin] = useState(true);
+  const [enableAuditTrail, setEnableAuditTrail] = useState(true);
+
+  const [clientFeatures, setClientFeatures] = useState<ClientRuntimeFeatures>({
+    enableHistorian: true,
+    enableReporting: true,
+    enableOee: true,
+    enableTraceability: true,
+    enableAiAssistant: true,
+    enableAiWorkbench: true,
+    enableFdd: true,
+    enableVpn: true
+  });
+
   if (!isOpen) return null;
 
   const handleGenerate = async (e: React.FormEvent) => {
@@ -40,9 +54,10 @@ const ExportClientPackageModal: React.FC<ExportClientPackageModalProps> = ({
         panels: appState.panels
       };
 
-      // Fetch operator credentials from server to bundle in the package
-      // Non-blocking: if credentials aren't configured, proceeds without them
-      const operatorCreds = await operatorAuthClient.exportForPackaging().catch(() => null);
+      // Fetch operator credentials from server to bundle in the package ONLY if operator security is enabled
+      const operatorCreds = requireOperatorLogin
+        ? await operatorAuthClient.exportForPackaging().catch(() => null)
+        : null;
 
       const signedPackage = await generateClientPackage(
         packageData,
@@ -51,7 +66,14 @@ const ExportClientPackageModal: React.FC<ExportClientPackageModalProps> = ({
         expiresAt,
         preferredView,
         clearPassword,
-        operatorCreds
+        operatorCreds,
+        clientFeatures,
+        {
+          requireOperatorLogin,
+          enableAuditTrail
+        },
+        appState.editPin,
+        appState.runtimePinTimeoutMinutes
       );
 
       const jsonString = JSON.stringify(signedPackage, null, 2);
@@ -190,6 +212,105 @@ const ExportClientPackageModal: React.FC<ExportClientPackageModalProps> = ({
             />
           </div>
 
+          {/* Security & Audit Controls */}
+          <div className="bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <i className="fas fa-shield-halved text-sky-400 text-xs"></i>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                  Client Security & Compliance
+                </span>
+              </div>
+              <div className="flex items-center space-x-1">
+                <span className="text-[10px] text-slate-400">Quick PIN:</span>
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                  appState.editPin 
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' 
+                    : 'bg-slate-800 text-slate-400'
+                }`}>
+                  {appState.editPin ? 'Active (Keypad)' : 'Not Set (Open)'}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {/* Operator Login System Toggle */}
+              <label className="flex items-start space-x-2.5 p-2.5 rounded-xl border border-slate-800 bg-slate-900/60 hover:bg-slate-900 cursor-pointer transition-colors">
+                <input
+                  type="checkbox"
+                  checked={requireOperatorLogin}
+                  onChange={(e) => setRequireOperatorLogin(e.target.checked)}
+                  className="accent-sky-500 w-4 h-4 mt-0.5 cursor-pointer rounded bg-slate-950 border-slate-700 appearance-auto shrink-0"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center space-x-1.5">
+                    <i className="fas fa-user-lock text-sky-400 text-xs"></i>
+                    <span className="text-xs font-bold text-slate-200">
+                      Operator Login (Username & Password System)
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">
+                    {requireOperatorLogin
+                      ? 'Enforces multi-user RBAC login with roles (Admin, Supervisor, Operator).'
+                      : 'Bypasses login. Client opens directly into HMI; uses quick keypad PIN for writes.'}
+                  </p>
+                </div>
+              </label>
+
+              {/* Audit Trail Logging Toggle */}
+              <label className="flex items-start space-x-2.5 p-2.5 rounded-xl border border-slate-800 bg-slate-900/60 hover:bg-slate-900 cursor-pointer transition-colors">
+                <input
+                  type="checkbox"
+                  checked={enableAuditTrail}
+                  onChange={(e) => setEnableAuditTrail(e.target.checked)}
+                  className="accent-sky-500 w-4 h-4 mt-0.5 cursor-pointer rounded bg-slate-950 border-slate-700 appearance-auto shrink-0"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center space-x-1.5">
+                    <i className="fas fa-clipboard-list text-emerald-400 text-xs"></i>
+                    <span className="text-xs font-bold text-slate-200">
+                      Audit Trail Logging
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">
+                    {enableAuditTrail
+                      ? 'Logs MQTT write commands and alarm acknowledgments to disk.'
+                      : 'Disabled. Zero disk writes — ideal for clients without compliance needs.'}
+                  </p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
+              Enabled Client Runtime Features
+            </label>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              {[
+                { key: 'enableFdd', label: 'TASC FDD / CBM', icon: 'fa-stethoscope', color: 'text-rose-400' },
+                { key: 'enableHistorian', label: 'Historian & Trends', icon: 'fa-chart-line', color: 'text-emerald-400' },
+                { key: 'enableOee', label: 'OEE & Downtime Studio', icon: 'fa-gauge-high', color: 'text-sky-400' },
+                { key: 'enableTraceability', label: 'Batch Traceability', icon: 'fa-barcode', color: 'text-cyan-400' },
+                { key: 'enableReporting', label: 'Reporting', icon: 'fa-chart-bar', color: 'text-indigo-400' },
+                { key: 'enableAiAssistant', label: 'AI Copilot Assistant', icon: 'fa-wand-magic-sparkles', color: 'text-purple-400' },
+                { key: 'enableAiWorkbench', label: 'AI Code Workbench', icon: 'fa-microchip', color: 'text-pink-400' },
+                { key: 'enableVpn', label: 'NetBird VPN', icon: 'fa-shield-halved', color: 'text-amber-400' }
+              ].map(feat => (
+                <label key={feat.key} className="flex items-center space-x-2 cursor-pointer bg-slate-950/50 p-2 rounded-lg border border-slate-800/60 hover:bg-slate-900 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={clientFeatures[feat.key as keyof ClientRuntimeFeatures] !== false}
+                    onChange={(e) => setClientFeatures(prev => ({ ...prev, [feat.key]: e.target.checked }))}
+                    className="accent-sky-500 w-3.5 h-3.5 cursor-pointer rounded bg-slate-900 border-slate-700 appearance-auto"
+                  />
+                  <i className={`fas ${feat.icon} text-[10px] ${feat.color}`}></i>
+                  <span className="text-[10px] font-semibold text-slate-300">{feat.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
           <div>
             <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
               License Expiration Date (Optional)
@@ -238,6 +359,8 @@ const ExportClientPackageModal: React.FC<ExportClientPackageModalProps> = ({
               className="w-full bg-slate-950 px-3.5 py-2 rounded-xl border border-slate-800 focus:border-sky-500 text-xs text-slate-300 outline-none"
             />
           </div>
+
+
 
           <div className="bg-slate-950 p-3 rounded-xl border border-slate-800/80 text-[11px] text-slate-400 flex items-center space-x-2">
             <i className="fas fa-lock text-amber-400 text-sm shrink-0"></i>

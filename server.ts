@@ -2634,7 +2634,26 @@ async function writeOpcUaTag(tag: any, connection: any, value: any): Promise<voi
   // Vite development middleware vs production static files
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        watch: {
+          ignored: [
+            '**/data/**',
+            '**/python_engine/**',
+            '**/*.log',
+            '**/audit.log',
+            '**/tasc_ai_daemon_audit.log',
+            '**/venv/**',
+            '**/scratch/**',
+            '**/dist/**',
+            '**/*.sqlite*',
+            '**/*.db',
+            /[\\/]data[\\/]/,
+            /[\\/]python_engine[\\/]/,
+            /\.log$/,
+          ],
+        },
+      },
       appType: 'spa'
     });
     app.use(vite.middlewares);

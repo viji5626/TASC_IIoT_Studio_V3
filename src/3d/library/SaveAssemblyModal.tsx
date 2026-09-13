@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { ProjectLibrary, Scada3dAssembly } from './ProjectLibrary';
 import { Scada3dObject, Scada3dCameraConfig } from '../types/scene';
 
@@ -67,11 +67,11 @@ export const SaveAssemblyModal: React.FC<SaveAssemblyModalProps> = ({
         {/* Header */}
         <div className="flex items-center gap-3 mb-5">
           <div className="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-500/30 flex items-center justify-center">
-            <i className="fas fa-cube-sharp text-sky-400"></i>
+            <i className="fas fa-cube text-sky-400"></i>
           </div>
           <div>
             <h2 className="text-white font-bold text-base">Save to Project Library</h2>
-            <p className="text-slate-400 text-xs">{sceneObjects.length} objects · {ProjectLibrary.countTags(sceneObjects)} bindings</p>
+            <p className="text-slate-400 text-xs">{sceneObjects.length} objects � {ProjectLibrary.countTags(sceneObjects)} bindings</p>
           </div>
           <button
             onClick={onClose}

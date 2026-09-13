@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Panel, PanelType, AppState, SvgSubPartConfig, DynamicBehaviorRule, DynamicPropertyType } from '../types';
+import { Panel, PanelType, AppState, SvgSubPartConfig, DynamicBehaviorRule, DynamicPropertyType, ProductEdition } from '../types';
 import KeypadModal from './KeypadModal';
 import { SymbolLibraryModal, IndustrialSymbolItem, convertSvgToPngDataUrl } from './SymbolLibraryModal';
 import { DynamicIndustrialSymbol } from './DynamicIndustrialSymbol';
@@ -59,6 +59,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   latestValues: latestValuesProp,
   historyValues: historyValuesProp,
   isFullscreen: isFullscreenProp,
+  userRole: userRoleProp,
   onOpenAddPanel: onOpenAddPanelProp,
   onEditPanel: onEditPanelProp,
   onDeletePanel: onDeletePanelProp,
@@ -78,7 +79,15 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   const onDeletePanel = onDeletePanelProp ?? store.handleDeletePanel;
   const onClonePanel = onClonePanelProp ?? store.handleQuickClonePanel;
   const { isDesktop, isMobile } = useDeviceCapability();
-  const isClientMode = appState.userRole === 'client' || appState.productEdition === 'client' || !!appState.isLockedPackage;
+
+  const userRole = userRoleProp ?? store.userRole ?? appState?.userRole;
+  const productEdition = store.productEdition ?? appState?.productEdition;
+  const isClientMode =
+    userRole === 'operator' ||
+    userRole === 'client' ||
+    productEdition === ProductEdition.CLIENT_RUNTIME ||
+    (productEdition as any) === 'client' ||
+    !!appState?.isLockedPackage;
 
   const [localEditMode, setLocalEditMode] = useState(!isClientMode);
   const isEditMode = store?.isHmiEditMode !== undefined ? store.isHmiEditMode : localEditMode;
@@ -3940,9 +3949,12 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     onContextMenu={(e) => handleContextMenu(e, panel.panelId)}
                     onDoubleClick={(e) => {
                       e.stopPropagation();
-                      onEditPanel(panel);
+                      if (effectiveEditMode) {
+                        onEditPanel(panel);
+                      }
                     }}
                     onClick={(e) => {
+                      e.preventDefault();
                       e.stopPropagation();
                       handlePanelInteract(panel);
                     }}
@@ -4077,9 +4089,11 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       <div className="w-full h-full p-1.5 flex items-center justify-center">
                         <button
                           type="button"
-                          disabled={isEditMode}
+                          disabled={effectiveEditMode}
                           onClick={(e) => {
-                            if (!isEditMode && onPublish) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (!effectiveEditMode && onPublish) {
                               const pubTopic = panel.publishTopic || panel.topic;
                               const payload = panel.buttonPayload || panel.payloadOn || '1';
                               onPublish(pubTopic, formatPublishPayload(payload, panel));
@@ -4147,6 +4161,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                           type="button"
                           disabled={effectiveEditMode}
                           onClick={(e) => {
+                            e.preventDefault();
                             e.stopPropagation();
                             handlePanelInteract(panel);
                           }}
@@ -4456,6 +4471,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                 type="button"
                                 onMouseDown={(e) => e.stopPropagation()}
                                 onClick={(e) => {
+                                  e.preventDefault();
                                   e.stopPropagation();
                                   if (onPublish) onPublish(panel.publishTopic || panel.topic, formatPublishPayload(opt.value, panel));
                                 }}
@@ -4572,7 +4588,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         }}
                         onDoubleClick={(e) => {
                           e.stopPropagation();
-                          onEditPanel(panel);
+                          if (effectiveEditMode) {
+                            onEditPanel(panel);
+                          }
                         }}
                         onContextMenu={(e) => {
                           e.stopPropagation();

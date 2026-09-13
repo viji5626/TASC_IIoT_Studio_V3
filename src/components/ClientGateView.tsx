@@ -73,6 +73,7 @@ const ClientGateView: React.FC<ClientGateViewProps> = ({
           panels: verification.packageData.panels,
           userRole: 'client',
           isLockedPackage: true,
+          clientFeatures: verification.clientFeatures,
           clientInfo: {
             clientName,
             generatedAt: verification.generatedAt,

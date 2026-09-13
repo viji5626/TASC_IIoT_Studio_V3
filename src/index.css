@@ -426,3 +426,6 @@ input[type=range]::-moz-range-thumb:active {
 }
 
 
+
+input[type="checkbox"] { appearance: auto; }
+

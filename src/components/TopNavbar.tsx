@@ -10,6 +10,7 @@ import AppLogo from './AppLogo';
 import { MultiDriverStatusPill } from './MultiDriverStatusPill';
 import { useDeviceCapability } from '../utils/deviceDetection';
 import { EditionManager } from '../utils/EditionManager';
+import { OperatorStatusBar } from './auth/OperatorStatusBar';
 
 export interface TopNavbarProps {
   appState: AppState;
@@ -103,6 +104,15 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
 
   const isCommunity = userRole === 'community' || productEdition === ProductEdition.COMMUNITY;
   const isClient = userRole === 'client' || productEdition === ProductEdition.CLIENT_RUNTIME;
+  const clientFeatures = appState.clientFeatures;
+
+  const showHistorian = !isClient || clientFeatures?.enableHistorian !== false;
+  const showFdd = isDesktop && (!isClient || clientFeatures?.enableFdd !== false);
+  const showOee = !isClient || clientFeatures?.enableOee !== false;
+  const showTraceability = !isClient || clientFeatures?.enableTraceability !== false;
+  const showReporting = !isClient || clientFeatures?.enableReporting !== false;
+  const showAiWorkbench = !isClient || clientFeatures?.enableAiWorkbench !== false;
+  const hasAnalysisItems = showHistorian || showFdd || showOee || showTraceability || showReporting;
 
   const handleCreateScreenCheck = () => {
     const check = editionMgr.CanCreateScreen(appState);
@@ -146,13 +156,25 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
           >
             <i className="fas fa-bars text-sm sm:text-base"></i>
           </button>
-          
-          <AppLogo 
-            size="sm" 
-            accentColor={activeThemeObj.primary} 
-            isCommunity={isCommunity} 
-          />
-          <span className="font-extrabold text-white text-xs sm:text-sm tracking-tight whitespace-nowrap shrink-0 hidden lg:inline">TASC IIoT Studio</span>
+          <button 
+            type="button"
+            onClick={() => {
+              const homeDash = appState.dashboards?.find(d => d.isHome) || appState.dashboards?.[0];
+              if (homeDash) {
+                setActiveDashboardId(homeDash.dashboardId);
+              }
+              setCurrentView(AppView.DASHBOARD);
+            }}
+            className="flex items-center space-x-1.5 hover:opacity-80 transition-opacity cursor-pointer text-left"
+            title="Go to Home Dashboard"
+          >
+            <AppLogo 
+              size="sm" 
+              accentColor={activeThemeObj.primary} 
+              isCommunity={isCommunity} 
+            />
+            <span className="font-extrabold text-white text-xs sm:text-sm tracking-tight whitespace-nowrap shrink-0 hidden lg:inline">TASC IIoT Studio</span>
+          </button>
         </div>
 
         {/* Multi-Driver & MQTT Live Connection Status Pill */}
@@ -215,121 +237,136 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
           {/* Quick Tools Dropdown Panel */}
           {isToolsMenuOpen && (
             <div className="absolute left-0 top-9 z-50 w-64 bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl p-1.5 animate-in fade-in zoom-in-95 duration-150 space-y-0.5 backdrop-blur-xl">
-              <div className="px-2.5 py-1 text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">
-                Analysis & Insights
-              </div>
-
-              {/* Historian */}
-              <button
-                type="button"
-                data-tour="historian-btn"
-                onClick={() => {
-                  setIsToolsMenuOpen(false);
-                  setIsAlarmHistorianModalOpen(true);
-                }}
-                className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-200 hover:bg-indigo-500/20 hover:text-indigo-200 flex items-center justify-between transition-colors"
-              >
-                <div className="flex items-center space-x-2">
-                  <i className="fas fa-history text-indigo-400 w-4 text-center text-xs"></i>
-                  <span>Alarm Historian</span>
-                </div>
-                <span className="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">FIFO</span>
-              </button>
-
-              {/* FDD / CBM (Desktop only) */}
-              {isDesktop && (
-                <button
-                  type="button"
-                  data-tour="fdd-btn"
-                  onClick={() => {
-                    setIsToolsMenuOpen(false);
-                    setIsFddModalOpen(true);
-                  }}
-                  className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-200 hover:bg-amber-500/20 hover:text-amber-200 flex items-center justify-between transition-colors"
-                >
-                  <div className="flex items-center space-x-2">
-                    <i className="fas fa-shield-halved text-amber-400 w-4 text-center text-xs"></i>
-                    <span>TASC FDD / CBM</span>
+              {hasAnalysisItems && (
+                <>
+                  <div className="px-2.5 py-1 text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">
+                    Analysis & Insights
                   </div>
-                  <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-mono font-bold">Predictive</span>
-                </button>
+
+                  {/* Historian */}
+                  {showHistorian && (
+                    <button
+                      type="button"
+                      data-tour="historian-btn"
+                      onClick={() => {
+                        setIsToolsMenuOpen(false);
+                        setIsAlarmHistorianModalOpen(true);
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-200 hover:bg-indigo-500/20 hover:text-indigo-200 flex items-center justify-between transition-colors"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <i className="fas fa-history text-indigo-400 w-4 text-center text-xs"></i>
+                        <span>Alarm Historian</span>
+                      </div>
+                      <span className="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">FIFO</span>
+                    </button>
+                  )}
+
+                  {/* FDD / CBM (Desktop only) */}
+                  {showFdd && (
+                    <button
+                      type="button"
+                      data-tour="fdd-btn"
+                      onClick={() => {
+                        setIsToolsMenuOpen(false);
+                        setIsFddModalOpen(true);
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-200 hover:bg-amber-500/20 hover:text-amber-200 flex items-center justify-between transition-colors"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <i className="fas fa-shield-halved text-amber-400 w-4 text-center text-xs"></i>
+                        <span>TASC FDD / CBM</span>
+                      </div>
+                      <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-mono font-bold">Predictive</span>
+                    </button>
+                  )}
+
+                  {/* OEE & Downtime Studio */}
+                  {showOee && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsToolsMenuOpen(false);
+                        setCurrentView(AppView.OEE_STUDIO);
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-200 hover:bg-emerald-500/20 hover:text-emerald-200 flex items-center justify-between transition-colors"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <i className="fas fa-gauge-high text-emerald-400 w-4 text-center text-xs"></i>
+                        <span>OEE & Downtime Studio</span>
+                      </div>
+                      <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-mono font-bold">Live APQ</span>
+                    </button>
+                  )}
+
+                  {/* Batch & Lot Traceability */}
+                  {showTraceability && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsToolsMenuOpen(false);
+                        setCurrentView(AppView.TRACEABILITY_STUDIO);
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-200 hover:bg-cyan-500/20 hover:text-cyan-200 flex items-center justify-between transition-colors"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <i className="fas fa-barcode text-cyan-400 w-4 text-center text-xs"></i>
+                        <span>Batch & Lot Traceability</span>
+                      </div>
+                      <span className="text-[9px] bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 rounded font-mono font-bold">Genealogy</span>
+                    </button>
+                  )}
+
+                  {/* Reports */}
+                  {showReporting && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsToolsMenuOpen(false);
+                        setCurrentView(AppView.REPORTING);
+                        setUnreadScheduledReports(0);
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-200 hover:bg-sky-500/20 hover:text-sky-200 flex items-center justify-between transition-colors"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <i className="fas fa-chart-bar text-sky-400 w-4 text-center text-xs"></i>
+                        <span>Reports & AI Generation</span>
+                      </div>
+                      {unreadScheduledReports > 0 && (
+                        <span className="text-[9px] bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-full font-black">
+                          {unreadScheduledReports}
+                        </span>
+                      )}
+                    </button>
+                  )}
+
+                  <div className="border-t border-slate-800/80 my-1"></div>
+                </>
               )}
 
-              {/* OEE & Downtime Studio */}
-              <button
-                type="button"
-                onClick={() => {
-                  setIsToolsMenuOpen(false);
-                  setCurrentView(AppView.OEE_STUDIO);
-                }}
-                className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-200 hover:bg-emerald-500/20 hover:text-emerald-200 flex items-center justify-between transition-colors"
-              >
-                <div className="flex items-center space-x-2">
-                  <i className="fas fa-gauge-high text-emerald-400 w-4 text-center text-xs"></i>
-                  <span>OEE & Downtime Studio</span>
-                </div>
-                <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-mono font-bold">Live APQ</span>
-              </button>
-
-              {/* Batch & Lot Traceability */}
-              <button
-                type="button"
-                onClick={() => {
-                  setIsToolsMenuOpen(false);
-                  setCurrentView(AppView.TRACEABILITY_STUDIO);
-                }}
-                className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-200 hover:bg-cyan-500/20 hover:text-cyan-200 flex items-center justify-between transition-colors"
-              >
-                <div className="flex items-center space-x-2">
-                  <i className="fas fa-barcode text-cyan-400 w-4 text-center text-xs"></i>
-                  <span>Batch & Lot Traceability</span>
-                </div>
-                <span className="text-[9px] bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 rounded font-mono font-bold">Genealogy</span>
-              </button>
-
-              {/* Reports */}
-              <button
-                type="button"
-                onClick={() => {
-                  setIsToolsMenuOpen(false);
-                  setCurrentView(AppView.REPORTING);
-                  setUnreadScheduledReports(0);
-                }}
-                className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-200 hover:bg-sky-500/20 hover:text-sky-200 flex items-center justify-between transition-colors"
-              >
-                <div className="flex items-center space-x-2">
-                  <i className="fas fa-chart-bar text-sky-400 w-4 text-center text-xs"></i>
-                  <span>Reports & AI Generation</span>
-                </div>
-                {unreadScheduledReports > 0 && (
-                  <span className="text-[9px] bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-full font-black">
-                    {unreadScheduledReports}
-                  </span>
-                )}
-              </button>
-
-              <div className="border-t border-slate-800/80 my-1"></div>
               <div className="px-2.5 py-1 text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">
                 Documentation & View
               </div>
 
               {/* AI Automation Code Workbench (RAD) */}
-              <button
-                type="button"
-                onClick={() => {
-                  setIsToolsMenuOpen(false);
-                  setCurrentView(AppView.AI_WORKBENCH);
-                }}
-                className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-white flex items-center justify-between transition-colors"
-              >
-                <div className="flex items-center space-x-2">
-                  <i className="fas fa-microchip text-indigo-400 w-4 text-center text-xs"></i>
-                  <span>AI Automation Code Workbench</span>
-                </div>
-                <span className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-1.5 py-0.2 rounded font-mono">
-                  RAD
-                </span>
-              </button>
+              {showAiWorkbench && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsToolsMenuOpen(false);
+                    setCurrentView(AppView.AI_WORKBENCH);
+                  }}
+                  className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-white flex items-center justify-between transition-colors"
+                >
+                  <div className="flex items-center space-x-2">
+                    <i className="fas fa-microchip text-indigo-400 w-4 text-center text-xs"></i>
+                    <span>AI Automation Code Workbench</span>
+                  </div>
+                  <span className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-1.5 py-0.2 rounded font-mono">
+                    RAD
+                  </span>
+                </button>
+              )}
 
               {/* User Manual */}
               <button
@@ -452,6 +489,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
 
       {/* Right Toolbar */}
       <div className={`flex items-center gap-1.5 ${isDesktop ? 'flex-wrap' : 'shrink-0'}`}>
+        <OperatorStatusBar />
         {isLocked && (
           <button
             type="button"

@@ -171,7 +171,7 @@ const btnSecondary: React.CSSProperties = {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export const CredentialManagementView: React.FC = () => {
+export const CredentialManagementView: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
   const auth = useOperatorAuth();
   const [tab, setTab] = useState<Tab>('users');
 
@@ -200,9 +200,23 @@ export const CredentialManagementView: React.FC = () => {
             <i className="fas fa-shield-halved" />
           </div>
           <div>
-            <h1 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#f8fafc', letterSpacing: '-0.02em' }}>
-              Credential & User Management
-            </h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {onBack && (
+                <button
+                  onClick={onBack}
+                  title="Back to Dashboard"
+                  style={{
+                    background: 'transparent', border: 'none', color: '#94a3b8',
+                    cursor: 'pointer', fontSize: '14px', padding: 0
+                  }}
+                >
+                  <i className="fas fa-arrow-left hover:text-white transition-colors" />
+                </button>
+              )}
+              <h1 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#f8fafc', letterSpacing: '-0.02em' }}>
+                Credential & User Management
+              </h1>
+            </div>
             <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#94a3b8' }}>
               Create operator accounts, configure security levels, assign granular permissions & password expiry tenure
             </p>
@@ -319,7 +333,7 @@ const UsersTab: React.FC<{ auth: ReturnType<typeof useOperatorAuth> }> = ({ auth
           color: feedback.type === 'ok' ? '#86efac' : '#fca5a5',
           fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px'
         }}>
-          {feedback.type === 'ok' ? '✅' : '❌'} {feedback.msg}
+          {feedback.type === 'ok' ? <i className="fas fa-check-circle" /> : <i className="fas fa-times-circle" />} {feedback.msg}
         </div>
       )}
 
@@ -356,7 +370,7 @@ const UsersTab: React.FC<{ auth: ReturnType<typeof useOperatorAuth> }> = ({ auth
       {/* Users list or Empty State */}
       {loading ? (
         <div style={{ textAlign: 'center', color: '#64748b', padding: '60px' }}>
-          <div style={{ fontSize: '24px', marginBottom: '8px' }}>⏳</div>
+          <div style={{ fontSize: '24px', marginBottom: '8px' }}><i className="fas fa-hourglass-half" /></div>
           Loading operator accounts...
         </div>
       ) : users.length === 0 ? (
@@ -366,7 +380,7 @@ const UsersTab: React.FC<{ auth: ReturnType<typeof useOperatorAuth> }> = ({ auth
           border: '2px dashed rgba(255,255,255,0.12)',
           background: 'rgba(15, 23, 42, 0.4)'
         }}>
-          <div style={{ fontSize: '48px', marginBottom: '14px' }}>👥</div>
+          <div style={{ fontSize: '48px', marginBottom: '14px' }}><i className="fas fa-users" /></div>
           <h3 style={{ margin: '0 0 8px', color: '#f8fafc', fontSize: '16px' }}>No Operator Users Configured</h3>
           <p style={{ margin: '0 0 20px', color: '#94a3b8', fontSize: '13px', maxWidth: '480px', marginInline: 'auto' }}>
             The credential database is currently empty. You can provision your first <strong>Administrator (Level 3)</strong> or <strong>Operator</strong> account right now with custom password tenure and granular permissions.
@@ -392,7 +406,7 @@ const UsersTab: React.FC<{ auth: ReturnType<typeof useOperatorAuth> }> = ({ auth
                     padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
                     background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)'
                   }}>
-                    ⚠️ Password Expired ({new Date(user.passwordExpiresAt).toLocaleDateString()})
+                    <i className="fas fa-triangle-exclamation" /> Password Expired ({new Date(user.passwordExpiresAt).toLocaleDateString()})
                   </span>
                 );
               } else if (daysLeft <= 7) {
@@ -401,7 +415,7 @@ const UsersTab: React.FC<{ auth: ReturnType<typeof useOperatorAuth> }> = ({ auth
                     padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600,
                     background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)'
                   }}>
-                    ⏳ Expires in {daysLeft} days ({new Date(user.passwordExpiresAt).toLocaleDateString()})
+                    <i className="fas fa-hourglass-half" /> Expires in {daysLeft} days ({new Date(user.passwordExpiresAt).toLocaleDateString()})
                   </span>
                 );
               } else {
@@ -410,7 +424,7 @@ const UsersTab: React.FC<{ auth: ReturnType<typeof useOperatorAuth> }> = ({ auth
                     padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 500,
                     background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.2)'
                   }}>
-                    ⏳ Validity: {daysLeft} days left ({new Date(user.passwordExpiresAt).toLocaleDateString()})
+                    <i className="fas fa-hourglass-half" /> Validity: {daysLeft} days left ({new Date(user.passwordExpiresAt).toLocaleDateString()})
                   </span>
                 );
               }
@@ -420,7 +434,7 @@ const UsersTab: React.FC<{ auth: ReturnType<typeof useOperatorAuth> }> = ({ auth
                   padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 500,
                   background: 'rgba(34, 197, 94, 0.1)', color: '#4ade80', border: '1px solid rgba(34, 197, 94, 0.2)'
                 }}>
-                  ♾️ Password: Never Expires
+                  <i className="fas fa-infinity" /> Password: Never Expires
                 </span>
               );
             }
@@ -495,15 +509,15 @@ const UsersTab: React.FC<{ auth: ReturnType<typeof useOperatorAuth> }> = ({ auth
                   <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                     {user.lockedUntil && new Date(user.lockedUntil) > new Date() && (
                       <button style={{ ...btnSecondary, color: '#fbbf24', borderColor: 'rgba(245,158,11,0.4)' }} onClick={() => handleUnlock(user)}>
-                        🔓 Unlock
+                        <i className="fas fa-lock-open" /> Unlock
                       </button>
                     )}
                     <button style={btnSecondary} onClick={() => { setEditingUser(user); setShowCreateForm(false); }}>
-                      ✏️ Edit
+                      <i className="fas fa-pencil" /> Edit
                     </button>
                     {!isSelf && (
                       <button style={btnDanger} onClick={() => handleDelete(user)} title="Delete user">
-                        🗑️ Delete
+                        <i className="fas fa-trash" /> Delete
                       </button>
                     )}
                   </div>
@@ -830,7 +844,7 @@ const UserForm: React.FC<{
 
         <div style={{ display: 'flex', gap: '10px' }}>
           <button type="submit" disabled={loading} style={{ ...btnPrimary, flex: 1, padding: '12px', justifyContent: 'center' }}>
-            {loading ? '⏳ Saving Account...' : isEdit ? '💾 Save Account Changes' : '✓ Create Operator Account'}
+            {loading ? <><i className="fas fa-spinner fa-spin" /> Saving Account...</> : isEdit ? <><i className="fas fa-save" /> Save Account Changes</> : <><i className="fas fa-plus" /> Create Operator Account</>}
           </button>
           <button type="button" onClick={onClose} style={btnSecondary}>
             Cancel
@@ -918,9 +932,9 @@ const AuditTab: React.FC<{ auth: ReturnType<typeof useOperatorAuth> }> = ({ auth
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
           <span style={{ color: '#64748b', fontSize: '12px' }}>{total} logged event{total !== 1 ? 's' : ''} found</span>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button style={{ ...btnSecondary, fontSize: '11px' }} onClick={() => handleExport('csv')}>⬇️ Export CSV</button>
-            <button style={{ ...btnSecondary, fontSize: '11px' }} onClick={() => handleExport('html')}>🌐 Export HTML</button>
-            <button style={{ ...btnSecondary, fontSize: '11px' }} onClick={() => handleExport('pdf')}>🖨️ Export PDF</button>
+            <button style={{ ...btnSecondary, fontSize: '11px' }} onClick={() => handleExport('csv')}><i className="fas fa-file-csv" /> Export CSV</button>
+            <button style={{ ...btnSecondary, fontSize: '11px' }} onClick={() => handleExport('html')}><i className="fas fa-globe" /> Export HTML</button>
+            <button style={{ ...btnSecondary, fontSize: '11px' }} onClick={() => handleExport('pdf')}><i className="fas fa-file-pdf" /> Export PDF</button>
           </div>
         </div>
       </div>
@@ -960,7 +974,7 @@ const AuditTab: React.FC<{ auth: ReturnType<typeof useOperatorAuth> }> = ({ auth
                       </td>
                       <td style={{ padding: '9px 14px' }}>
                         <span style={{ color: ev.success ? '#22c55e' : '#ef4444', fontSize: '11px', fontWeight: 700 }}>
-                          {ev.success ? '✅' : '❌'}
+                          {ev.success ? <i className="fas fa-check" /> : <i className="fas fa-xmark" />}
                         </span>
                       </td>
                       <td style={{ padding: '9px 14px', color: '#475569', fontFamily: 'monospace', fontSize: '10px' }}>
@@ -1024,11 +1038,11 @@ const PolicyTab: React.FC<{ auth: ReturnType<typeof useOperatorAuth> }> = ({ aut
           border: `1px solid ${feedback.type === 'ok' ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)'}`,
           color: feedback.type === 'ok' ? '#86efac' : '#fca5a5',
           fontSize: '12px'
-        }}>{feedback.type === 'ok' ? '✅' : '❌'} {feedback.msg}</div>
+        }}>{feedback.type === 'ok' ? <i className="fas fa-check-circle" /> : <i className="fas fa-times-circle" />} {feedback.msg}</div>
       )}
 
       <form onSubmit={handleSave} style={cardStyle}>
-        <h3 style={{ margin: '0 0 4px', color: '#f8fafc', fontSize: '15px', fontWeight: 700 }}>⚙️ Global Security Policy</h3>
+        <h3 style={{ margin: '0 0 4px', color: '#f8fafc', fontSize: '15px', fontWeight: 700 }}><i className="fas fa-shield-halved" /> Global Security Policy</h3>
         <p style={{ margin: '0 0 20px', color: '#64748b', fontSize: '12px' }}>Lockout thresholds and runtime session timeout</p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
@@ -1070,7 +1084,7 @@ const PolicyTab: React.FC<{ auth: ReturnType<typeof useOperatorAuth> }> = ({ aut
         </div>
 
         <button type="submit" disabled={loading} style={{ ...btnPrimary, marginTop: '24px', width: '100%', padding: '11px', justifyContent: 'center' }}>
-          {loading ? '⏳ Saving...' : '💾 Save Security Policy'}
+          {loading ? <><i className="fas fa-spinner fa-spin" /> Saving...</> : <><i className="fas fa-save" /> Save Security Policy</>}
         </button>
       </form>
     </div>

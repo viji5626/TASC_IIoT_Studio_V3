@@ -63,7 +63,7 @@ async function apiFetch<T>(
 
   let isEngineeringMode = false;
   try {
-    const raw = localStorage.getItem('tasc_app_state');
+    const raw = localStorage.getItem('mqtt_dash_pro_state');
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed.userRole === 'admin') isEngineeringMode = true;

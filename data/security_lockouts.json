@@ -1,13 +1,60 @@
 {
-  "userLockouts": {},
+  "userLockouts": {
+    "laptop-ck0m4vvh\\vijay": {
+      "count": 1,
+      "firstAttemptTime": 1789300734255,
+      "lastAttemptTime": 1789300734255
+    }
+  },
   "ipRateLimits": {
     "192.168.1.105": {
       "count": 5,
       "firstAttemptTime": 1788029521463,
       "lastAttemptTime": 1788029521465
+    },
+    "127.0.0.1": {
+      "count": 1,
+      "firstAttemptTime": 1789300734255,
+      "lastAttemptTime": 1789300734255
     }
   },
   "auditTrail": [
+    {
+      "id": "audit-1789315529550-0b396b",
+      "timestamp": "2026-09-13T16:05:29.550Z",
+      "eventType": "LOGIN_SUCCESS",
+      "username": "vijay",
+      "ip": "127.0.0.1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+      "details": "Authenticated successfully."
+    },
+    {
+      "id": "audit-1789304685041-wzo9tc",
+      "timestamp": "2026-09-13T13:04:45.041Z",
+      "eventType": "LOGIN_SUCCESS",
+      "username": "vijay",
+      "ip": "127.0.0.1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+      "details": "Authenticated successfully."
+    },
+    {
+      "id": "audit-1789302335815-ujhn29",
+      "timestamp": "2026-09-13T12:25:35.815Z",
+      "eventType": "LOGIN_SUCCESS",
+      "username": "vijay",
+      "ip": "127.0.0.1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36 Edg/153.0.0.0",
+      "details": "Authenticated successfully."
+    },
+    {
+      "id": "audit-1789300734255-qph1m0",
+      "timestamp": "2026-09-13T11:58:54.255Z",
+      "eventType": "LOGIN_FAILURE",
+      "username": "laptop-ck0m4vvh\\vijay",
+      "ip": "127.0.0.1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36 Edg/153.0.0.0",
+      "details": "Invalid username or password."
+    },
     {
       "id": "audit-1788029521465-9o5j0s",
       "timestamp": "2026-08-29T18:52:01.465Z",

@@ -94,6 +94,10 @@ const LandingPage: React.FC<LandingPageProps> = ({
           productEdition: ProductEdition.CLIENT_RUNTIME,
           isLockedPackage: true,
           clearPassword: verification.clearPassword,
+          clientFeatures: verification.clientFeatures,
+          clientSecurity: verification.clientSecurity,
+          editPin: verification.editPin !== undefined ? verification.editPin : appState.editPin,
+          runtimePinTimeoutMinutes: verification.runtimePinTimeoutMinutes !== undefined ? verification.runtimePinTimeoutMinutes : appState.runtimePinTimeoutMinutes,
           clientInfo: {
             clientName,
             generatedAt: verification.generatedAt,
@@ -106,9 +110,8 @@ const LandingPage: React.FC<LandingPageProps> = ({
 
         onImportClientPackage(newAppState, clientName, verification.expiresAt, verification.preferredWorkstationMode);
 
-        // If the package contains pre-configured operator credentials, push them to the server
-        // This replaces any existing credential store (Engineering Edition bundled it intentionally)
-        if (verification.operatorCredentials) {
+        // If the package contains pre-configured operator credentials, and operator login is enabled, push them to the server
+        if (verification.clientSecurity?.requireOperatorLogin !== false && verification.operatorCredentials) {
           operatorAuthClient.importFromPackage(
             verification.operatorCredentials,
             true, // auto-confirm overwrite — this is an intentional package import

@@ -220,7 +220,7 @@ export const OperatorAuthProvider: React.FC<Props> = ({ children }) => {
   const initAdmin = useCallback(async (username: string, displayName: string, password: string) => {
     try {
       const data = await operatorAuthClient.initAdmin(username, displayName, password);
-      setCurrentOperator(data.session as any);
+      setCurrentOperator((data.session as any)?.user || (data.session as any));
       setIsAuthenticated(true);
       setIsInitialized(true);
       setRequireSetup(false);
