@@ -170,10 +170,12 @@ export const MultiDriverStatusPill: React.FC<MultiDriverStatusPillProps> = ({
       });
     }
 
-  }, [mqttConnection, allMqttConnections, mqttConnected, isSimulated, driverConnections]);
+    return items;
+  }, [mqttConnection, allMqttConnections, mqttConnected, isSimulated, driverConnections]) || [];
 
-  const onlineCount = driverItems.filter(d => d.status === 'connected').length;
-  const totalCount = driverItems.length;
+  const safeDriverItems = driverItems || [];
+  const onlineCount = safeDriverItems.filter(d => d.status === 'connected').length;
+  const totalCount = safeDriverItems.length;
   const isAllOnline = totalCount > 0 && onlineCount === totalCount;
   const isAllOffline = totalCount === 0 || onlineCount === 0;
 
