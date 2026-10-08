@@ -45,9 +45,9 @@ export const EmailAlertConfigModal: React.FC<EmailAlertConfigModalProps> = ({ is
       port: 587,
       secure: false,
       authType: 'login',
-      user: 'vijay.bsas@gmail.com',
+      user: '',
       password: '',
-      fromEmail: 'vijay.bsas@gmail.com',
+      fromEmail: '',
       fromName: 'TASC Alarm Alerts'
     },
     recipients: []
@@ -64,7 +64,7 @@ export const EmailAlertConfigModal: React.FC<EmailAlertConfigModalProps> = ({ is
   const [phonebookError, setPhonebookError] = useState<string | null>(null);
 
   // Test Email state
-  const [testEmail, setTestEmail] = useState('vijay.bsas@gmail.com');
+  const [testEmail, setTestEmail] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -333,7 +333,7 @@ export const EmailAlertConfigModal: React.FC<EmailAlertConfigModalProps> = ({ is
                   </span>
                 </span>
                 <p className="text-xs text-slate-400">
-                  Sends via your isolated alerting account (<code className="text-rose-300 font-mono">vijay.bsas@gmail.com</code>) to guarantee high-priority alarm delivery.
+                  Sends via your isolated alerting account {config.smtp.user ? (<code className="text-rose-300 font-mono">({config.smtp.user})</code>) : '(e.g. alerts@company.com)'} to guarantee high-priority alarm delivery.
                 </p>
               </div>
             </div>
@@ -368,7 +368,7 @@ export const EmailAlertConfigModal: React.FC<EmailAlertConfigModalProps> = ({ is
                   value={config.smtp.user || ''}
                   onChange={e => setConfig(prev => ({ ...prev, smtp: { ...prev.smtp, user: e.target.value } }))}
                   className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white font-mono focus:border-rose-500 focus:outline-none"
-                  placeholder="vijay.bsas@gmail.com"
+                  placeholder="alerts@company.com"
                 />
               </div>
 
@@ -401,7 +401,7 @@ export const EmailAlertConfigModal: React.FC<EmailAlertConfigModalProps> = ({ is
                   value={config.smtp.fromEmail || ''}
                   onChange={e => setConfig(prev => ({ ...prev, smtp: { ...prev.smtp, fromEmail: e.target.value } }))}
                   className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white font-mono focus:border-rose-500 focus:outline-none"
-                  placeholder="vijay.bsas@gmail.com"
+                  placeholder="alerts@company.com"
                 />
               </div>
             </div>
@@ -464,7 +464,7 @@ export const EmailAlertConfigModal: React.FC<EmailAlertConfigModalProps> = ({ is
                     setNewRecipientName(e.target.value);
                     if (phonebookError) setPhonebookError(null);
                   }}
-                  placeholder="e.g. Vijay (Shift In-charge)"
+                  placeholder="e.g. Shift Lead / Plant Engineer"
                   className={`w-full bg-slate-900 border rounded px-2.5 py-1.5 text-xs text-white focus:outline-none transition-colors ${
                     phonebookError && !newRecipientName.trim()
                       ? 'border-rose-500/80 focus:border-rose-500'
@@ -482,7 +482,7 @@ export const EmailAlertConfigModal: React.FC<EmailAlertConfigModalProps> = ({ is
                     setNewRecipientEmail(e.target.value);
                     if (phonebookError) setPhonebookError(null);
                   }}
-                  placeholder="e.g. vijay.bsas@gmail.com"
+                  placeholder="e.g. operator@company.com"
                   className={`w-full bg-slate-900 border rounded px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none transition-colors ${
                     phonebookError && !newRecipientEmail.trim()
                       ? 'border-rose-500/80 focus:border-rose-500'

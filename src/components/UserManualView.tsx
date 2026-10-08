@@ -728,7 +728,7 @@ export const UserManualView: React.FC<UserManualViewProps> = ({
                   <ul className="list-disc list-inside text-[11px] text-slate-400 space-y-1">
                     <li>Install Tailscale on both the SCADA PC and the Android phone.</li>
                     <li>Sign in to the same Tailscale network account.</li>
-                    <li>Note the phone's Tailscale 100.x.y.z IP address (e.g. <code className="text-emerald-300 font-mono">100.67.124.78</code>).</li>
+                    <li>Note the phone's Tailscale 100.x.y.z IP address (e.g. <code className="text-emerald-300 font-mono">100.64.0.1</code>).</li>
                     <li>Works everywhere — even over 4G/5G cellular data or when the phone leaves the plant!</li>
                   </ul>
                   <div className="text-[10px] font-mono text-emerald-400 bg-slate-900 p-1.5 rounded">
@@ -804,12 +804,12 @@ export const UserManualView: React.FC<UserManualViewProps> = ({
                   <span>Generating a Free Google App Password (SOP):</span>
                 </div>
                 <ol className="list-decimal list-inside text-[11px] text-slate-300 space-y-1 pl-1">
-                  <li>Log in to your dedicated alerting Google Account (e.g. <code>vijay.bsas@gmail.com</code>).</li>
+                  <li>Log in to your dedicated alerting Google Account (e.g. <code>alerts.scada@yourcompany.com</code>).</li>
                   <li>Navigate to <strong>Google Account Security</strong> (<code>myaccount.google.com/security</code>).</li>
                   <li>Ensure <strong>2-Step Verification</strong> is toggled <strong>ON</strong>.</li>
                   <li>In the search box at the top, type <strong>App passwords</strong> and press Enter.</li>
                   <li>Enter an app name (e.g. <code>TASC Alarm Alerts</code>) and click <strong>Create</strong>.</li>
-                  <li>Google will display a 16-character code (e.g. <code>txwkulwklpqxcunk</code>). Copy this password.</li>
+                  <li>Google will display a 16-character code (e.g. <code>abcd efgh ijkl mnop</code>). Copy this password.</li>
                   <li>In TASC Studio &rarr; <em>Live Alarm Center &rarr; Email Alerts</em> &rarr; Paste into the <strong>App Password</strong> field and save.</li>
                 </ol>
               </div>

@@ -640,9 +640,9 @@ export const SmsAlertConfigModal: React.FC<SmsAlertConfigModalProps> = ({ isOpen
                           port: 587,
                           secure: false,
                           authType: 'login',
-                          user: 'vijay.bsas@gmail.com',
+                          user: '',
                           password: '',
-                          fromEmail: 'vijay.bsas@gmail.com',
+                          fromEmail: '',
                           fromName: 'TASC Alarm Alerts'
                         }
                       }));
@@ -693,7 +693,7 @@ export const SmsAlertConfigModal: React.FC<SmsAlertConfigModalProps> = ({ isOpen
                         secondarySmtp: { ...prev.secondarySmtp!, user: e.target.value }
                       }))}
                       className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:border-sky-500 focus:outline-none font-mono"
-                      placeholder="vijay.bsas@gmail.com"
+                      placeholder="alerts@company.com"
                     />
                   </div>
 
@@ -735,7 +735,7 @@ export const SmsAlertConfigModal: React.FC<SmsAlertConfigModalProps> = ({ isOpen
                         secondarySmtp: { ...prev.secondarySmtp!, fromEmail: e.target.value }
                       }))}
                       className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:border-sky-500 focus:outline-none font-mono"
-                      placeholder="vijay.bsas@gmail.com"
+                      placeholder="alerts@company.com"
                     />
                   </div>
                 </div>
@@ -764,7 +764,7 @@ export const SmsAlertConfigModal: React.FC<SmsAlertConfigModalProps> = ({ isOpen
                 <div>
                   <span className="font-semibold text-emerald-200">Local Android SIM Delivery Active:</span>
                   <p className="text-[11px] text-emerald-300/80 mt-0.5">
-                    Alarms are sent directly via the connected Android phone's Airtel SIM. This bypasses TRAI DLT mandates without requiring any carrier email domain or telecom registration. All Indian numbers (+91) supported.
+                    Alarms are sent directly via the connected Android phone's active SIM card. This bypasses telecom carrier email domain restrictions. All local cellular numbers supported.
                   </p>
                 </div>
               </div>
@@ -827,7 +827,7 @@ export const SmsAlertConfigModal: React.FC<SmsAlertConfigModalProps> = ({ isOpen
                     setNewRecipientPhone(e.target.value);
                     if (phonebookError) setPhonebookError(null);
                   }}
-                  placeholder={config.providerType === 'libresms' ? "e.g. +91 9413668274" : "e.g. 555-234-5678"}
+                  placeholder={config.providerType === 'libresms' ? "e.g. +91 98XXXXXXXX" : "e.g. +1 555-0100"}
                   className={`w-full bg-slate-900 border rounded px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none transition-colors ${
                     phonebookError && !newRecipientPhone.trim()
                       ? 'border-rose-500/80 focus:border-rose-500'
@@ -843,7 +843,7 @@ export const SmsAlertConfigModal: React.FC<SmsAlertConfigModalProps> = ({ isOpen
                 {config.providerType === 'libresms' ? (
                   <div className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-emerald-400 font-mono flex items-center space-x-2">
                     <i className="fas fa-sim-card text-xs"></i>
-                    <span>Local Android SIM (Airtel / India)</span>
+                    <span>Local Android SIM (Direct Cellular SMS)</span>
                   </div>
                 ) : (
                   <select
@@ -975,7 +975,7 @@ export const SmsAlertConfigModal: React.FC<SmsAlertConfigModalProps> = ({ isOpen
                   type="text"
                   value={testPhone}
                   onChange={e => setTestPhone(e.target.value)}
-                  placeholder={config.providerType === 'libresms' ? "Enter mobile number (e.g. +91 9413668274)" : "Enter phone number (e.g. 555-234-5678)"}
+                  placeholder={config.providerType === 'libresms' ? "Enter mobile number (e.g. +91 98XXXXXXXX)" : "Enter phone number (e.g. +1 555-0100)"}
                   className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-xs text-white font-mono focus:border-sky-500 focus:outline-none"
                 />
               </div>

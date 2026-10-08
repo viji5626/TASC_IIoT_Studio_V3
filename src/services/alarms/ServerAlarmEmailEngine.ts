@@ -25,7 +25,7 @@ export interface AlarmEmailConfig {
 const CONFIG_FILE = path.join(process.cwd(), 'data', 'tasc_alarm_email_config.json');
 
 const DEFAULT_CONFIG: AlarmEmailConfig = {
-  enabled: true,
+  enabled: false,
   minSeverity: 'HIGH_AND_CRITICAL',
   debounceSeconds: 120,
   alarmStormThreshold: 5,
@@ -35,20 +35,12 @@ const DEFAULT_CONFIG: AlarmEmailConfig = {
     port: 587,
     secure: false,
     authType: 'login',
-    user: 'vijay.bsas@gmail.com',
-    password: 'txwkulwklpqxcunk',
-    fromEmail: 'vijay.bsas@gmail.com',
+    user: '',
+    password: '',
+    fromEmail: '',
     fromName: 'TASC Alarm Alerts'
   },
-  recipients: [
-    {
-      id: 'rec_email_1',
-      name: 'Vijay TASC',
-      email: 'vijay.bsas@gmail.com',
-      enabled: true,
-      severities: ['critical', 'high']
-    }
-  ]
+  recipients: []
 };
 
 export class ServerAlarmEmailEngine {

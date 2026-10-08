@@ -257,7 +257,7 @@ export const EmbeddedGgufControl: React.FC<EmbeddedGgufControlProps> = ({
             type="text"
             value={customSearchDir}
             onChange={(e) => setCustomSearchDir(e.target.value)}
-            placeholder="e.g. C:\Users\vijay\.lmstudio\models\lmstudio-community"
+            placeholder="e.g. C:\Users\YourUsername\.lmstudio\models\lmstudio-community"
             className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
           />
           <button

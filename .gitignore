@@ -33,10 +33,13 @@ data/test_reports_out/
 installer_output/
 staging/
 
-# Sensitive local configs
+# Sensitive local configs and operator stores
 data/tasc_alarm_email_config.json
 data/tasc_sms_config.json
 data/tasc_smtp_config.json
+data/operator_credentials.json
+data/operator_audit.json
+data/security_lockouts.json
 
 # External gateway repos
 sms_gateway/
