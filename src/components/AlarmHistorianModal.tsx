@@ -335,7 +335,7 @@ export const AlarmHistorianModal: React.FC<AlarmHistorianModalProps> = ({
                               backgroundColor: `${entry.color}15`
                             }}
                           >
-                            {entry.category === 'TRIP' || entry.category === 'FAULT' ? '⚡ TRIP / FAULT' : `${entry.category} ZONE`}
+                            {entry.category === 'TRIP' || entry.category === 'FAULT' ? 'TRIP / FAULT' : `${entry.category} ZONE`}
                           </span>
                         </td>
                         <td className="p-3 font-mono font-bold text-right text-white whitespace-nowrap">
@@ -421,7 +421,7 @@ export const AlarmHistorianModal: React.FC<AlarmHistorianModalProps> = ({
                     onChange={(e) => {
                       const inputVal = parseInt(e.target.value) || 0;
                       if (isCommunityMode && inputVal > 50) {
-                        alert("🔒 Free Demo Limit: Maximum 50 Rows allowed for Community Edition. Upgrade to Engineering Studio for higher row limits.");
+                        alert("Community Edition Limit: Maximum 50 Rows allowed for Community Edition. Upgrade to Engineering Studio for higher row limits.");
                         handleUpdateConfig(50, 1);
                         return;
                       }
@@ -458,7 +458,7 @@ export const AlarmHistorianModal: React.FC<AlarmHistorianModalProps> = ({
                         type="button"
                         onClick={() => {
                           if (isLocked) {
-                            alert(`🔒 Free Demo Limit: ${presetRows.toLocaleString()} Rows requires Engineering Studio. Upgrade to unlock higher row limits.`);
+                            alert(`Community Edition Limit: ${presetRows.toLocaleString()} Rows requires Engineering Studio. Upgrade to unlock higher row limits.`);
                             return;
                           }
                           const est = estimateStorageForRows(presetRows);

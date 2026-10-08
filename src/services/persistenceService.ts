@@ -24,6 +24,45 @@ export function loadPersistedState(): AppState | null {
   return null;
 }
 
+let deployTimeout: any = null;
+let lastDeployedJson: string = '';
+
+function deployToCore(state: AppState) {
+  if (deployTimeout) {
+    clearTimeout(deployTimeout);
+  }
+  deployTimeout = setTimeout(() => {
+    // Only send tags and connections to save bandwidth
+    const payload = {
+      tags: (state as any).tags || (state as any).driverTags || {},
+      connections: (state as any).connections || (state as any).driverConnections || {}
+    };
+    
+    const payloadJson = JSON.stringify(payload);
+    if (payloadJson === lastDeployedJson) {
+      return; // Skip redundant deployment
+    }
+    lastDeployedJson = payloadJson;
+
+    fetch('/api/project/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payloadJson
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data && data.success) {
+        console.log('[PersistenceService] Successfully synced config to core engine:', data.message);
+      } else {
+        console.warn('[PersistenceService] Failed to sync config to core engine:', data);
+      }
+    })
+    .catch(err => {
+      console.warn('[PersistenceService] Network error syncing config to core:', err.message);
+    });
+  }, 5000); // 5 seconds debounce
+}
+
 /**
  * Saves current AppState into browser localStorage.
  */
@@ -31,6 +70,7 @@ export function savePersistedState(state: AppState): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    deployToCore(state);
   } catch (err) {
     console.error('[PersistenceService] Failed to save state to localStorage:', err);
   }

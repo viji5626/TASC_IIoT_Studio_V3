@@ -37,8 +37,8 @@ export const PanelAlarmLogConfigSection: React.FC<PanelAlarmLogConfigSectionProp
           onChange={handleChange}
           className="w-full bg-slate-900 text-white rounded-lg p-2.5 text-xs border border-slate-700 font-bold focus:border-indigo-400 focus:outline-none"
         >
-          <option value="live">🔴 Live Active Monitor (Active Unack & Active Ack Only)</option>
-          <option value="historian">📜 Full Historical Alarm Log (All Active & Resolved Events)</option>
+          <option value="live">Live Active Monitor (Active Unack &amp; Active Ack Only)</option>
+          <option value="historian">Full Historical Alarm Log (All Active &amp; Resolved Events)</option>
         </select>
         <span className="text-[10px] text-slate-400 block mt-1">
           Operators can also toggle between Live and Historian modes dynamically on the element view.

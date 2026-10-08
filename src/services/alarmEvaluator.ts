@@ -28,18 +28,25 @@ export function evaluateAlarms(
     const tripStatus = isPanelTripped(panel, latestValues);
     if (tripStatus.isTripped) {
       const tripAlarmKey = `${panel.panelId}_TRIP`;
+      const nowIso = new Date().toISOString();
       newAlarmsList.push({
         alarmKey: tripAlarmKey,
         panelId: panel.panelId,
         panelName: panel.panelName || 'Equipment',
+        panelTitle: panel.panelName || 'Equipment',
         dashboardId: panel.dashboardId,
         zone: 'TRIP',
+        alarmType: 'TRIP',
         value: tripStatus.tripValue,
+        currentValue: tripStatus.tripValue,
         unit: '',
         threshold: 1,
+        limitThreshold: 'Digital Trip',
         message: tripStatus.message,
         color: tripStatus.tripColor,
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: nowIso,
+        triggeredAt: nowIso,
+        topic: panel.topic || panel.tripTopic,
         acknowledged: !!acknowledgedAlarms[tripAlarmKey]
       });
     }
@@ -84,18 +91,28 @@ export function evaluateAlarms(
 
     if (matchedZone) {
       const alarmKey = `${panel.panelId}_${matchedZone}`;
+      const nowIso = panelValObj.time && !isNaN(new Date(panelValObj.time).getTime())
+        ? new Date(panelValObj.time).toISOString()
+        : new Date().toISOString();
+
       newAlarmsList.push({
         alarmKey,
         panelId: panel.panelId,
         panelName: panel.panelName || 'Symbol Asset',
+        panelTitle: panel.panelName || 'Symbol Asset',
         dashboardId: panel.dashboardId,
         zone: matchedZone,
+        alarmType: matchedZone,
         value: numVal,
+        currentValue: numVal,
         unit: panel.unit || '',
         threshold: thresholdVal,
+        limitThreshold: thresholdVal,
         message: alarmMsg,
         color: alarmColor,
-        timestamp: panelValObj.time || new Date().toLocaleTimeString(),
+        timestamp: nowIso,
+        triggeredAt: nowIso,
+        topic: panel.topic,
         acknowledged: !!acknowledgedAlarms[alarmKey]
       });
     }

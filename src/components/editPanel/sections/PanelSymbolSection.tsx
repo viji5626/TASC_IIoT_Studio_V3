@@ -18,7 +18,7 @@ export const PanelSymbolSection: React.FC<PanelSymbolSectionProps> = ({
   handleHighThresholdChange,
   setPickingColorFor
 }) => {
-  if (formData.type !== PanelType.IMAGE && !formData.symbolId && !formData.symbolAnimType) {
+  if (!formData.symbolId) {
     return null;
   }
 
@@ -27,7 +27,7 @@ export const PanelSymbolSection: React.FC<PanelSymbolSectionProps> = ({
       <div className="flex items-center justify-between">
         <label className="text-xs text-sky-400 font-bold uppercase tracking-wider flex items-center space-x-2">
           <i className="fas fa-industry text-xs text-sky-400"></i>
-          <span>Industrial Symbol Animation & Alarming</span>
+          <span>Industrial Symbol Alarming & State Colors</span>
         </label>
         <span className="text-[10px] text-sky-300 bg-sky-500/10 px-2 py-0.5 rounded font-mono border border-sky-500/20">
           TASC Symbol Library
@@ -35,28 +35,26 @@ export const PanelSymbolSection: React.FC<PanelSymbolSectionProps> = ({
       </div>
 
       <p className="text-[11px] text-slate-400 leading-relaxed">
-        Configure real-time SVG animations, level indicator thresholds, low/high alarms, and digital ON/OFF state color behavior for this industrial equipment symbol.
+        Configure level indicator thresholds, low/high alarms, and digital ON/OFF state color behavior for this industrial equipment symbol.
       </p>
 
-      {/* Symbol Animation Type Selector */}
+      {/* Symbol State Color & Fill Mode */}
       <div>
-        <label className="text-xs text-slate-300 font-bold block mb-1">Symbol Animation Mode</label>
+        <label className="text-xs text-slate-300 font-bold block mb-1">Symbol State Color & Fill Mode</label>
         <select
           name="symbolAnimType"
           value={formData.symbolAnimType || 'none'}
           onChange={handleChange}
           className="w-full bg-slate-900 border border-slate-700 text-white rounded-lg p-2 text-xs outline-none focus:border-sky-500 font-semibold"
         >
-          <option value="none">🚫 Static Display (No Animation)</option>
-          <option value="digital_on_off">🔴🟢 Digital ON/OFF State (Valves, Cutoff, Solenoids)</option>
-          <option value="analog_level">📊 Analog Level Fill & Sight Glass (Tanks, Silos, Vessels)</option>
-          <option value="analog_valve_angle">🔄 Control Valve Angle / Stem Travel (0° - 90°)</option>
-          <option value="motor_rotation">🌀 Motor / Agitator Rotation (Pumps, Fans, Mixers)</option>
+          <option value="none">Static Display (Default)</option>
+          <option value="digital_on_off">Digital ON/OFF State Color (Valves, Cutoff, Solenoids)</option>
+          <option value="analog_level">Analog Level Fill &amp; Sight Glass (Tanks, Silos, Vessels)</option>
         </select>
       </div>
 
       {/* Digital ON/OFF State Config */}
-      {(formData.symbolAnimType === 'digital_on_off' || formData.symbolAnimType === 'motor_rotation') && (
+      {formData.symbolAnimType === 'digital_on_off' && (
         <div className="space-y-3 pt-2 border-t border-slate-800">
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -113,7 +111,7 @@ export const PanelSymbolSection: React.FC<PanelSymbolSectionProps> = ({
       )}
 
       {/* Analog Level & Alarm Config with Interlocked Limits */}
-      {(formData.symbolAnimType === 'analog_level' || formData.symbolAnimType === 'analog_valve_angle') && (
+      {formData.symbolAnimType === 'analog_level' && (
         <div className="space-y-4 pt-3 border-t border-slate-800">
           <div className="grid grid-cols-2 gap-3">
             <div>

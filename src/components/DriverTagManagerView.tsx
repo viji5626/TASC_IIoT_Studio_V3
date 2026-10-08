@@ -197,7 +197,7 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
 
   const handleOpenAdd = () => {
     if (atLimit) {
-      alert(`🔒 Free Demo Limit: Maximum 5 Driver Tags allowed for Community Edition. Upgrade to Engineering Studio for unlimited tags.`);
+      alert(`Community Edition Limit: Maximum 5 Driver Tags allowed for Community Edition. Upgrade to Engineering Studio for unlimited tags.`);
       return;
     }
     setEditingTag(emptyTag(connections[0]?.connectionId || ''));
@@ -228,7 +228,7 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
       onUpdate(tag);
     } else {
       if (atLimit) {
-        alert(`🔒 Free Demo Limit: Maximum 5 Driver Tags allowed for Community Edition.`);
+        alert(`Community Edition Limit: Maximum 5 Driver Tags allowed for Community Edition.`);
         return;
       }
       onAdd(tag);
@@ -268,7 +268,7 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
       }
       if (result.imported.length > 0) {
         if (isCommunity && tags.length + result.imported.length > maxTags) {
-          alert(`🔒 Free Demo Limit: Importing these tags would exceed the 5-tag Community limit. Truncating to 5 tags max.`);
+          alert(`Community Edition Limit: Importing these tags would exceed the 5-tag Community limit. Truncating to 5 tags max.`);
           const remainingSlots = Math.max(0, maxTags - tags.length);
           onImport(result.imported.slice(0, remainingSlots));
         } else {

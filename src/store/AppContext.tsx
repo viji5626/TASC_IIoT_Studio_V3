@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from 'react';
 import { 
   AppState, 
   AppView, 
@@ -89,8 +89,6 @@ export interface AppContextType {
   setActiveConnectionId: React.Dispatch<React.SetStateAction<string>>;
   activeDashboardId: string;
   setActiveDashboardId: React.Dispatch<React.SetStateAction<string>>;
-  activeMode: 'grid' | 'hmi';
-  setActiveMode: React.Dispatch<React.SetStateAction<'grid' | 'hmi'>>;
   isHmiEditMode: boolean;
   setIsHmiEditMode: React.Dispatch<React.SetStateAction<boolean>>;
   selectedPanelId: string | null;
@@ -270,17 +268,36 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     }
     return AppView.DASHBOARD;
   });
-  const [activeMode, setActiveMode] = useState<'grid' | 'hmi'>('hmi');
   const [activeConnectionId, setActiveConnectionId] = useState<string>(
     appState.connections[0]?.connectionId || ''
   );
   const [activeDashboardId, setActiveDashboardId] = useState<string>(
-    appState.dashboards[0]?.dashboardId || ''
+    appState.dashboards.find(d => d.isHome)?.dashboardId || appState.dashboards[0]?.dashboardId || ''
   );
   const [isHmiEditMode, setIsHmiEditMode] = useState<boolean>(() => {
     const isClient = userRole === 'client' || productEdition === ProductEdition.CLIENT_RUNTIME || !!appState.isLockedPackage;
     return !isClient;
   });
+
+  useEffect(() => {
+    const isClient = userRole === 'client' || productEdition === ProductEdition.CLIENT_RUNTIME || !!appState.isLockedPackage;
+    if (isClient) {
+      setIsHmiEditMode(false);
+    }
+  }, [userRole, productEdition, appState.isLockedPackage]);
+
+  useEffect(() => {
+    const handleSetEditMode = (e: any) => {
+      if (typeof e?.detail === 'boolean') {
+        setIsHmiEditMode(e.detail);
+      } else {
+        setIsHmiEditMode(prev => !prev);
+      }
+    };
+    window.addEventListener('tasc-set-edit-mode', handleSetEditMode);
+    return () => window.removeEventListener('tasc-set-edit-mode', handleSetEditMode);
+  }, []);
+
   const [selectedPanelId, setSelectedPanelId] = useState<string | null>(null);
 
   // Modals & UI Drawers
@@ -1210,8 +1227,8 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     setActiveConnectionId,
     activeDashboardId,
     setActiveDashboardId,
-    activeMode,
-    setActiveMode,
+    isHmiEditMode,
+    setIsHmiEditMode,
     selectedPanelId,
     setSelectedPanelId,
 
@@ -1359,8 +1376,6 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     setActiveConnectionId,
     activeDashboardId,
     setActiveDashboardId,
-    activeMode,
-    setActiveMode,
     isHmiEditMode,
     setIsHmiEditMode,
     selectedPanelId,

@@ -639,7 +639,7 @@ const UserForm: React.FC<{
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div>
           <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '16px', fontWeight: 700 }}>
-            {isEdit ? `✏️ Edit Operator: ${existing?.displayName}` : '+ Create New Operator Account'}
+            {isEdit ? `Edit Operator: ${existing?.displayName}` : '+ Create New Operator Account'}
           </h3>
           <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#94a3b8' }}>
             Set security level, granular control permissions, and password expiry tenure

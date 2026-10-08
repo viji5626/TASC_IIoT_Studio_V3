@@ -9,7 +9,10 @@ import fs from 'fs';
 import path from 'path';
 import { createRequire } from 'module';
 
-const require = createRequire(import.meta.url);
+// Safely obtain require across both bundled CommonJS and tsx/ESM
+const dynamicRequire: any = (typeof require === 'function')
+  ? require
+  : createRequire(typeof __filename !== 'undefined' ? __filename : path.join(process.cwd(), 'index.js'));
 import type {
   ScadaSqlConfig,
   SqlFilter,
@@ -206,7 +209,7 @@ export class ScadaSqlService {
         let sqlModule: any;
         if (this.activeDriver === 'msnodesqlv8') {
           // Dynamic require msnodesqlv8 driver
-          sqlModule = require('mssql/msnodesqlv8');
+          sqlModule = dynamicRequire('mssql/msnodesqlv8');
         } else {
           sqlModule = sqlTedious;
         }
@@ -299,7 +302,7 @@ export class ScadaSqlService {
     try {
       let pool: any;
       if (merged.authType === 'windows_integrated') {
-        const sqlMv8 = require('mssql/msnodesqlv8');
+        const sqlMv8 = dynamicRequire('mssql/msnodesqlv8');
         pool = new sqlMv8.ConnectionPool({
           server: srv,
           database: db,

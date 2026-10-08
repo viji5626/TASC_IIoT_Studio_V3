@@ -6,3 +6,37 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Scratch and test files
+scratch/
+memlab_snapshots/
+graphify-out/
+chrome_*.png
+jev_*.png
+
+# Python & AI binary data
+__pycache__/
+*.pyc
+python_engine/__pycache__/
+python_engine/data/chroma_db/
+models/
+runtimes/
+
+# Local databases and report output
+*.db
+*.sqlite
+*.sqlite3
+data/*.db
+data/batch_reports/
+data/reports/
+data/test_reports_out/
+installer_output/
+staging/
+
+# Sensitive local configs
+data/tasc_alarm_email_config.json
+data/tasc_sms_config.json
+data/tasc_smtp_config.json
+
+# External gateway repos
+sms_gateway/

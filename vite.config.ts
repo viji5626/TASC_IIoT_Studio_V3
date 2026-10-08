@@ -1,7 +1,7 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
   return {
@@ -18,6 +18,7 @@ export default defineConfig(() => {
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {
         ignored: [
+          '**/sms_gateway/**',
           '**/data/**',
           '**/python_engine/**',
           '**/*.log',
@@ -28,6 +29,13 @@ export default defineConfig(() => {
           '**/dist/**',
           '**/*.sqlite*',
           '**/*.db',
+          '**/runtimes/**',
+          '**/tasc_core_config.json',
+          '**/tasc_core_config*.json',
+          '**/staging/**',
+          '**/installer_output/**',
+          '**/graphify-out/**',
+          '**/memlab_snapshots/**',
           /[\\/]data[\\/]/,
           /[\\/]python_engine[\\/]/,
           /\.log$/,

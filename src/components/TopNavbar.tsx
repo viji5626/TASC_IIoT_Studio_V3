@@ -11,6 +11,7 @@ import { MultiDriverStatusPill } from './MultiDriverStatusPill';
 import { useDeviceCapability } from '../utils/deviceDetection';
 import { EditionManager } from '../utils/EditionManager';
 import { OperatorStatusBar } from './auth/OperatorStatusBar';
+import { useAppContext } from '../store/AppContext';
 
 export interface TopNavbarProps {
   appState: AppState;
@@ -23,6 +24,7 @@ export interface TopNavbarProps {
   activeDashboardId: string;
   setActiveDashboardId: (id: string) => void;
   isHmiEditMode?: boolean;
+  setIsHmiEditMode?: React.Dispatch<React.SetStateAction<boolean>>;
   isLocked: boolean;
   handleToggleLock: () => void;
   isFullscreen: boolean;
@@ -60,6 +62,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
   activeDashboardId,
   setActiveDashboardId,
   isHmiEditMode,
+  setIsHmiEditMode,
   isLocked,
   handleToggleLock,
   isFullscreen,
@@ -85,6 +88,10 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
   setCommunityLimitNotice,
   handleOpenAddPanel,
 }) => {
+  const appCtx = useAppContext();
+  const activeEditMode = isHmiEditMode !== undefined ? isHmiEditMode : (appCtx?.isHmiEditMode ?? true);
+  const setEditMode = setIsHmiEditMode || appCtx?.setIsHmiEditMode;
+
   const { isDesktop, isMobile } = useDeviceCapability();
   const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false);
   const toolsMenuRef = useRef<HTMLDivElement>(null);
@@ -138,8 +145,8 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
       }}
       className={`theme-header px-2 sm:px-3 border-b border-slate-800 flex items-center justify-between z-40 backdrop-blur-md w-full max-w-full ${
         isDesktop
-          ? 'flex-wrap min-h-[48px] py-1 gap-y-1.5 overflow-visible'
-          : 'h-11 sm:h-[48px] overflow-x-auto custom-horizontal-scrollbar touch-scroll overscroll-x-contain shrink-0'
+          ? 'flex-wrap min-h-[50px] py-1.5 gap-y-1.5 overflow-visible'
+          : 'h-12 sm:h-[52px] overflow-x-auto custom-horizontal-scrollbar touch-scroll overscroll-x-contain shrink-0 py-1'
       }`}
     >
       {/* Left Toolbar: Brand & Connections */}
@@ -151,7 +158,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
             type="button" 
             data-tour="sidebar-btn"
             onClick={() => setIsSidebarOpen(true)}
-            className="p-1 sm:p-1.5 text-slate-300 hover:text-white rounded-lg hover:bg-slate-800/80 active:scale-95 transition-all shrink-0 cursor-pointer"
+            className="h-10 w-10 flex items-center justify-center text-slate-300 hover:text-white rounded-xl bg-slate-800/60 hover:bg-slate-800 active:scale-95 transition-all shrink-0 cursor-pointer border border-slate-700/60 shadow-sm"
             title="Open Menu"
           >
             <i className="fas fa-bars text-sm sm:text-base"></i>
@@ -165,7 +172,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
               }
               setCurrentView(AppView.DASHBOARD);
             }}
-            className="flex items-center space-x-1.5 hover:opacity-80 transition-opacity cursor-pointer text-left"
+            className="h-10 flex items-center space-x-1.5 px-1.5 rounded-xl hover:opacity-80 transition-opacity cursor-pointer text-left shrink-0"
             title="Go to Home Dashboard"
           >
             <AppLogo 
@@ -196,17 +203,17 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
           type="button"
           data-tour="alarms-btn"
           onClick={() => setIsAlarmModalOpen(true)}
-          className={`flex items-center space-x-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer relative shrink-0 min-h-[30px] ${
+          className={`flex items-center space-x-1.5 px-3 sm:px-3.5 h-10 rounded-xl text-xs font-bold transition-all cursor-pointer relative shrink-0 shadow-sm ${
             activeAlarms.length > 0
               ? 'bg-rose-500/20 text-rose-300 border border-rose-500/60 hover:bg-rose-500/30 animate-pulse'
-              : 'bg-slate-800/80 text-slate-400 border border-slate-700 hover:text-white'
+              : 'bg-slate-800/80 text-slate-300 border border-slate-700 hover:text-white hover:bg-slate-700/80'
           }`}
           title="Telemetry Inbuilt Parameter Alarms"
         >
           <i className={`fas fa-bell text-xs ${activeAlarms.length > 0 ? 'text-rose-400 animate-bounce' : 'text-slate-400'}`}></i>
-          <span className="hidden lg:inline">ALARMS</span>
+          <span className="hidden sm:inline">ALARMS</span>
           {activeAlarms.length > 0 && (
-            <span className="bg-rose-500 text-black text-[9px] font-mono font-black px-1.5 py-0.2 rounded-full">
+            <span className="bg-rose-500 text-black text-[9px] font-mono font-black px-1.5 py-0.5 rounded-full">
               {activeAlarms.length}
             </span>
           )}
@@ -217,15 +224,15 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
           <button
             type="button"
             onClick={() => setIsToolsMenuOpen(!isToolsMenuOpen)}
-            className={`flex items-center space-x-1 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer shadow-sm shrink-0 min-h-[30px] ${
+            className={`flex items-center space-x-1.5 px-3 sm:px-3.5 h-10 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm shrink-0 ${
               isToolsMenuOpen || unreadScheduledReports > 0
                 ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 hover:bg-sky-500/30'
-                : 'bg-slate-800/80 text-slate-300 border border-slate-700 hover:text-white'
+                : 'bg-slate-800/80 text-slate-300 border border-slate-700 hover:text-white hover:bg-slate-700/80'
             }`}
             title="Analysis, Diagnostics & Quick Tools"
           >
             <i className="fas fa-toolbox text-xs text-sky-400"></i>
-            <span className="hidden xl:inline">TOOLS</span>
+            <span className="hidden sm:inline">TOOLS</span>
             {unreadScheduledReports > 0 && (
               <span className="bg-amber-400 text-slate-950 font-black text-[8px] px-1 py-0.2 rounded-full animate-pulse">
                 {unreadScheduledReports}
@@ -236,7 +243,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
 
           {/* Quick Tools Dropdown Panel */}
           {isToolsMenuOpen && (
-            <div className="absolute left-0 top-9 z-50 w-64 bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl p-1.5 animate-in fade-in zoom-in-95 duration-150 space-y-0.5 backdrop-blur-xl">
+            <div className="absolute left-0 top-12 z-50 w-72 bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl p-2 animate-in fade-in zoom-in-95 duration-150 space-y-1 backdrop-blur-xl">
               {hasAnalysisItems && (
                 <>
                   <div className="px-2.5 py-1 text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">
@@ -410,12 +417,12 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
           <button
             type="button"
             onClick={handleRequestExitSession}
-            className="flex items-center space-x-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-1 rounded-lg text-[10px] font-bold hover:bg-emerald-500/30 transition-all cursor-pointer shrink-0 min-h-[30px]"
+            className="flex items-center space-x-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 h-10 rounded-xl text-xs font-bold hover:bg-emerald-500/30 transition-all cursor-pointer shrink-0"
             title={`Community Edition (Free) • ${appState.dashboards.length} Screens / 10 Widgets Max — Click to exit / change mode`}
           >
             <i className="fas fa-cube text-xs text-emerald-400"></i>
             <span className="hidden 2xl:inline">COMMUNITY</span>
-            <span className={`text-[9px] px-1 rounded font-mono font-extrabold ${appState.panels.length > 10 ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-slate-950'}`}>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-extrabold ${appState.panels.length > 10 ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-slate-950'}`}>
               ({appState.panels.length}/10W)
             </span>
           </button>
@@ -423,22 +430,22 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
           <button
             type="button"
             onClick={handleRequestExitSession}
-            className="flex items-center space-x-1 bg-sky-500/20 text-sky-300 border border-sky-500/30 px-2 py-1 rounded-lg text-[10px] font-bold hover:bg-sky-500/30 transition-all cursor-pointer shrink-0 min-h-[30px]"
+            className="flex items-center space-x-1.5 bg-sky-500/20 text-sky-300 border border-sky-500/30 px-3 h-10 rounded-xl text-xs font-bold hover:bg-sky-500/30 transition-all cursor-pointer shrink-0"
             title="Client Edition (Operator Mode) — Click to exit / change mode"
           >
             <i className="fas fa-shield-halved text-xs text-sky-400"></i>
             <span className="hidden lg:inline">{clientInfo?.clientName || 'CLIENT'}</span>
-            <span className="text-[9px] bg-sky-500 text-slate-950 px-1 rounded font-mono font-extrabold">OPERATOR</span>
+            <span className="text-[10px] bg-sky-500 text-slate-950 px-1.5 py-0.5 rounded font-mono font-extrabold">OPERATOR</span>
           </button>
         ) : null}
 
         {/* HMI Screen Switcher Dropdown & Add Screen (+) Button */}
         {appState.dashboards && appState.dashboards.length > 0 && (
-          <div className="flex items-center space-x-1 shrink-0">
+          <div className="flex items-center space-x-1.5 shrink-0">
             <select
               value={activeDashboardId}
               onChange={(e) => handleSelectDashboard(e.target.value)}
-              className="bg-slate-950 text-sky-400 font-bold text-xs px-2 py-1 rounded-lg border border-slate-800 outline-none focus:border-sky-500 cursor-pointer max-w-[130px] sm:max-w-[180px] shadow-inner shrink-0 truncate hover:border-slate-700 transition-colors min-h-[30px]"
+              className="bg-slate-950 text-sky-400 font-bold text-xs sm:text-sm px-3 h-10 rounded-xl border border-slate-700/80 outline-none focus:border-sky-500 cursor-pointer max-w-[140px] sm:max-w-[200px] shadow-inner shrink-0 truncate hover:border-slate-600 transition-colors"
               title="Switch Active HMI Screen Page"
             >
               {appState.dashboards.map(d => (
@@ -449,11 +456,11 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
             </select>
 
             {/* Add Screen (+) Button */}
-            {!isFullscreen && isHmiEditMode && !isLocked && !isClient && (
+            {!isFullscreen && activeEditMode && !isLocked && !isClient && (
               <button
                 type="button"
                 onClick={handleCreateScreenCheck}
-                className="h-[30px] w-[30px] bg-sky-500 hover:bg-sky-400 text-slate-950 font-black rounded-lg text-xs transition-all flex items-center justify-center cursor-pointer shrink-0 shadow-md active:scale-95 border border-sky-400/80 hover:shadow-sky-500/20"
+                className="h-10 w-10 bg-sky-500 hover:bg-sky-400 text-slate-950 font-black rounded-xl text-sm transition-all flex items-center justify-center cursor-pointer shrink-0 shadow-md active:scale-95 border border-sky-400/80 hover:shadow-sky-500/20"
                 title="Add New HMI Screen"
               >
                 <i className="fas fa-plus text-xs"></i>
@@ -464,11 +471,11 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
 
         {/* Inline Fullscreen Controls */}
         {isFullscreen && (
-          <div className="flex items-center space-x-1 shrink-0">
+          <div className="flex items-center space-x-1.5 shrink-0">
             <button
               type="button"
               onClick={() => window.dispatchEvent(new CustomEvent('hmi-restore-autofit'))}
-              className="flex items-center space-x-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[30px]"
+              className="flex items-center space-x-1.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 px-3 h-10 rounded-xl text-xs font-extrabold transition-all cursor-pointer shrink-0"
               title="Restore Fit (Reset zoom to fit all screen elements)"
             >
               <i className="fas fa-compress-arrows-alt text-xs text-indigo-400"></i>
@@ -477,7 +484,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
             <button
               type="button"
               onClick={handleExitFullscreen}
-              className="flex items-center space-x-1 bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-extrabold transition-all cursor-pointer shrink-0 min-h-[30px]"
+              className="flex items-center space-x-1.5 bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 px-3 h-10 rounded-xl text-xs font-extrabold transition-all cursor-pointer shrink-0"
               title="Exit Full Screen Mode"
             >
               <i className="fas fa-compress text-xs text-sky-400"></i>
@@ -488,18 +495,75 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
       </div>
 
       {/* Right Toolbar */}
-      <div className={`flex items-center gap-1.5 ${isDesktop ? 'flex-wrap' : 'shrink-0'}`}>
+      <div className={`flex items-center gap-1.5 sm:gap-2 ${isDesktop ? 'flex-wrap' : 'shrink-0'}`}>
         <OperatorStatusBar />
+
         {isLocked && (
           <button
             type="button"
             onClick={handleToggleLock}
-            className="px-2.5 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-semibold flex items-center space-x-1.5 hover:bg-amber-500/30 transition-colors cursor-pointer"
+            className="h-10 px-3 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-xl text-xs font-semibold flex items-center space-x-1.5 hover:bg-amber-500/30 transition-colors cursor-pointer shrink-0"
             title="Screen Edits Locked — Click to unlock"
           >
-            <i className="fas fa-lock text-[11px]"></i>
+            <i className="fas fa-lock text-xs"></i>
             <span className="hidden sm:inline">Locked</span>
           </button>
+        )}
+
+        {/* RUN / DESIGN Mode Toggle Segmented Control */}
+        {isClient ? (
+          <div
+            className="h-10 px-3.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs sm:text-sm font-extrabold tracking-wider uppercase flex items-center space-x-1.5 shadow-sm shrink-0"
+            title="Client Edition (Operator Mode) — Live Execution Active"
+          >
+            <i className="fas fa-play text-xs text-emerald-400 animate-pulse"></i>
+            <span className="font-bold">LIVE HMI</span>
+          </div>
+        ) : (
+          <div
+            data-tour="run-mode-btn"
+            className="h-10 p-1 bg-slate-900/90 border border-slate-700/80 rounded-xl flex items-center space-x-1 shadow-md shrink-0"
+          >
+            <button
+              type="button"
+              onClick={() => {
+                if (currentView !== AppView.DASHBOARD) {
+                  setCurrentView(AppView.DASHBOARD);
+                }
+                setEditMode?.(true);
+                window.dispatchEvent(new CustomEvent('tasc-set-edit-mode', { detail: true }));
+              }}
+              className={`h-8 px-3 rounded-lg text-xs font-black tracking-wider uppercase transition-all flex items-center space-x-1.5 cursor-pointer active:scale-95 ${
+                activeEditMode
+                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md shadow-amber-500/20 border border-amber-400'
+                  : 'text-slate-400 hover:text-amber-300 hover:bg-slate-800/80'
+              }`}
+              title="DESIGN Mode (Show Tools, Palette & Canvas Editing Handles)"
+            >
+              <i className="fas fa-pen-to-square text-xs"></i>
+              <span className="font-black">DESIGN</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (currentView !== AppView.DASHBOARD) {
+                  setCurrentView(AppView.DASHBOARD);
+                }
+                setEditMode?.(false);
+                window.dispatchEvent(new CustomEvent('tasc-set-edit-mode', { detail: false }));
+              }}
+              className={`h-8 px-3 rounded-lg text-xs font-black tracking-wider uppercase transition-all flex items-center space-x-1.5 cursor-pointer active:scale-95 ${
+                !activeEditMode
+                  ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-md shadow-emerald-500/30 border border-emerald-400'
+                  : 'text-slate-400 hover:text-emerald-300 hover:bg-slate-800/80'
+              }`}
+              title="RUN Mode (Hide Tools, Clean Canvas & Live Runtime Execution)"
+            >
+              <i className="fas fa-play text-xs"></i>
+              <span className="font-black">RUN</span>
+            </button>
+          </div>
         )}
       </div>
     </header>

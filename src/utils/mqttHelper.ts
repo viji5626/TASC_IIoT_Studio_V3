@@ -31,42 +31,113 @@ function findKeyRecursive(obj: any, targetKey: string): any {
   return undefined;
 }
 
-export function getJsonValue(payload: any, path: string): any {
-  if (payload === undefined || payload === null) return undefined;
-  
-  let data = payload;
-  if (typeof data === 'string') {
-    const trimmedPayload = data.trim();
-    if ((trimmedPayload.startsWith('{') && trimmedPayload.endsWith('}')) ||
-        (trimmedPayload.startsWith('[') && trimmedPayload.endsWith(']'))) {
-      try {
-        data = JSON.parse(trimmedPayload);
-      } catch {
-        // preserve original string if parse fails
+/**
+ * Parses bit extraction specifiers from a JSONPath or tag name.
+ * Supports:
+ * - Dot notation: "tag[0].b3", "tag.b3", "tag.bit3", "tag.bit(3)", "tag.bits[3]"
+ * - Colon notation: "tag[0]:3", "tag:3", ":3"
+ * - Standalone bit: "b3", "b0", "bit(3)", "bit3"
+ */
+export function parseBitExtractionPath(path: string): { basePath: string; bitIndex?: number } {
+  if (!path) return { basePath: '' };
+  const trimmed = path.trim();
+
+  // Pattern 1: Colon notation e.g. "tag:3", "tag[0]:3", ":3"
+  const colonMatch = trimmed.match(/^(.*?):([0-9]{1,2})$/);
+  if (colonMatch) {
+    const bitIndex = parseInt(colonMatch[2], 10);
+    if (!isNaN(bitIndex) && bitIndex >= 0 && bitIndex <= 63) {
+      return { basePath: colonMatch[1].trim(), bitIndex };
+    }
+  }
+
+  // Pattern 2: Dot/Slash notation e.g. "tag.b3", "tag[0].b3", "tag.bit3", "tag.bit(3)", "tag.bits[3]"
+  const dotBitMatch = trimmed.match(/^(.*?)(?:\.|\/)(?:b|bit|bits)(?:\(|\.|\/|\[)?([0-9]{1,2})(?:\)|\])?$/i);
+  if (dotBitMatch) {
+    const bitIndex = parseInt(dotBitMatch[2], 10);
+    if (!isNaN(bitIndex) && bitIndex >= 0 && bitIndex <= 63) {
+      return { basePath: dotBitMatch[1].trim(), bitIndex };
+    }
+  }
+
+  // Pattern 3: Standalone bit selector e.g. "b3", "b0", "bit(3)", "bit3", "bits[3]"
+  const standaloneMatch = trimmed.match(/^(?:b|bit|bits)(?:\(|\.|\/|\[)?([0-9]{1,2})(?:\)|\])?$/i);
+  if (standaloneMatch) {
+    const bitIndex = parseInt(standaloneMatch[1], 10);
+    if (!isNaN(bitIndex) && bitIndex >= 0 && bitIndex <= 63) {
+      return { basePath: '', bitIndex };
+    }
+  }
+
+  return { basePath: trimmed };
+}
+
+/**
+ * Extracts a single bit (0 or 1) from an integer number, string, or single-element array (e.g. [24]).
+ * Handles 16-bit unsigned PLC registers, 32-bit DINTs, and 64-bit BigInt words.
+ */
+export function extractBitValue(val: any, bitIndex: number): number | undefined {
+  if (val === undefined || val === null || bitIndex < 0 || bitIndex > 63) return undefined;
+
+  let target = val;
+  // If array with single item, unwrap e.g. [24] -> 24
+  if (Array.isArray(target)) {
+    if (target.length === 1) {
+      target = target[0];
+    } else if (target.length > 0 && typeof target[0] === 'number') {
+      target = target[0];
+    }
+  } else if (typeof target === 'object' && target !== null) {
+    // If object with wrapped value e.g. { val: 24 } or single property { tag: [24] }
+    if ('val' in target) {
+      return extractBitValue(target.val, bitIndex);
+    }
+    const keys = Object.keys(target);
+    if (keys.length === 1) {
+      const singleVal = target[keys[0]];
+      if (Array.isArray(singleVal) && singleVal.length === 1) {
+        target = singleVal[0];
+      } else if (typeof singleVal === 'number' || typeof singleVal === 'string') {
+        target = singleVal;
       }
     }
   }
 
-  if (data === undefined || data === null) return undefined;
-
-  const trimmed = (path || '').trim();
-  if (!trimmed) {
-    if (Array.isArray(data) && data.length === 1 && typeof data[0] !== 'object') {
-      return data[0];
+  let num: number;
+  if (typeof target === 'number') {
+    num = target;
+  } else if (typeof target === 'string') {
+    const trimmed = target.trim();
+    if (trimmed.startsWith('0x') || trimmed.startsWith('0X')) {
+      num = parseInt(trimmed, 16);
+    } else if (trimmed.startsWith('0b') || trimmed.startsWith('0B')) {
+      num = parseInt(trimmed.slice(2), 2);
+    } else {
+      num = Number(trimmed);
     }
-    return typeof data === 'object' ? JSON.stringify(data) : data;
+  } else if (typeof target === 'boolean') {
+    num = target ? 1 : 0;
+  } else {
+    return undefined;
   }
 
-  // Clean JSONPath prefix ($. or $ or /)
-  let cleanPath = trimmed;
-  if (cleanPath.startsWith('$.')) {
-    cleanPath = cleanPath.substring(2);
-  } else if (cleanPath.startsWith('$')) {
-    cleanPath = cleanPath.substring(1);
-  } else if (cleanPath.startsWith('/')) {
-    cleanPath = cleanPath.substring(1);
-  }
+  if (isNaN(num)) return undefined;
 
+  try {
+    const big = BigInt(Math.trunc(num));
+    const unsignedBig = big < 0n ? (big & 0xFFFFFFFFFFFFFFFFn) : big;
+    const bit = (unsignedBig >> BigInt(bitIndex)) & 1n;
+    return Number(bit);
+  } catch {
+    const bit = (Math.floor(num) >>> bitIndex) & 1;
+    return bit;
+  }
+}
+
+/**
+ * Resolves standard nested object paths, brackets, and array indices.
+ */
+function resolveObjectPath(data: any, cleanPath: string): any {
   if (!cleanPath) {
     if (Array.isArray(data) && data.length === 1 && typeof data[0] !== 'object') {
       return data[0];
@@ -74,8 +145,24 @@ export function getJsonValue(payload: any, path: string): any {
     return typeof data === 'object' ? JSON.stringify(data) : data;
   }
 
+  let normalizedPath = cleanPath;
+  if (normalizedPath.startsWith('$.')) {
+    normalizedPath = normalizedPath.substring(2);
+  } else if (normalizedPath.startsWith('$')) {
+    normalizedPath = normalizedPath.substring(1);
+  } else if (normalizedPath.startsWith('/')) {
+    normalizedPath = normalizedPath.substring(1);
+  }
+
+  if (!normalizedPath) {
+    if (Array.isArray(data) && data.length === 1 && typeof data[0] !== 'object') {
+      return data[0];
+    }
+    return typeof data === 'object' ? JSON.stringify(data) : data;
+  }
+
   // Convert bracket notation: e.g. ["data_shankar"][0] or .data_shankar[0] or .data_shankar[ 0 ]
-  const normalized = cleanPath
+  const normalized = normalizedPath
     .replace(/\[\s*['"]?([^'"\]]+)['"]?\s*\]/g, '.$1')
     .replace(/\//g, '.');
 
@@ -127,6 +214,129 @@ export function getJsonValue(payload: any, path: string): any {
   }
 
   return current;
+}
+
+/**
+ * Universal JSON / Bit Value Extractor.
+ * Extracts values from JSON payloads via JSONPath or dot-notation, and extracts individual bits (0 or 1)
+ * when a bit specifier is present (e.g. tag[0].b3, tag.b3, tag:3, tag.bit(3), b3, :3).
+ */
+export function getJsonValue(payload: any, path: string): any {
+  if (payload === undefined || payload === null) return undefined;
+  
+  let data = payload;
+  if (typeof data === 'string') {
+    const trimmedPayload = data.trim();
+    if ((trimmedPayload.startsWith('{') && trimmedPayload.endsWith('}')) ||
+        (trimmedPayload.startsWith('[') && trimmedPayload.endsWith(']'))) {
+      try {
+        data = JSON.parse(trimmedPayload);
+      } catch {
+        // preserve original string if parse fails
+      }
+    }
+  }
+
+  if (data === undefined || data === null) return undefined;
+
+  const trimmed = (path || '').trim();
+  if (!trimmed) {
+    if (Array.isArray(data) && data.length === 1 && typeof data[0] !== 'object') {
+      return data[0];
+    }
+    return typeof data === 'object' ? JSON.stringify(data) : data;
+  }
+
+  // 1. Try standard traversal on the raw path first
+  const directResolved = resolveObjectPath(data, trimmed);
+  const bitInfo = parseBitExtractionPath(trimmed);
+
+  // If path does not contain a bit specifier, return standard resolved value
+  if (bitInfo.bitIndex === undefined) {
+    return directResolved;
+  }
+
+  // If the path literally matched a concrete property (e.g. an object property literally named "b3"),
+  // return that property to maintain 100% backward compatibility
+  if (directResolved !== undefined && !(typeof directResolved === 'string' && directResolved === JSON.stringify(data))) {
+    return directResolved;
+  }
+
+  // 2. Otherwise evaluate the basePath and extract the designated bit (0 or 1)
+  let targetVal: any = undefined;
+  if (bitInfo.basePath) {
+    targetVal = resolveObjectPath(data, bitInfo.basePath);
+  } else {
+    // Standalone bit e.g. "b3" on payload directly
+    targetVal = data;
+  }
+
+  if (targetVal !== undefined) {
+    const bit = extractBitValue(targetVal, bitInfo.bitIndex);
+    if (bit !== undefined) return bit;
+  }
+
+  return undefined;
+}
+
+/**
+ * Resolves a live tag value from latestValues map with bit extraction support.
+ * If tagKey contains a bit suffix (e.g. "Word1.b3", "Tag:3") and is not found directly,
+ * looks up the base tag in latestValues and extracts the designated bit.
+ */
+export function resolveTagValueWithBit(
+  tagKey: string | undefined,
+  latestValues: Record<string, any>
+): any {
+  if (!tagKey || !latestValues) return undefined;
+  const cleanKey = String(tagKey).trim();
+  if (!cleanKey) return undefined;
+
+  // 1. Direct match in latestValues
+  if (latestValues[cleanKey] !== undefined) {
+    const item = latestValues[cleanKey];
+    return item?.val !== undefined ? item.val : item;
+  }
+
+  // 2. Case-insensitive or tag_panel_ prefix match
+  for (const [k, v] of Object.entries(latestValues)) {
+    if (
+      k.toLowerCase() === cleanKey.toLowerCase() ||
+      k === `tag_panel_${cleanKey}` ||
+      k.toLowerCase() === `tag_panel_${cleanKey.toLowerCase()}`
+    ) {
+      return v?.val !== undefined ? v.val : v;
+    }
+  }
+
+  // 3. Bit extraction fallback if tagKey has .b<N>, :<N>, or .bit(<N>)
+  const bitInfo = parseBitExtractionPath(cleanKey);
+  if (bitInfo.bitIndex !== undefined && bitInfo.basePath) {
+    const baseClean = bitInfo.basePath.trim();
+    let baseRaw: any = undefined;
+
+    if (latestValues[baseClean] !== undefined) {
+      const item = latestValues[baseClean];
+      baseRaw = item?.val !== undefined ? item.val : item;
+    } else {
+      for (const [k, v] of Object.entries(latestValues)) {
+        if (
+          k.toLowerCase() === baseClean.toLowerCase() ||
+          k === `tag_panel_${baseClean}` ||
+          k.toLowerCase() === `tag_panel_${baseClean.toLowerCase()}`
+        ) {
+          baseRaw = v?.val !== undefined ? v.val : v;
+          break;
+        }
+      }
+    }
+
+    if (baseRaw !== undefined) {
+      return extractBitValue(baseRaw, bitInfo.bitIndex);
+    }
+  }
+
+  return undefined;
 }
 
 export function formatBrokerWebSocketUrl(conn: { brokerAddress: string; port: number; protocol?: string; useBackendBridge?: boolean }): string {

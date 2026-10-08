@@ -97,7 +97,7 @@ const DriverDiagnosticsView: React.FC<DriverDiagnosticsViewProps> = ({ onBack, a
             <p className="font-bold text-sm text-amber-200">Action Required: Driver Tag is created but not bound to a Widget</p>
             <p>You have created <strong>{tags.length} driver tag(s)</strong>, but zero dashboard widgets are currently configured to use them.</p>
             <p className="pt-1">
-              👉 <strong>Solution:</strong> Go to Dashboard → Click <strong>Edit Panel</strong> on a widget → Toggle <strong>DATA SOURCE</strong> to <strong>Driver Tag</strong> → Select your tag from the list.
+              <strong>Solution:</strong> Go to Dashboard → Click <strong>Edit Panel</strong> on a widget → Toggle <strong>DATA SOURCE</strong> to <strong>Driver Tag</strong> → Select your tag from the list.
             </p>
           </div>
         </div>

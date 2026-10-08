@@ -249,11 +249,11 @@ def valueChanged(tag, tagPath, previousValue, currentValue, initialChange, misse
                   </div>
                   {generatedResult.safetyCheck.passed ? (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300">
-                      ✓ Safety Rules Passed
+                      Safety Rules Passed
                     </span>
                   ) : (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 border border-amber-500/40 text-amber-300">
-                      ⚠ Advisory Found
+                      Advisory Found
                     </span>
                   )}
                 </div>

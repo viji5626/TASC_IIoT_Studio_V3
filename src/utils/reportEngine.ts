@@ -347,19 +347,19 @@ export function buildAiHtmlReport(
 
 <div class="no-print" style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:16px;">
   <button onclick="window.print()" style="background:#0284c7;color:#ffffff;border:none;padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.2);">
-    🖨️ Print / Save to PDF
+    Print / Save to PDF
   </button>
 </div>
 
 <div class="header">
 
-  <h1>📊 ${escHtml(dataset.title)}</h1>
+  <h1>${escHtml(dataset.title)}</h1>
   <div class="meta">
-    <span>📅 Period: <strong>${fromLabel}</strong> → <strong>${toLabel}</strong></span>
-    <span>⚙️ Resolution: <strong>${dataset.resolution}</strong></span>
-    <span>🏷 Tags: <strong>${dataset.tags.length}</strong></span>
-    <span>🚨 Alarms: <strong>${dataset.alarms.length}</strong></span>
-    ${dataset.fddFaults && dataset.fddFaults.length > 0 ? `<span>🛡️ FDD Faults: <strong>${dataset.fddFaults.length}</strong></span>` : ''}
+    <span>Period: <strong>${fromLabel}</strong> → <strong>${toLabel}</strong></span>
+    <span>Resolution: <strong>${dataset.resolution}</strong></span>
+    <span>Tags: <strong>${dataset.tags.length}</strong></span>
+    <span>Alarms: <strong>${dataset.alarms.length}</strong></span>
+    ${dataset.fddFaults && dataset.fddFaults.length > 0 ? `<span>FDD Faults: <strong>${dataset.fddFaults.length}</strong></span>` : ''}
   </div>
   <div class="meta" style="margin-top:6px">Generated: ${generatedAt} · TASC IIoT Studio</div>
   ${suggestionNote}
@@ -392,14 +392,14 @@ export function buildAiHtmlReport(
 
 <!-- Section 1: AI Executive Summary -->
 <div class="section">
-  <h2>🤖 Executive Summary</h2>
+  <h2>Executive Summary</h2>
   <div class="narrative">${escHtml(aiSummary)}</div>
 </div>
 
 <!-- Section 2: Line Trend Charts -->
 ${chartTags.length > 0 ? `
 <div class="section">
-  <h2>📈 Process Trend Analysis</h2>
+  <h2>Process Trend Analysis</h2>
   <div class="chart-container">
     <canvas id="lineChart"></canvas>
   </div>
@@ -410,13 +410,13 @@ ${chartTags.length > 0 ? `
 ${dataset.tags.length > 0 ? `
 <div class="chart-row">
   <div class="section">
-    <h2>📊 Average Values</h2>
+    <h2>Average Values</h2>
     <div class="chart-container" style="height:220px">
       <canvas id="barAvgChart"></canvas>
     </div>
   </div>
   <div class="section">
-    <h2>📉 Min / Max Range</h2>
+    <h2>Min / Max Range</h2>
     <div class="chart-container" style="height:220px">
       <canvas id="barMinMaxChart"></canvas>
     </div>
@@ -426,7 +426,7 @@ ${dataset.tags.length > 0 ? `
 
 <!-- Section 4: Statistical Table -->
 <div class="section">
-  <h2>📋 Statistical Summary</h2>
+  <h2>Statistical Summary</h2>
   ${dataset.tags.length > 0 ? `
   <table>
     <thead>
@@ -447,7 +447,7 @@ ${dataset.tags.length > 0 ? `
 <!-- Section 5: Alarm Log -->
 ${dataset.alarms.length > 0 ? `
 <div class="section">
-  <h2>🚨 Alarm Events Log (${dataset.alarms.length} events)</h2>
+  <h2>Alarm Events Log (${dataset.alarms.length} events)</h2>
   <table>
     <thead>
       <tr><th>Trigger Time</th><th>Equipment</th><th>Category</th><th>Message</th><th>Value</th><th>Status</th></tr>
@@ -460,7 +460,7 @@ ${dataset.alarms.length > 0 ? `
 <!-- Section 6: FDD Predictive Maintenance & Faults Log -->
 ${dataset.fddFaults && dataset.fddFaults.length > 0 ? `
 <div class="section">
-  <h2>🛡️ FDD Predictive Maintenance & Faults Log (${dataset.fddFaults.length} events)</h2>
+  <h2>FDD Predictive Maintenance & Faults Log (${dataset.fddFaults.length} events)</h2>
   <table>
     <thead>
       <tr><th>Trigger Time</th><th>Asset</th><th>Fault / Rule</th><th>Severity</th><th>Duration</th><th>Est. Cost Impact</th><th>Status</th><th>Root Cause Summary</th></tr>
@@ -472,7 +472,7 @@ ${dataset.fddFaults && dataset.fddFaults.length > 0 ? `
 
 <!-- Section 7: AI Results & Recommendations -->
 <div class="section">
-  <h2>✅ Results & Recommendations</h2>
+  <h2>Results & Recommendations</h2>
   <div class="narrative">${escHtml(aiResults)}</div>
 </div>
 

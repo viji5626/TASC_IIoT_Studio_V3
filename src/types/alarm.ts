@@ -2,14 +2,22 @@ export interface ActiveAlarm {
   alarmKey: string; // `${panelId}_${zone}`
   panelId: string;
   panelName: string;
+  panelTitle?: string;
   dashboardId: string;
   zone: 'LOW' | 'MID' | 'HIGH' | 'TRIP' | 'FAULT';
+  alarmType?: string;
   value: number;
+  currentValue?: number | string;
   unit?: string;
   threshold: number;
+  limitThreshold?: number | string;
   message: string;
   color: string;
   timestamp: string;
+  triggeredAt?: string | number;
+  topic?: string;
+  tagId?: string;
+  driverTagId?: string;
   acknowledged?: boolean;
 }
 

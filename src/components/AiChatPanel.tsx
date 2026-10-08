@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ChatMessage, ImageAttachment } from '../utils/aiProviders/types';
+import { ChatMessage, ImageAttachment, JevDiagnosticPayload } from '../utils/aiProviders/types';
 import { createSpeechDictation, SpeechDictationController } from '../utils/speechFilter';
 import { CommunityAiQuotaStatus } from '../utils/aiQuotaManager';
 import { PendingReportRequest, MultiAgentEvent, AppView } from '../types';
 import { useAppStore } from '../store/useAppStore';
 import { Ai3dAssetDefinition, Ai3dAssetService } from '../services/Ai3dAssetService';
 import { verifyAiResponseTruth } from '../services/ai/multiTierFactShield';
+import { Zap, AlertTriangle, CheckCircle2, Clock, X } from 'lucide-react';
 
 interface Props {
   messages: ChatMessage[];
@@ -26,6 +27,7 @@ interface Props {
   onReportSuggestionSelected?: (selectedIds: number[]) => void;
   onDownloadReport?: (html: string, title: string) => void;
   onDownloadExcel?: (jobId: string, title: string) => void;
+  onExecuteInterlock?: (action: string, targetTag?: string, commandVal?: any) => Promise<boolean> | boolean;
 }
 
 function formatResponseTime(ms?: number): string | null {
@@ -90,6 +92,175 @@ function renderMessageContent(content: string, onOpenImage: (url: string, alt: s
   return elements.length > 0 ? elements : content;
 }
 
+interface JevDiagnosticCardProps {
+  diagnostic: JevDiagnosticPayload;
+  onOpenSafetyModal: () => void;
+}
+
+const JevDiagnosticChatCard: React.FC<JevDiagnosticCardProps> = ({
+  diagnostic,
+  onOpenSafetyModal
+}) => {
+  // Live TTL countdown timer (90s window)
+  const [secondsLeft, setSecondsLeft] = useState(() => {
+    const elapsed = Date.now() - new Date(diagnostic.timestamp).getTime();
+    return Math.max(0, Math.ceil((90000 - elapsed) / 1000));
+  });
+
+  useEffect(() => {
+    if (secondsLeft <= 0 || diagnostic.interlockExecuted) return;
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - new Date(diagnostic.timestamp).getTime();
+      const left = Math.max(0, Math.ceil((90000 - elapsed) / 1000));
+      setSecondsLeft(left);
+      if (left <= 0) clearInterval(interval);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [diagnostic.timestamp, diagnostic.interlockExecuted, secondsLeft]);
+
+  const getSeverityBadge = (sev: string) => {
+    switch (sev) {
+      case 'CRITICAL':
+        return 'bg-red-500/20 text-red-400 border-red-500/50 animate-pulse';
+      case 'HIGH':
+        return 'bg-amber-500/20 text-amber-400 border-amber-500/50';
+      case 'MEDIUM':
+        return 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40';
+      default:
+        return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40';
+    }
+  };
+
+  const isExpired = secondsLeft <= 0;
+  const isExecuted = Boolean(diagnostic.interlockExecuted);
+
+  return (
+    <div className="mt-2.5 p-3.5 bg-slate-950/90 border border-amber-500/30 rounded-xl flex flex-col gap-2.5 text-xs text-slate-100 shadow-xl max-w-full">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+        <div className="flex items-center gap-2">
+          <Zap size={14} className="text-amber-400 shrink-0" />
+          <span className="font-bold text-amber-400 uppercase tracking-wide">
+            {diagnostic.diagnosticType === 'TRIAGE' ? 'ISA-18.2 Alarm Triage' : 'Instant Root Cause Analysis (RCA)'}
+          </span>
+          <span className="px-1.5 py-0.2 bg-slate-800 text-[10px] text-slate-300 rounded font-mono">
+            {diagnostic.latencyMs.toFixed(1)} ms
+          </span>
+          <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">
+            via {diagnostic.backend || 'laya-english'}
+          </span>
+        </div>
+        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getSeverityBadge(diagnostic.severity)}`}>
+          {diagnostic.severity}
+        </span>
+      </div>
+
+      {/* Metadata Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+        <div className="p-2 bg-slate-900/90 rounded border border-slate-800">
+          <span className="text-[10px] text-slate-400 uppercase font-mono block">Target Subsystem</span>
+          <strong className="text-sky-300 text-xs block font-mono mt-0.5 truncate">
+            {diagnostic.targetAsset.replace(/_/g, ' ')}
+          </strong>
+        </div>
+
+        <div className="p-2 bg-slate-900/90 rounded border border-slate-800">
+          <span className="text-[10px] text-slate-400 uppercase font-mono block">Initiating Event</span>
+          <strong className="text-slate-200 text-xs block font-mono mt-0.5 truncate">
+            {diagnostic.initiatingEvent.replace(/_/g, ' ')}
+          </strong>
+        </div>
+
+        <div className="p-2 bg-slate-900/90 rounded border border-slate-800">
+          <span className="text-[10px] text-slate-400 uppercase font-mono block">Primary Root Cause</span>
+          <strong className="text-white text-xs block font-bold tracking-tight mt-0.5 truncate">
+            {diagnostic.primaryResult.replace(/_/g, ' ')}
+          </strong>
+        </div>
+
+        <div className="p-2 bg-slate-900/90 rounded border border-slate-800">
+          <span className="text-[10px] text-slate-400 uppercase font-mono block">Calibrated Confidence</span>
+          <strong className="text-amber-400 text-xs block font-mono mt-0.5">
+            {(diagnostic.confidence * 100).toFixed(1)}%
+          </strong>
+        </div>
+      </div>
+
+      {/* Collateral Risk */}
+      {diagnostic.secondaryRisk && (
+        <div className="text-[11px] text-amber-300/90 flex items-center gap-1.5 px-2.5 py-1 bg-amber-950/30 rounded border border-amber-500/20">
+          <AlertTriangle size={13} className="text-amber-400 shrink-0" />
+          <span>Collateral Risk (60s): <strong>{diagnostic.secondaryRisk.replace(/_/g, ' ')}</strong></span>
+        </div>
+      )}
+
+      {/* Probabilities */}
+      {diagnostic.probabilities && diagnostic.probabilities.length > 0 && (
+        <div className="space-y-1 pt-1 border-t border-slate-800/60">
+          <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+            <span>Calibrated Logit Probability Distribution:</span>
+            <span>Single Forward Pass</span>
+          </div>
+          <div className="space-y-1">
+            {diagnostic.probabilities.map((item, idx) => (
+              <div key={idx} className="flex items-center gap-2 text-[10px]">
+                <span className="w-36 sm:w-48 truncate text-slate-300 font-mono">{item.name.replace(/_/g, ' ')}</span>
+                <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      idx === 0 ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-slate-600'
+                    }`}
+                    style={{ width: `${Math.min(100, Math.max(5, item.prob * 100))}%` }}
+                  />
+                </div>
+                <span className="w-10 text-right font-mono text-slate-400">{(item.prob * 100).toFixed(1)}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Action / Interlock Block */}
+      {diagnostic.immediateAction && (
+        <div className="p-2.5 bg-red-950/40 border border-red-500/30 rounded-lg flex flex-wrap items-center justify-between gap-2 mt-1">
+          <div>
+            <span className="text-[10px] font-bold uppercase text-red-400 tracking-wider block">
+              Immediate Recommended Safety Action:
+            </span>
+            <span className="text-xs font-bold text-white tracking-wide">
+              {diagnostic.immediateAction.replace(/_/g, ' ')}
+            </span>
+          </div>
+
+          <div>
+            {isExecuted ? (
+              <span className="px-2.5 py-1 bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 rounded-md text-[11px] font-semibold flex items-center gap-1.5">
+                <CheckCircle2 size={12} className="text-emerald-400" />
+                <span>Interlock Dispatched ({diagnostic.interlockExecuted?.operator})</span>
+              </span>
+            ) : isExpired ? (
+              <span className="px-2.5 py-1 bg-slate-800/80 text-slate-400 border border-slate-700 rounded-md text-[11px] font-mono flex items-center gap-1.5" title="Action expired after 90 seconds. Please re-evaluate live telemetry.">
+                <Clock size={12} />
+                <span>Action Expired (Re-evaluate)</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={onOpenSafetyModal}
+                className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold transition-all shadow-lg active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                title="Open two-stage safety confirmation modal"
+              >
+                <Zap size={12} />
+                <span>Execute Interlock ({secondsLeft}s)</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const AiChatPanel: React.FC<Props> = ({
   messages,
   isLoading,
@@ -107,7 +278,8 @@ export const AiChatPanel: React.FC<Props> = ({
   reportDownloads = [],
   onReportSuggestionSelected,
   onDownloadReport,
-  onDownloadExcel
+  onDownloadExcel,
+  onExecuteInterlock
 }) => {
   const isQuotaLocked = Boolean(isCommunity && quotaStatus?.isLocked);
 
@@ -116,6 +288,11 @@ export const AiChatPanel: React.FC<Props> = ({
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [lightboxImage, setLightboxImage] = useState<{ url: string; alt: string } | null>(null);
   const [agentActivity, setAgentActivity] = useState<MultiAgentEvent | null>(null);
+
+  // Safety Interlock Modal State & Execution
+  const [safetyModalTarget, setSafetyModalTarget] = useState<{ diagnostic: JevDiagnosticPayload; msgIndex: number } | null>(null);
+  const [isExecutingInterlock, setIsExecutingInterlock] = useState(false);
+  const [interlockExecutedNotice, setInterlockExecutedNotice] = useState<string | null>(null);
 
   // 3D AI Asset Generation State
   const [generated3dAssets, setGenerated3dAssets] = useState<Ai3dAssetDefinition[]>([]);
@@ -130,6 +307,14 @@ export const AiChatPanel: React.FC<Props> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus input on mount for instantaneous, zero-click readiness
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 150);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Subscribe to 3D Asset Generated Events
   useEffect(() => {
@@ -333,6 +518,8 @@ export const AiChatPanel: React.FC<Props> = ({
             </div>
             <div className="flex flex-wrap justify-center gap-1.5 mt-1 max-w-xs">
               {[
+                'Why did Pump-1 trip? (Root Cause)',
+                'Triage active alarms (ISA-18.2)',
                 'What alarms are active?',
                 'Summarize dashboards',
                 'Generate a cooling P&ID diagram',
@@ -441,6 +628,35 @@ export const AiChatPanel: React.FC<Props> = ({
                   <div className="whitespace-pre-wrap">
                     {renderMessageContent(msg.content, (url, alt) => setLightboxImage({ url, alt }))}
                   </div>
+
+                  {/* In-Chat SCADA Diagnostic Card (RCA / Triage) */}
+                  {msg.jevDiagnostic && (
+                    <JevDiagnosticChatCard
+                      diagnostic={msg.jevDiagnostic}
+                      onOpenSafetyModal={() => setSafetyModalTarget({ diagnostic: msg.jevDiagnostic!, msgIndex: idx })}
+                    />
+                  )}
+
+                  {/* In-Chat Multi-Asset Quick Disambiguation Picker */}
+                  {msg.candidateAssets && msg.candidateAssets.length > 0 && (
+                    <div className="mt-2.5 p-2.5 bg-slate-950/80 border border-sky-500/30 rounded-xl space-y-2">
+                      <span className="text-[11px] text-slate-300 font-mono block">
+                        Select equipment to inspect:
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {msg.candidateAssets.map((asset) => (
+                          <button
+                            key={asset.id}
+                            type="button"
+                            onClick={() => onSendMessage(`Why did ${asset.name} trip?`)}
+                            className="px-2.5 py-1 bg-sky-950 hover:bg-sky-900/80 text-sky-300 border border-sky-500/40 rounded-lg text-xs font-semibold transition-all hover:scale-102 active:scale-95 cursor-pointer shadow-sm"
+                          >
+                            {asset.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -659,7 +875,7 @@ export const AiChatPanel: React.FC<Props> = ({
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="text-[9px] bg-sky-500/20 text-sky-300 font-bold px-1.5 py-0.5 rounded border border-sky-500/30 uppercase tracking-wider">
-                          🤖 3D Model Generated
+                          3D Model Generated
                         </span>
                         <span className="text-[10px] text-slate-400">{asset.category}</span>
                       </div>
@@ -953,6 +1169,106 @@ export const AiChatPanel: React.FC<Props> = ({
               />
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Two-Stage Safety Confirmation Modal for Hardware Interlocks */}
+      {safetyModalTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-red-500/50 rounded-2xl p-5 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-red-400 font-bold text-sm">
+                <AlertTriangle size={18} />
+                <span>Industrial Safety Interlock — Confirmation</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSafetyModalTarget(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-3 bg-red-950/40 border border-red-500/30 rounded-xl text-xs text-red-200 space-y-1.5">
+              <p className="font-semibold text-red-300">
+                CRITICAL OPERATIONAL COMMAND:
+              </p>
+              <p className="text-[11px] text-slate-300">
+                You are about to dispatch a hardware emergency trip sequence to the live plant automation bus.
+              </p>
+            </div>
+
+            <div className="space-y-2 text-xs bg-slate-950/70 p-3 rounded-xl border border-slate-800">
+              <div className="flex justify-between py-1 border-b border-slate-800/60">
+                <span className="text-slate-400">Target Asset:</span>
+                <strong className="text-white font-mono">{safetyModalTarget.diagnostic.targetAsset}</strong>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-800/60">
+                <span className="text-slate-400">Safety Action:</span>
+                <strong className="text-red-400 font-mono">{safetyModalTarget.diagnostic.immediateAction}</strong>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-800/60">
+                <span className="text-slate-400">Target PLC Tag:</span>
+                <span className="text-amber-300 font-mono">{safetyModalTarget.diagnostic.targetTag || 'PLC_SAFETY_TRIP'}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-800/60">
+                <span className="text-slate-400">Command Written:</span>
+                <span className="text-emerald-400 font-mono">1 (EMERGENCY ISOLATE)</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-slate-400">Operator Identity:</span>
+                <span className="text-slate-200 font-mono">Engineering Studio Admin</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setSafetyModalTarget(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsExecutingInterlock(true);
+                  try {
+                    const action = safetyModalTarget.diagnostic.immediateAction || 'TRIP';
+                    const tag = safetyModalTarget.diagnostic.targetTag || 'PLC_SAFETY_TRIP';
+                    if (onExecuteInterlock) {
+                      await onExecuteInterlock(action, tag, 1);
+                    }
+                    // Update diagnostic payload in message
+                    safetyModalTarget.diagnostic.interlockExecuted = {
+                      operator: 'Admin',
+                      executedAt: new Date().toISOString(),
+                      tagWritten: tag
+                    };
+                    setInterlockExecutedNotice(`Interlock dispatched to ${tag}: ${action}`);
+                    setTimeout(() => setInterlockExecutedNotice(null), 5000);
+                    setSafetyModalTarget(null);
+                  } finally {
+                    setIsExecutingInterlock(false);
+                  }
+                }}
+                disabled={isExecutingInterlock}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg active:scale-95 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Zap size={14} />
+                <span>{isExecutingInterlock ? 'Dispatching Interlock...' : 'Confirm Hardware Trip'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Interlock Dispatched Toast */}
+      {interlockExecutedNotice && (
+        <div className="fixed bottom-20 right-6 z-50 p-3 bg-emerald-950/90 border border-emerald-500/60 rounded-xl text-xs text-emerald-200 shadow-2xl flex items-center gap-2 animate-fadeIn">
+          <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+          <span><strong>Hardware Interlock Dispatched:</strong> {interlockExecutedNotice}</span>
         </div>
       )}
     </div>

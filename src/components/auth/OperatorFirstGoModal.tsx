@@ -49,7 +49,7 @@ Username: ${username.trim()}
 Password: ${password}
 Rights: Administrator (Full System Access)
 
-⚠️ KEEP THIS FILE SECURE.
+WARNING: KEEP THIS FILE SECURE.
 These credentials are required to manage operators, configure system settings, and access the Engineering Studio.`;
 
       const blob = new Blob([content], { type: 'text/plain' });

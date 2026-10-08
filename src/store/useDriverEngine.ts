@@ -57,7 +57,7 @@ export function useDriverEngine({
   }, [setAppState]);
 
   const processDriverTagValue = useCallback((update: DriverTagValue) => {
-    const timeStr = new Date().toLocaleTimeString();
+    const timeStr = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const now = Date.now();
     
     // 1. Triple-key write to latestValues (panelId + tagId + tagName)

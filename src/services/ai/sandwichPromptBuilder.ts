@@ -39,7 +39,7 @@ export function buildSandwichPrompt(options: SandwichPromptOptions): {
     'You are the TASC IIoT Studio Senior Industrial Diagnostics & SCADA AI Copilot. You analyze industrial telemetry, diagnose equipment trips, calculate energy/financial waste, and provide actionable maintenance steps.';
 
   // ─── 1. TOP ANCHOR: High-Priority Safety & Trips ───
-  let topZone = `### 🚨 CRITICAL SAFETY & ACTIVE TRIP NOTIFICATIONS (HIGHEST PRIORITY)\n`;
+  let topZone = `### CRITICAL SAFETY & ACTIVE TRIP NOTIFICATIONS (HIGHEST PRIORITY)\n`;
   if (options.activeTrips && options.activeTrips.length > 0) {
     topZone += options.activeTrips.map(t => 
       `- **[${t.severity}] ${t.tag}**: ${t.message} (Triggered: ${t.timestamp})`
@@ -49,7 +49,7 @@ export function buildSandwichPrompt(options: SandwichPromptOptions): {
   }
 
   // ─── 2. MIDDLE ZONE: Background Specs & Static SOPs ───
-  let middleZone = `\n### 📋 EQUIPMENT NAMEPLATE & BASELINE SPECIFICATIONS\n`;
+  let middleZone = `\n### EQUIPMENT NAMEPLATE & BASELINE SPECIFICATIONS\n`;
   if (options.equipmentMetadata && options.equipmentMetadata.length > 0) {
     middleZone += options.equipmentMetadata.map(e =>
       `- **${e.name}** (${e.type}): Nominal: ${e.nominalRating}`
@@ -57,23 +57,23 @@ export function buildSandwichPrompt(options: SandwichPromptOptions): {
   }
 
   if (options.ragContext) {
-    middleZone += `\n### 📖 RELEVANT ENGINEERING HANDBOOK / SOP EXCERPTS (RAG GROUNDING)\n${options.ragContext}\n`;
+    middleZone += `\n### RELEVANT ENGINEERING HANDBOOK / SOP EXCERPTS (RAG GROUNDING)\n${options.ragContext}\n`;
   }
 
   // ─── 3. BOTTOM ANCHOR: Live Telemetry Dynamics & Recency User Query ───
-  let bottomZone = `\n### 📈 LIVE SENSOR TELEMETRY & EP-LTTB DOWNSAMPLED DYNAMICS\n`;
+  let bottomZone = `\n### LIVE SENSOR TELEMETRY & EP-LTTB DOWNSAMPLED DYNAMICS\n`;
   if (options.telemetrySummaries && options.telemetrySummaries.length > 0) {
     bottomZone += options.telemetrySummaries.map(t => t.compactMarkdownSummary).join('\n\n') + '\n';
   } else {
     bottomZone += `*No dynamic time-series sensors attached to this query.*\n`;
   }
 
-  bottomZone += `\n### 🎯 OPERATOR QUERY (IMMEDIATE OBJECTIVE)\n${options.userQuery}\n`;
+  bottomZone += `\n### OPERATOR QUERY (IMMEDIATE OBJECTIVE)\n${options.userQuery}\n`;
 
   if (options.outputFormatInstructions) {
-    bottomZone += `\n### 📝 STRICT OUTPUT FORMAT REQUIREMENTS\n${options.outputFormatInstructions}`;
+    bottomZone += `\n### STRICT OUTPUT FORMAT REQUIREMENTS\n${options.outputFormatInstructions}`;
   } else {
-    bottomZone += `\n### 📝 STRICT OUTPUT FORMAT REQUIREMENTS\nProvide a structured industrial diagnosis with:\n1. **Root Cause Analysis**\n2. **Financial & Energy Waste Assessment**\n3. **Immediate Corrective SOP Actions (Step-by-Step)**`;
+    bottomZone += `\n### STRICT OUTPUT FORMAT REQUIREMENTS\nProvide a structured industrial diagnosis with:\n1. **Root Cause Analysis**\n2. **Financial & Energy Waste Assessment**\n3. **Immediate Corrective SOP Actions (Step-by-Step)**`;
   }
 
   // Combine user prompt maintaining the Sandwich Architecture

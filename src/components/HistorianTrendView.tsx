@@ -700,7 +700,7 @@ export const HistorianTrendView: React.FC<HistorianTrendViewProps> = ({
                                     <span>{tag.name}</span>
                                     {!masterTagFound && (
                                       <span className="text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/40 px-1.5 py-0.2 rounded font-mono" title="Master tag unlinked in Driver Tag Manager">
-                                        ⚠️ Unlinked
+                                        Unlinked
                                       </span>
                                     )}
                                   </div>
@@ -718,7 +718,7 @@ export const HistorianTrendView: React.FC<HistorianTrendViewProps> = ({
                                       ? 'bg-violet-500/20 text-violet-300 border-violet-500/40'
                                       : 'bg-sky-500/20 text-sky-300 border-sky-500/40'
                                   }`}>
-                                    {isDriver ? '🔌 Driver' : '🏷️ MQTT'}
+                                    {isDriver ? 'Driver' : 'MQTT'}
                                   </span>
                                   <span className="text-[11px] font-mono text-slate-300 truncate max-w-[200px]">
                                     {isDriver ? (tag.driverTagId || 'PLC Register') : (tag.topic || '---')}
@@ -745,7 +745,7 @@ export const HistorianTrendView: React.FC<HistorianTrendViewProps> = ({
                             <td className="py-2.5 px-3">
                               {tag.useCustomInterval ? (
                                 <div className="text-[10px] text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-md inline-block font-mono">
-                                  ⚡ {tag.customIntervalSeconds}s Custom
+                                  {tag.customIntervalSeconds}s Custom
                                   {tag.deadband !== undefined && tag.deadband > 0 && ` (±${tag.deadband}%)`}
                                 </div>
                               ) : (
@@ -954,7 +954,7 @@ export const HistorianTrendView: React.FC<HistorianTrendViewProps> = ({
                   <span>Live Storage Footprint Estimator</span>
                 </h3>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-950 border border-slate-800 text-slate-400">
-                  {storageEstimate.isPC ? '💻 Workstation Mode' : '📱 Mobile Safe Mode'}
+                  {storageEstimate.isPC ? 'Workstation Mode' : 'Mobile Safe Mode'}
                 </span>
               </div>
 
@@ -1424,7 +1424,7 @@ export const HistorianTrendView: React.FC<HistorianTrendViewProps> = ({
                         : 'bg-slate-950 text-slate-400 border-slate-800'
                     }`}
                   >
-                    🏷️ MQTT Broker Tag
+                    MQTT Broker Tag
                   </button>
 
                   <button
@@ -1436,7 +1436,7 @@ export const HistorianTrendView: React.FC<HistorianTrendViewProps> = ({
                         : 'bg-slate-950 text-slate-400 border-slate-800'
                     }`}
                   >
-                    🔌 Driver Hardware Tag
+                    Driver Hardware Tag
                   </button>
                 </div>
               </div>
@@ -1558,7 +1558,7 @@ export const HistorianTrendView: React.FC<HistorianTrendViewProps> = ({
               {/* Collapsible Advanced Overrides */}
               <div className="p-3 bg-slate-950/70 border border-slate-800/80 rounded-xl space-y-2.5">
                 <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">
-                  ⚙️ Advanced Sampling & Deadband Overrides
+                  Advanced Sampling & Deadband Overrides
                 </span>
 
                 <div className="flex items-center justify-between">

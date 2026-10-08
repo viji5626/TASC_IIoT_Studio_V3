@@ -251,13 +251,13 @@ export const TemplateReportManager: React.FC = () => {
     try {
       const result = await generateTemplateReport(tmpl, from, to, bypassCap);
       if (result.success) {
-        setGenerateResult(`✅ Report generated! ${result.rowsWritten.toLocaleString()} rows written to "${result.filename}". Download started.${result.rowLimitApplied ? ' ⚠️ Row limit was applied — some data may be trimmed. Enable "Bypass Cap" to get full data.' : ''}`);
+        setGenerateResult(`Report generated successfully! ${result.rowsWritten.toLocaleString()} rows written to "${result.filename}". Download started.${result.rowLimitApplied ? ' (Row limit was applied — some data may be trimmed. Enable "Bypass Cap" to get full data.)' : ''}`);
         refreshTemplates();
       } else {
-        setGenerateResult(`❌ Error: ${result.errorMessage}`);
+        setGenerateResult(`Error: ${result.errorMessage}`);
       }
     } catch (e: any) {
-      setGenerateResult(`❌ Unexpected error: ${e.message}`);
+      setGenerateResult(`Unexpected error: ${e.message}`);
     }
     setIsGenerating(false);
   };
@@ -864,7 +864,7 @@ export const TemplateReportManager: React.FC = () => {
 
                 {generateResult && (
                   <div className={`rounded-xl px-4 py-3 text-xs leading-relaxed ${
-                    generateResult.startsWith('✅')
+                    !generateResult.startsWith('Error') && !generateResult.startsWith('Unexpected')
                       ? 'bg-emerald-950/80 border border-emerald-500/40 text-emerald-300'
                       : 'bg-red-950/80 border border-red-500/40 text-red-300'
                   }`}>

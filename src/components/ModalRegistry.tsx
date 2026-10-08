@@ -384,7 +384,7 @@ export const ModalRegistry: React.FC<ModalRegistryProps> = React.memo(({
 
       {/* Interactive CoachMark / Product Tour Overlay */}
       <CoachMarkOverlay
-        isOpen={isTourOpen}
+        isOpen={isTourOpen && !isAiDrawerOpen}
         onClose={() => setIsTourOpen(false)}
         onNavigate={setCurrentView}
         onOpenFdd={() => setIsFddModalOpen(true)}
@@ -394,7 +394,12 @@ export const ModalRegistry: React.FC<ModalRegistryProps> = React.memo(({
 
       {/* AI Copilot Floating Action Button */}
       {!isClient && (currentView === AppView.DASHBOARD || currentView === AppView.WEB_HMI) && (
-        <AiChatFab onClick={() => setIsAiDrawerOpen(true)} />
+        <AiChatFab
+          onClick={() => {
+            if (isTourOpen) setIsTourOpen(false);
+            setIsAiDrawerOpen(true);
+          }}
+        />
       )}
 
       {/* AI Copilot Slide-in Drawer */}

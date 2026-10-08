@@ -46,13 +46,34 @@ const AddConnectionView: React.FC<AddConnectionViewProps> = ({ onCancel, onCreat
     legacyLayout: false
   });
 
+  // Normalize protocol string to match exact <option> values (case-insensitive)
+  const normalizeProtocol = (p?: string): string => {
+    const s = (p || '').trim();
+    if (/^tcp-ssl$/i.test(s)) return 'TCP-SSL';
+    if (/^tcp$/i.test(s) || /^mqtt$/i.test(s)) return 'TCP';
+    if (/^websocket-ssl$/i.test(s) || /^wss$/i.test(s)) return 'WebSocket-SSL';
+    if (/^websocket$/i.test(s) || /^ws$/i.test(s)) return 'WebSocket';
+    return 'WebSocket'; // safe fallback
+  };
+
+  // Default port per protocol
+  const defaultPortForProtocol = (proto: string): number => {
+    switch (proto) {
+      case 'TCP': return 1883;
+      case 'TCP-SSL': return 8883;
+      case 'WebSocket-SSL': return 8084;
+      default: return 8083; // WebSocket
+    }
+  };
+
   useEffect(() => {
     if (initialData) {
+      const proto = normalizeProtocol(initialData.protocol);
       setFormData({
         connectionName: initialData.connectionName ?? '',
         brokerAddress: initialData.brokerAddress ?? 'broker.emqx.io',
-        port: initialData.port ?? 8084,
-        protocol: initialData.protocol ?? 'WebSocket',
+        port: initialData.port ?? defaultPortForProtocol(proto),
+        protocol: proto,
         clientId: initialData.clientId ?? '',
         username: initialData.username ?? '',
         password: initialData.password ?? '',
@@ -71,7 +92,19 @@ const AddConnectionView: React.FC<AddConnectionViewProps> = ({ onCancel, onCreat
 
   const handleChange = (e: any) => {
     const { name, value, type, checked } = e.target;
-    setFormData((prev: any) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+    setFormData((prev: any) => {
+      const updated = { ...prev, [name]: type === 'checkbox' ? checked : value };
+      // When protocol changes, auto-update port to the standard default
+      if (name === 'protocol') {
+        const currentPort = Number(prev.port);
+        const knownDefaults = [1883, 8883, 8083, 8084];
+        // Only auto-update if port is still a known default (not user-customised)
+        if (knownDefaults.includes(currentPort)) {
+          updated.port = defaultPortForProtocol(value);
+        }
+      }
+      return updated;
+    });
   };
 
   const openAddDash = () => {

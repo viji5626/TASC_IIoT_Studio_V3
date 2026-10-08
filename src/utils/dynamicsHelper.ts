@@ -1,5 +1,5 @@
 import { Panel, DynamicBehaviorRule } from '../types';
-import { getJsonValue } from './mqttHelper';
+import { getJsonValue, resolveTagValueWithBit, parseBitExtractionPath, extractBitValue } from './mqttHelper';
 import { staticTagService } from '../services/assets/staticTagService';
 import { sqlTagEngine } from '../services/data/sqlTagEngine';
 
@@ -63,21 +63,20 @@ export function evaluatePanelDynamics(
 
     if (tagKey) {
       const cleanKey = String(tagKey).trim();
-      if (latestValues[cleanKey] !== undefined) {
-        rawVal = latestValues[cleanKey]?.val !== undefined ? latestValues[cleanKey].val : latestValues[cleanKey];
-      } else {
-        // Try finding by case-insensitive match or tag_panel_ prefix
-        for (const [k, v] of Object.entries(latestValues)) {
-          if (k.toLowerCase() === cleanKey.toLowerCase() || k === `tag_panel_${cleanKey}` || k.toLowerCase() === `tag_panel_${cleanKey.toLowerCase()}`) {
-            rawVal = v?.val !== undefined ? v.val : v;
-            break;
-          }
-        }
-      }
+      rawVal = resolveTagValueWithBit(cleanKey, latestValues);
 
       // Check Static SCADA Local Tags (Memory/Setpoints)
       if (rawVal === undefined) {
         rawVal = staticTagService.getTagValue(cleanKey);
+        if (rawVal === undefined) {
+          const bitInfo = parseBitExtractionPath(cleanKey);
+          if (bitInfo.bitIndex !== undefined && bitInfo.basePath) {
+            const baseStatic = staticTagService.getTagValue(bitInfo.basePath);
+            if (baseStatic !== undefined) {
+              rawVal = extractBitValue(baseStatic, bitInfo.bitIndex);
+            }
+          }
+        }
       }
 
       // Check Database SQL Tags
@@ -85,17 +84,27 @@ export function evaluatePanelDynamics(
         const sqlVal = sqlTagEngine.getValue(cleanKey);
         if (sqlVal && sqlVal.value !== null) {
           rawVal = sqlVal.value;
+        } else {
+          const bitInfo = parseBitExtractionPath(cleanKey);
+          if (bitInfo.bitIndex !== undefined && bitInfo.basePath) {
+            const baseSql = sqlTagEngine.getValue(bitInfo.basePath);
+            if (baseSql && baseSql.value !== null) {
+              rawVal = extractBitValue(baseSql.value, bitInfo.bitIndex);
+            }
+          }
         }
       }
     }
 
     // Fallback to panel's own primary tag or panelId if not resolved
     if (rawVal === undefined) {
-      if (panel.driverTagId && latestValues[panel.driverTagId] !== undefined) {
-        rawVal = latestValues[panel.driverTagId]?.val !== undefined ? latestValues[panel.driverTagId].val : latestValues[panel.driverTagId];
-      } else if (panel.topic && latestValues[panel.topic] !== undefined) {
-        rawVal = latestValues[panel.topic]?.val !== undefined ? latestValues[panel.topic].val : latestValues[panel.topic];
-      } else if (latestValues[panel.panelId] !== undefined) {
+      if (panel.driverTagId) {
+        rawVal = resolveTagValueWithBit(panel.driverTagId, latestValues);
+      }
+      if (rawVal === undefined && panel.topic) {
+        rawVal = resolveTagValueWithBit(panel.topic, latestValues);
+      }
+      if (rawVal === undefined && panel.panelId && latestValues[panel.panelId] !== undefined) {
         rawVal = latestValues[panel.panelId]?.val !== undefined ? latestValues[panel.panelId].val : latestValues[panel.panelId];
       }
     }
@@ -293,19 +302,19 @@ export function getMotionTagValue(panel: Panel, latestValues: Record<string, any
   // Custom tag mode vs element's own primary tag
   if (panel.motionTagMode === 'custom') {
     if (panel.motionDataSourceMode === 'driver' && panel.motionDriverTagId) {
-      return latestValues[panel.motionDriverTagId]?.val ?? latestValues[panel.motionDriverTagId];
+      return resolveTagValueWithBit(panel.motionDriverTagId, latestValues);
     }
     if (panel.motionTopic) {
-      return latestValues[panel.motionTopic]?.val ?? latestValues[panel.motionTopic];
+      return resolveTagValueWithBit(panel.motionTopic, latestValues);
     }
   }
 
   // Fallback to panel's own primary tag / topic
   if (panel.dataSourceMode === 'driver' && panel.driverTagId) {
-    return latestValues[panel.driverTagId]?.val ?? latestValues[panel.driverTagId];
+    return resolveTagValueWithBit(panel.driverTagId, latestValues);
   }
   if (panel.topic) {
-    return latestValues[panel.topic]?.val ?? latestValues[panel.topic];
+    return resolveTagValueWithBit(panel.topic, latestValues);
   }
   return latestValues[panel.panelId]?.val ?? latestValues[panel.panelId];
 }
@@ -319,19 +328,19 @@ export function getRotationTagValue(panel: Panel, latestValues: Record<string, a
   // Custom tag mode vs element's own primary tag
   if (panel.rotationTagMode === 'custom') {
     if (panel.rotationDataSourceMode === 'driver' && panel.rotationDriverTagId) {
-      return latestValues[panel.rotationDriverTagId]?.val ?? latestValues[panel.rotationDriverTagId];
+      return resolveTagValueWithBit(panel.rotationDriverTagId, latestValues);
     }
     if (panel.rotationTopic) {
-      return latestValues[panel.rotationTopic]?.val ?? latestValues[panel.rotationTopic];
+      return resolveTagValueWithBit(panel.rotationTopic, latestValues);
     }
   }
 
   // Fallback to panel's own primary tag / topic
   if (panel.dataSourceMode === 'driver' && panel.driverTagId) {
-    return latestValues[panel.driverTagId]?.val ?? latestValues[panel.driverTagId];
+    return resolveTagValueWithBit(panel.driverTagId, latestValues);
   }
   if (panel.topic) {
-    return latestValues[panel.topic]?.val ?? latestValues[panel.topic];
+    return resolveTagValueWithBit(panel.topic, latestValues);
   }
   return latestValues[panel.panelId]?.val ?? latestValues[panel.panelId];
 }

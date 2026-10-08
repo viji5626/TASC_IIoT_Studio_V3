@@ -51,7 +51,7 @@ export function verifyAiResponseTruth(
       verifiedCount: 0,
       citations: [],
       sanitizedOutputText: aiResponseText,
-      overallBadge: { status: 'VERIFIED', label: '🛡️ Telemetry Verified', color: '#10b981' }
+      overallBadge: { status: 'VERIFIED', label: 'Telemetry Verified', color: '#10b981' }
     };
   }
 
@@ -90,7 +90,7 @@ export function verifyAiResponseTruth(
         isVerified,
         tier: 'RAW_TELEMETRY',
         deviationPercent: Number(deviation.toFixed(1)),
-        badgeLabel: isVerified ? '🛡️ Raw Telemetry Verified' : '⚠️ Value Drift > 2%'
+        badgeLabel: isVerified ? 'Raw Telemetry Verified' : 'Value Drift > 2%'
       });
     }
   }
@@ -107,7 +107,7 @@ export function verifyAiResponseTruth(
       isVerified: true,
       tier: 'COMPUTED_FORMULA',
       deviationPercent: 0,
-      badgeLabel: '📐 Computed Formula Verified'
+      badgeLabel: 'Computed Formula Verified'
     });
   }
 
@@ -116,20 +116,20 @@ export function verifyAiResponseTruth(
 
   let overallBadge: { status: 'VERIFIED' | 'COMPUTED' | 'WARNING'; label: string; color: string } = {
     status: 'VERIFIED',
-    label: '🛡️ Grounded Telemetry Verified',
+    label: 'Grounded Telemetry Verified',
     color: '#10b981'
   };
 
   if (citations.some(c => !c.isVerified)) {
     overallBadge = {
       status: 'WARNING',
-      label: '⚠️ Telemetry Divergence Detected',
+      label: 'Telemetry Divergence Detected',
       color: '#f59e0b'
     };
   } else if (citations.some(c => c.tier === 'COMPUTED_FORMULA')) {
     overallBadge = {
       status: 'COMPUTED',
-      label: '📐 Telemetry & Formulas Verified',
+      label: 'Telemetry & Formulas Verified',
       color: '#38bdf8'
     };
   }

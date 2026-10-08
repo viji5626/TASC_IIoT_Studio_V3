@@ -49,6 +49,18 @@ const LandingPage: React.FC<LandingPageProps> = ({
   const hasCommercialSaved = !!commercialPackage;
   const hasCommunitySaved = !!communityPackage;
 
+  // Check build environment: 'desktop' (Inno Setup offline installer) vs 'web' (Netlify/GitHub/Localhost)
+  const [isDesktopInstaller] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const target = params.get('target') || params.get('edition');
+      if (target === 'desktop') return true;
+      if (target === 'web' || target === 'community') return false;
+      if ((window as any).__TASC_BUILD_TARGET__ === 'desktop') return true;
+    }
+    return (import.meta as any).env?.VITE_BUILD_TARGET === 'desktop';
+  });
+
   const handleAdminSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdminError('');
@@ -206,99 +218,105 @@ const LandingPage: React.FC<LandingPageProps> = ({
             Industrial Automation & HMI Runtime Architecture
           </h2>
           <p className="text-[11px] sm:text-xs text-slate-400 leading-normal max-w-xl mx-auto">
-            Choose your application mode below to begin. Build custom HMI screens in Community Mode, load pre-configured client runtime packages, or enter Engineering Studio.
+            {isDesktopInstaller
+              ? 'Choose your application mode below to begin. Load pre-configured client runtime packages, or authenticate to enter Engineering Studio.'
+              : 'Choose your application mode below to begin. Build custom HMI screens in Community Mode, load pre-configured client runtime packages, or enter Engineering Studio.'}
           </p>
         </div>
 
-        {/* 3 Product Edition Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3.5 sm:gap-5 items-stretch">
-          
-          {/* OPTION 1: COMMUNITY EDITION */}
-          <div className="bg-slate-900/80 hover:bg-slate-900/95 border border-slate-800/90 hover:border-emerald-500/50 rounded-2xl p-4 sm:p-5 flex flex-col justify-between shadow-2xl backdrop-blur-xl transition-all duration-300 hover:shadow-emerald-500/10 group relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-bl-full pointer-events-none group-hover:bg-emerald-500/10 transition-all" />
-            
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center text-lg shadow-inner">
-                  <i className="fas fa-cube"></i>
+        {/* Product Edition Cards: 2 Cards for Desktop Offline Installer, 3 Cards for Web/Hosting/Localhost */}
+        <div className={isDesktopInstaller 
+          ? "grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6 max-w-4xl mx-auto items-stretch w-full"
+          : "grid grid-cols-1 lg:grid-cols-3 gap-3.5 sm:gap-5 items-stretch w-full max-w-6xl mx-auto"
+        }>
+          {!isDesktopInstaller && (
+            /* OPTION 1: COMMUNITY EDITION */
+            <div className="bg-slate-900/80 hover:bg-slate-900/95 border border-slate-800/90 hover:border-emerald-500/50 rounded-2xl p-4 sm:p-5 flex flex-col justify-between shadow-2xl backdrop-blur-xl transition-all duration-300 hover:shadow-emerald-500/10 group relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-bl-full pointer-events-none group-hover:bg-emerald-500/10 transition-all" />
+              
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center text-lg shadow-inner">
+                    <i className="fas fa-cube"></i>
+                  </div>
+                  <span className="text-[9px] font-extrabold uppercase tracking-widest bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
+                    Free • Self-Serve
+                  </span>
                 </div>
-                <span className="text-[9px] font-extrabold uppercase tracking-widest bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
-                  Free • Self-Serve
-                </span>
+
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-white group-hover:text-emerald-300 transition-colors">
+                    Community Edition
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                    For learning, testing, and building small personal MQTT HMI dashboards.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5 pt-1.5 border-t border-slate-800/80 text-[11px]">
+                  <div className="flex items-start space-x-2 text-slate-300">
+                    <i className="fas fa-check text-emerald-400 mt-0.5 shrink-0 text-[10px]"></i>
+                    <span>Connect to custom MQTT broker</span>
+                  </div>
+                  <div className="flex items-start space-x-2 text-emerald-300 font-medium">
+                    <i className="fas fa-unlock text-emerald-400 mt-0.5 shrink-0 text-[10px]"></i>
+                    <span><strong>Unlocked Web HMI Canvas & 3D SCADA Studio</strong></span>
+                  </div>
+                  <div className="flex items-start space-x-2 text-amber-300 font-medium">
+                    <i className="fas fa-circle-exclamation text-amber-400 mt-0.5 shrink-0 text-[10px]"></i>
+                    <span><strong>Limit: Max 1 Screen</strong> (Single Dashboard)</span>
+                  </div>
+                  <div className="flex items-start space-x-2 text-amber-300 font-medium">
+                    <i className="fas fa-circle-exclamation text-amber-400 mt-0.5 shrink-0 text-[10px]"></i>
+                    <span><strong>Limit: Max 10 Widgets</strong> (10 Panels max)</span>
+                  </div>
+                  <div className="flex items-start space-x-2 text-slate-400">
+                    <i className="fas fa-lock text-slate-500 mt-0.5 shrink-0 text-[10px]"></i>
+                    <span>Full Editing Unlocked • Backup/Restore Revoked</span>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <h3 className="text-base sm:text-lg font-bold text-white group-hover:text-emerald-300 transition-colors">
-                  Community Edition
-                </h3>
-                <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                  For learning, testing, and building small personal MQTT HMI dashboards.
-                </p>
-              </div>
-
-              <div className="space-y-1.5 pt-1.5 border-t border-slate-800/80 text-[11px]">
-                <div className="flex items-start space-x-2 text-slate-300">
-                  <i className="fas fa-check text-emerald-400 mt-0.5 shrink-0 text-[10px]"></i>
-                  <span>Connect to custom MQTT broker</span>
-                </div>
-                <div className="flex items-start space-x-2 text-emerald-300 font-medium">
-                  <i className="fas fa-unlock text-emerald-400 mt-0.5 shrink-0 text-[10px]"></i>
-                  <span><strong>Unlocked Web HMI Canvas & 3D SCADA Studio</strong></span>
-                </div>
-                <div className="flex items-start space-x-2 text-amber-300 font-medium">
-                  <i className="fas fa-circle-exclamation text-amber-400 mt-0.5 shrink-0 text-[10px]"></i>
-                  <span><strong>Limit: Max 1 Screen</strong> (Single Dashboard)</span>
-                </div>
-                <div className="flex items-start space-x-2 text-amber-300 font-medium">
-                  <i className="fas fa-circle-exclamation text-amber-400 mt-0.5 shrink-0 text-[10px]"></i>
-                  <span><strong>Limit: Max 10 Widgets</strong> (10 Panels max)</span>
-                </div>
-                <div className="flex items-start space-x-2 text-slate-400">
-                  <i className="fas fa-lock text-slate-500 mt-0.5 shrink-0 text-[10px]"></i>
-                  <span>Full Editing Unlocked • Backup/Restore Revoked</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-4 mt-auto">
-              {hasCommunitySaved && communityPackage ? (
-                <div className="space-y-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (onLoadSavedCommunitySetup) onLoadSavedCommunitySetup(false);
-                      else onSelectCommunityMode();
-                    }}
-                    className="w-full py-2.5 px-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/20 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer"
-                  >
-                    <i className="fas fa-rotate-left text-xs"></i>
-                    <span>Resume Community Demo ({communityPackage.meta.panelsCount} Wdgt)</span>
-                  </button>
+              <div className="pt-4 mt-auto">
+                {hasCommunitySaved && communityPackage ? (
+                  <div className="space-y-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onLoadSavedCommunitySetup) onLoadSavedCommunitySetup(false);
+                        else onSelectCommunityMode();
+                      }}
+                      className="w-full py-2.5 px-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/20 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer"
+                    >
+                      <i className="fas fa-rotate-left text-xs"></i>
+                      <span>Resume Community Demo ({communityPackage.meta.panelsCount} Wdgt)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSelectCommunityMode();
+                      }}
+                      className="w-full py-1 px-2 text-emerald-400 hover:text-emerald-300 font-semibold text-[10px] flex items-center justify-center space-x-1 transition-colors cursor-pointer"
+                    >
+                      <i className="fas fa-plus text-[10px]"></i>
+                      <span>Start Fresh Community Session</span>
+                    </button>
+                  </div>
+                ) : (
                   <button
                     type="button"
                     onClick={() => {
                       onSelectCommunityMode();
                     }}
-                    className="w-full py-1 px-2 text-emerald-400 hover:text-emerald-300 font-semibold text-[10px] flex items-center justify-center space-x-1 transition-colors cursor-pointer"
+                    className="w-full py-2.5 px-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/20 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer"
                   >
-                    <i className="fas fa-plus text-[10px]"></i>
-                    <span>Start Fresh Community Session</span>
+                    <span>Start Community Edition</span>
+                    <i className="fas fa-arrow-right text-xs"></i>
                   </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSelectCommunityMode();
-                  }}
-                  className="w-full py-2.5 px-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/20 active:scale-98 transition-all flex items-center justify-center space-x-2 cursor-pointer"
-                >
-                  <span>Start Community Edition</span>
-                  <i className="fas fa-arrow-right text-xs"></i>
-                </button>
-              )}
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* OPTION 2: CLIENT EDITION */}
           <div className="bg-slate-900/80 hover:bg-slate-900/95 border border-sky-500/40 hover:border-sky-400 rounded-2xl p-4 sm:p-5 flex flex-col justify-between shadow-2xl backdrop-blur-xl transition-all duration-300 hover:shadow-sky-500/10 group relative overflow-hidden ring-1 ring-sky-500/20">

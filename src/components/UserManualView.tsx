@@ -656,6 +656,206 @@ export const UserManualView: React.FC<UserManualViewProps> = ({
           )
         }
       ]
+    },
+    {
+      id: 'ch14',
+      number: 14,
+      title: 'Industrial SMS & Email Alert Gateways Setup Guide',
+      category: 'Alarms & Telemetry',
+      icon: 'fa-tower-broadcast',
+      readTime: '7 min',
+      summary: 'Comprehensive setup guide for zero-cost mobile SMS alerts via LibreSMS Android GSM Gateway (over Tailscale or LAN) and real-time Email alerts via Secondary SMTP.',
+      sections: [
+        {
+          title: '14.1 LibreSMS Android GSM Gateway Architecture & Direct Download',
+          content: (
+            <div className="space-y-3 text-xs leading-relaxed text-slate-300">
+              <p>
+                In India and several international regions, telecom operators (Airtel, Jio, Vi, BSNL) enforce TRAI DLT regulations that decommissioned public Email-to-SMS domains. Sending emails to carrier addresses results in <code>550 User not found</code> bounces.
+              </p>
+              <p>
+                To provide <strong>100% free, subscriptionless mobile SMS alerts</strong> without paying for Twilio, AWS SNS, or commercial SMS gateways, TASC Studio integrates with <strong>LibreSMS</strong>. LibreSMS turns any standard Android phone with an active SIM card into an on-premise hardware GSM/LTE gateway that listens on local port <code>8686</code>.
+              </p>
+
+              <div className="my-3 p-4 bg-slate-950 border border-sky-500/30 rounded-2xl space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800">
+                  <div className="flex items-center space-x-2 text-sky-400 font-bold">
+                    <i className="fas fa-download"></i>
+                    <span>Download LibreSMS Android Gateway APK</span>
+                  </div>
+                  <span className="text-[10px] bg-sky-500/20 text-sky-300 border border-sky-500/40 px-2 py-0.5 rounded font-mono">
+                    Signed &amp; Verified Build
+                  </span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  <a
+                    href="https://drive.google.com/file/d/1O1qoeARBUMTE4LGmgenPBPbvWl6QdbSW/view?usp=sharing"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-sky-600 to-sky-500 hover:from-sky-500 hover:to-sky-400 text-white font-bold rounded-xl flex items-center justify-center space-x-2 transition-all shadow-lg shadow-sky-950/50 cursor-pointer"
+                  >
+                    <i className="fab fa-google-drive text-base"></i>
+                    <span>Direct Google Drive Download APK</span>
+                    <i className="fas fa-arrow-up-right-from-square text-xs ml-1"></i>
+                  </a>
+
+                  <div className="text-[11px] text-slate-400">
+                    <div>Or install directly from local repository:</div>
+                    <code className="text-sky-300 bg-slate-900 px-1.5 py-0.5 rounded font-mono text-[10px]">
+                      sms_gateway/libresms/com.libresms.app-Signed.apk
+                    </code>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        },
+        {
+          title: '14.2 Network Connectivity SOP (Tailscale Mesh VPN vs. Local Wi-Fi)',
+          content: (
+            <div className="space-y-3 text-xs leading-relaxed text-slate-300">
+              <p>
+                TASC SCADA communicates with the Android phone over HTTP on port <code>8686</code>. You can connect your phone using either Tailscale (recommended) or local plant Wi-Fi:
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="p-3.5 bg-slate-950 border border-emerald-500/30 rounded-xl space-y-2">
+                  <div className="font-bold text-emerald-300 flex items-center space-x-2">
+                    <i className="fas fa-network-wired"></i>
+                    <span>Method A: Tailscale Mesh VPN (Recommended)</span>
+                  </div>
+                  <ul className="list-disc list-inside text-[11px] text-slate-400 space-y-1">
+                    <li>Install Tailscale on both the SCADA PC and the Android phone.</li>
+                    <li>Sign in to the same Tailscale network account.</li>
+                    <li>Note the phone's Tailscale 100.x.y.z IP address (e.g. <code className="text-emerald-300 font-mono">100.67.124.78</code>).</li>
+                    <li>Works everywhere — even over 4G/5G cellular data or when the phone leaves the plant!</li>
+                  </ul>
+                  <div className="text-[10px] font-mono text-emerald-400 bg-slate-900 p-1.5 rounded">
+                    URL: http://100.x.y.z:8686
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+                  <div className="font-bold text-sky-300 flex items-center space-x-2">
+                    <i className="fas fa-wifi"></i>
+                    <span>Method B: Plant Local Wi-Fi (Offline LAN)</span>
+                  </div>
+                  <ul className="list-disc list-inside text-[11px] text-slate-400 space-y-1">
+                    <li>Connect the Android phone to the same Wi-Fi router as the SCADA server.</li>
+                    <li>Open phone Wi-Fi settings to check IP (e.g. <code className="text-sky-300 font-mono">192.168.1.50</code>).</li>
+                    <li>Assign a static DHCP lease on your router so the IP address remains constant.</li>
+                    <li>100% isolated and air-gapped from the public internet.</li>
+                  </ul>
+                  <div className="text-[10px] font-mono text-sky-400 bg-slate-900 p-1.5 rounded">
+                    URL: http://192.168.x.x:8686
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        },
+        {
+          title: '14.3 LibreSMS App Setup & Android System Settings',
+          content: (
+            <div className="space-y-3 text-xs leading-relaxed text-slate-300">
+              <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+                <div className="font-bold text-white text-xs">Step-by-Step Mobile App Configuration:</div>
+                <ol className="list-decimal list-inside text-[11px] text-slate-300 space-y-1 pl-1">
+                  <li>Open the <strong>LibreSMS</strong> app on your Android phone.</li>
+                  <li>Go to the <strong>Controls</strong> tab &rarr; Verify <strong>Listen Port</strong> is set to <code>8686</code>.</li>
+                  <li>Enable <strong>Auto-Start on Boot</strong> so the gateway resumes automatically after phone restarts.</li>
+                  <li>Tap <strong>SAVE CONFIGURATION</strong>.</li>
+                  <li>Go to the <strong>Dashboard</strong> tab &rarr; Tap <strong>START GATEWAY</strong>. The status dot will turn <strong className="text-emerald-400">Green</strong>.</li>
+                </ol>
+              </div>
+
+              <div className="p-3.5 bg-amber-950/30 border-l-4 border-amber-500 rounded-r-xl space-y-2">
+                <div className="font-bold text-amber-300 text-xs flex items-center space-x-1.5">
+                  <i className="fas fa-triangle-exclamation"></i>
+                  <span>Crucial Android System Permissions (Read Carefully):</span>
+                </div>
+                <div className="text-[11px] text-slate-300 space-y-1.5">
+                  <p>
+                    <strong>1. Keep "Messages" as Default SMS App:</strong> LibreSMS is a headless backend server, not a chat app. In your phone's <em>Settings &rarr; Apps &rarr; Default Apps &rarr; SMS App</em>, keep your normal <strong>Google Messages</strong> selected. This allows incoming alarms (even when sent to your own number) to ring and appear as normal conversation bubbles.
+                  </p>
+                  <p>
+                    <strong>2. Disable Battery Optimization:</strong> In Android <em>Settings &rarr; Apps &rarr; LibreSMS &rarr; Battery</em>, select <strong>Unrestricted</strong> (or "Don't Optimize"). Lock LibreSMS in your recent apps drawer so Android doesn't kill it when the screen turns off.
+                  </p>
+                  <p>
+                    <strong>3. Dual-SIM Selection:</strong> If using a dual-SIM phone, go to <em>Settings &rarr; SIM Card Manager</em> and set the default SMS SIM to the card with your active SMS recharge pack.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )
+        },
+        {
+          title: '14.4 Real-Time Alarm Email Alerts via Secondary SMTP',
+          content: (
+            <div className="space-y-3 text-xs leading-relaxed text-slate-300">
+              <p>
+                To complement instant SMS text alerts, TASC Studio includes an isolated <strong>Secondary SMTP Email Engine</strong>. When a critical parameter breaches, it formats a high-contrast industrial HTML email showing the breached tag, threshold, exact timestamp, and corrective operator SOP.
+              </p>
+
+              <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+                <div className="font-bold text-rose-300 text-xs flex items-center space-x-1.5">
+                  <i className="fas fa-key"></i>
+                  <span>Generating a Free Google App Password (SOP):</span>
+                </div>
+                <ol className="list-decimal list-inside text-[11px] text-slate-300 space-y-1 pl-1">
+                  <li>Log in to your dedicated alerting Google Account (e.g. <code>vijay.bsas@gmail.com</code>).</li>
+                  <li>Navigate to <strong>Google Account Security</strong> (<code>myaccount.google.com/security</code>).</li>
+                  <li>Ensure <strong>2-Step Verification</strong> is toggled <strong>ON</strong>.</li>
+                  <li>In the search box at the top, type <strong>App passwords</strong> and press Enter.</li>
+                  <li>Enter an app name (e.g. <code>TASC Alarm Alerts</code>) and click <strong>Create</strong>.</li>
+                  <li>Google will display a 16-character code (e.g. <code>txwkulwklpqxcunk</code>). Copy this password.</li>
+                  <li>In TASC Studio &rarr; <em>Live Alarm Center &rarr; Email Alerts</em> &rarr; Paste into the <strong>App Password</strong> field and save.</li>
+                </ol>
+              </div>
+            </div>
+          )
+        },
+        {
+          title: '14.5 Telemetry Live Alarm Center Verification Checklist',
+          content: (
+            <div className="space-y-3 text-xs leading-relaxed text-slate-300">
+              <p>
+                Before handing off the plant to field operators, verify both channels using the built-in testing tools:
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
+                <div className="p-3 bg-slate-950 border border-sky-500/30 rounded-xl space-y-1.5">
+                  <div className="font-bold text-sky-400 flex items-center space-x-1.5">
+                    <i className="fas fa-comment-sms"></i>
+                    <span>Verifying SMS Delivery</span>
+                  </div>
+                  <p className="text-slate-400">
+                    Open <em>Live Alarm Center &rarr; SMS Alerts</em>. In the Operator Phonebook, click <strong>Test</strong> next to your phone number. Verify that your phone rings with a <code>[TASC TEST]</code> verification SMS within 2 seconds.
+                  </p>
+                </div>
+
+                <div className="p-3 bg-slate-950 border border-rose-500/30 rounded-xl space-y-1.5">
+                  <div className="font-bold text-rose-400 flex items-center space-x-1.5">
+                    <i className="fas fa-envelope"></i>
+                    <span>Verifying Email Delivery</span>
+                  </div>
+                  <p className="text-slate-400">
+                    Open <em>Live Alarm Center &rarr; Email Alerts</em>. In the verification section, enter your email and click <strong>Send Test Email</strong>. Confirm receipt of the green-bordered verification email in your mailbox.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3 bg-emerald-950/40 border border-emerald-500/30 rounded-xl text-emerald-300 text-[11px] flex items-center space-x-2">
+                <i className="fas fa-shield-check text-base text-emerald-400 shrink-0"></i>
+                <span>
+                  <strong>Dual Redundancy Active:</strong> Any qualifying alarm (Critical HH/LL or High H) will now immediately fire both an SMS to the on-duty engineer's pocket and an email to the plant management mailbox!
+                </span>
+              </div>
+            </div>
+          )
+        }
+      ]
     }
   ], []);
 
@@ -767,7 +967,7 @@ export const UserManualView: React.FC<UserManualViewProps> = ({
             </div>
             {searchQuery.trim() && (
               <div className="mt-2 text-[10px] text-sky-400 font-mono flex items-center justify-between">
-                <span>⚡ Hybrid Semantic RAG Active</span>
+                <span>Hybrid Semantic RAG Active</span>
                 <span>{filteredChapters.length} matches</span>
               </div>
             )}

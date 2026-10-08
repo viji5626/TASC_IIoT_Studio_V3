@@ -6,7 +6,6 @@ import { useAppStore } from '../store/useAppStore';
 
 // Modular Sections
 import { PanelDataSourceSection } from './editPanel/sections/PanelDataSourceSection';
-import { PanelDynamicsSection } from './editPanel/sections/PanelDynamicsSection';
 import { PanelAlarmsSection } from './editPanel/sections/PanelAlarmsSection';
 import { PanelTrendSection } from './editPanel/sections/PanelTrendSection';
 import { PanelOptionsEditor } from './editPanel/sections/PanelOptionsEditor';
@@ -108,6 +107,8 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({
         iconColorOn: panel.iconColorOn ?? '#10b981',
         iconColorOff: panel.iconColorOff ?? '#4b5563',
         fontSize: panel.fontSize ?? 18,
+        textAlign: panel.textAlign ?? (panel.type === PanelType.GAUGE ? 'center' : 'left'),
+        textWrap: panel.textWrap ?? true,
         payloadOn: panel.payloadOn ?? '1',
         payloadOff: panel.payloadOff ?? '0',
         showReceivedTimeStamp: panel.showReceivedTimeStamp ?? true,
@@ -129,37 +130,6 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({
         alarmViewMode: panel.alarmViewMode ?? 'live',
         pageSize: panel.pageSize ?? 5,
         maxDisplayRows: panel.maxDisplayRows ?? 100,
-
-        // Tag-Based Motion Dynamics
-        enableMotionDynamics: panel.enableMotionDynamics ?? false,
-        motionTagMode: panel.motionTagMode ?? 'same',
-        motionDataSourceMode: panel.motionDataSourceMode ?? 'mqtt',
-        motionTopic: panel.motionTopic ?? '',
-        motionDriverTagId: panel.motionDriverTagId ?? '',
-        motionTagMin: panel.motionTagMin !== undefined ? Number(panel.motionTagMin) : pMin,
-        motionTagMax: panel.motionTagMax !== undefined ? Number(panel.motionTagMax) : pMax,
-        motionStartX: panel.motionStartX !== undefined ? Number(panel.motionStartX) : 0,
-        motionStartY: panel.motionStartY !== undefined ? Number(panel.motionStartY) : 0,
-        motionEndX: panel.motionEndX !== undefined ? Number(panel.motionEndX) : 150,
-        motionEndY: panel.motionEndY !== undefined ? Number(panel.motionEndY) : 0,
-
-        // Tag-Based Rotation Dynamics
-        enableRotationDynamics: panel.enableRotationDynamics ?? false,
-        rotationMode: panel.rotationMode ?? 'continuous',
-        rotationTagMode: panel.rotationTagMode ?? 'same',
-        rotationDataSourceMode: panel.rotationDataSourceMode ?? 'mqtt',
-        rotationTopic: panel.rotationTopic ?? '',
-        rotationDriverTagId: panel.rotationDriverTagId ?? '',
-        rotationDirection: panel.rotationDirection ?? 'cw',
-        rotationSpeed: panel.rotationSpeed ?? 'medium',
-        rotationDurationSeconds: panel.rotationDurationSeconds !== undefined ? Number(panel.rotationDurationSeconds) : 2,
-        rotationTriggerType: panel.rotationTriggerType ?? 'digital',
-        rotationOperator: panel.rotationOperator ?? '>',
-        rotationTriggerValue: panel.rotationTriggerValue ?? '0',
-        rotationTagMin: panel.rotationTagMin !== undefined ? Number(panel.rotationTagMin) : pMin,
-        rotationTagMax: panel.rotationTagMax !== undefined ? Number(panel.rotationTagMax) : pMax,
-        rotationAngleMin: panel.rotationAngleMin !== undefined ? Number(panel.rotationAngleMin) : 0,
-        rotationAngleMax: panel.rotationAngleMax !== undefined ? Number(panel.rotationAngleMax) : 360,
 
         // Equipment Trip Tag & Alarms
         enableTrip: panel.enableTrip ?? false,
@@ -293,13 +263,37 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({
         </div>
 
         <div className="space-y-4 text-xs">
-          {/* Panel Name & Description */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="relative border-b border-gray-700 py-2">
+          {/* Panel Name, Name Alignment & Description */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+            <div className="sm:col-span-5 relative border-b border-gray-700 py-2">
               <label className="text-xs text-amber-500 absolute -top-2">Panel Name *</label>
               <input name="panelName" value={formData.panelName || ''} onChange={handleChange} required className="w-full bg-transparent outline-none text-white py-2" placeholder="e.g. Tank Level" />
             </div>
-            <div className="relative border-b border-gray-700 py-2">
+            <div className="sm:col-span-3 relative border-b border-gray-700 py-1 flex flex-col justify-end">
+              <label className="text-xs text-amber-500 mb-1 flex items-center space-x-1">
+                <i className="fas fa-align-center text-[10px]"></i>
+                <span>Name Alignment</span>
+              </label>
+              <div className="flex items-center space-x-1">
+                {(['left', 'center', 'right'] as const).map(align => (
+                  <button
+                    key={align}
+                    type="button"
+                    onClick={() => setFormData((prev: any) => ({ ...prev, textAlign: align }))}
+                    className={`flex-1 py-1 px-1 rounded text-[11px] font-semibold flex items-center justify-center space-x-1 transition-all cursor-pointer ${
+                      (formData.textAlign || 'left') === align
+                        ? 'bg-amber-500 text-black shadow-md font-bold'
+                        : 'bg-[#1e1e1e] text-gray-400 hover:text-white'
+                    }`}
+                    title={`Align Name ${align.toUpperCase()}`}
+                  >
+                    <i className={`fas fa-align-${align} text-[10px]`}></i>
+                    <span className="capitalize text-[10px]">{align}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="sm:col-span-4 relative border-b border-gray-700 py-2">
               <label className="text-xs text-gray-400 absolute -top-2">Description</label>
               <input name="description" value={formData.description || ''} onChange={handleChange} className="w-full bg-transparent outline-none text-white py-2" placeholder="Optional notes" />
             </div>
@@ -423,17 +417,7 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({
                 isLineGraph={isLineGraph}
               />
 
-              {/* 10. Motion & Rotation Dynamics */}
-              <PanelDynamicsSection
-                formData={formData}
-                setFormData={setFormData}
-                appState={appState}
-                handleChange={handleChange}
-                isStaticOrDecorative={isStaticOrDecorative}
-                isLineGraph={isLineGraph}
-              />
-
-              {/* 11. Appearance, Layout & Publish Behavior */}
+              {/* 10. Appearance, Layout & Publish Behavior */}
               <PanelAppearanceSection
                 formData={formData}
                 setFormData={setFormData}

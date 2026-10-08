@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   AppView, 
   AppState, 
@@ -41,6 +41,7 @@ import { OperatorLoginModal } from './components/auth/OperatorLoginModal';
 import { CredentialManagementView } from './components/auth/CredentialManagementView';
 import { PermissionDeniedToast } from './components/auth/PermissionDeniedToast';
 import { AiAutomationWorkbenchView } from './components/AiAutomationWorkbenchView';
+import { IndustrialStartupSplash } from './components/IndustrialStartupSplash';
 
 function AppContent() {
   const {
@@ -87,9 +88,8 @@ function AppContent() {
     setActiveConnectionId,
     activeDashboardId,
     setActiveDashboardId,
-    activeMode,
-    setActiveMode,
     isHmiEditMode,
+    setIsHmiEditMode,
     selectedPanelId,
     activeConnection,
     activeDashboard,
@@ -176,6 +176,7 @@ function AppContent() {
 
   const { isDesktop, isMobile } = useDeviceCapability();
   const operatorAuth = useOperatorAuth();
+  const [isBootSplashVisible, setIsBootSplashVisible] = useState(() => !sessionStorage.getItem('tasc_splash_shown'));
 
   // Global listener for cross-studio navigation events
   useEffect(() => {
@@ -198,6 +199,8 @@ function AppContent() {
           if (dashId) setActiveDashboardId(dashId);
           if (connId) setActiveConnectionId(connId);
           setCurrentView(AppView.DASHBOARD);
+          // Auto-start Local AI daemon if AI is configured in project
+          fetch('/api/ai/daemon/start', { method: 'POST' }).catch(() => {});
         })}
         onLoadSavedCommunitySetup={(asClientMode) => handleLoadSavedCommunitySetup(asClientMode, (dashId, connId) => {
           if (dashId) setActiveDashboardId(dashId);
@@ -227,13 +230,7 @@ function AppContent() {
           setCurrentView(AppView.DASHBOARD);
         }}
         onLoginAdmin={() => {
-          const freshDash: Dashboard = {
-            dashboardId: 'dash_main',
-            dashboardName: 'Main Dashboard',
-            connectionId: 'conn_demo',
-            isHome: true,
-            themeColor: '#0ea5e9'
-          };
+          const homeDash = appState.dashboards.find(d => d.isHome) || appState.dashboards[0];
           setUserRole('admin');
           setProductEdition(ProductEdition.ENGINEERING);
           setAppState(prev => ({
@@ -242,11 +239,24 @@ function AppContent() {
             productEdition: ProductEdition.ENGINEERING,
             packageOrigin: 'engineering',
             isLockedPackage: false,
-            dashboards: prev.dashboards.length > 0 && prev.panels.length === 0 ? prev.dashboards : [freshDash],
-            panels: []
+            dashboards: prev.dashboards.length > 0 ? prev.dashboards : [
+              {
+                dashboardId: 'dash_main',
+                dashboardName: 'Main Dashboard',
+                connectionId: 'conn_demo',
+                isHome: true,
+                themeColor: '#0ea5e9'
+              }
+            ],
+            panels: prev.panels || []
           }));
-          setActiveDashboardId('dash_main');
+          setActiveDashboardId(homeDash ? homeDash.dashboardId : 'dash_main');
           setCurrentView(AppView.DASHBOARD);
+
+          // Auto-start Local AI daemon immediately on entering Engineering Mode
+          fetch('/api/ai/daemon/start', { method: 'POST' }).then(res => res.json()).then(data => {
+            console.log('[Engineering Studio] Local AI Daemon initialized on the go:', data);
+          }).catch(() => {});
         }}
         onImportClientPackage={(newAppState, clientName, expiresAt, preferredWorkstationMode) => {
           const finalState: AppState = {
@@ -268,9 +278,6 @@ function AppContent() {
           setUserRole('client');
           setProductEdition(ProductEdition.CLIENT_RUNTIME);
           setClientInfo({ clientName, expiresAt, isSignedPackage: true });
-          if (preferredWorkstationMode) {
-            setActiveMode(preferredWorkstationMode);
-          }
           if (newAppState.dashboards[0]) {
             setActiveDashboardId(newAppState.dashboards[0].dashboardId);
           }
@@ -280,6 +287,18 @@ function AppContent() {
           saveCommercialState(finalState);
           setIsClientSetupSaved(true);
           setCurrentView(AppView.DASHBOARD);
+
+          // Auto-start Local AI daemon if AI is configured in imported package
+          const hasAi = Boolean(
+            (newAppState as any).aiConfig ||
+            (newAppState as any).enableAiAssistant ||
+            (newAppState as any).hasAi ||
+            newAppState.panels?.some((p: any) => p.type === 'ai_assistant' || p.type === 'ai_copilot' || p.type === 'jev_diagnostics') ||
+            localStorage.getItem('tasc_ai_provider')
+          );
+          if (hasAi) {
+            fetch('/api/ai/daemon/start', { method: 'POST' }).catch(() => {});
+          }
         }}
         accentColor={activeThemeObj.primary}
       />
@@ -309,6 +328,11 @@ function AppContent() {
   // Render main screen view
   return (
     <div className="flex flex-col h-screen w-screen text-slate-200 overflow-hidden font-sans select-none" style={{ backgroundColor: activeThemeObj.bgCanvas }}>
+      {/* Industrial SCADA Boot & Diagnostics Startup Animation Screen */}
+      {isBootSplashVisible && (
+        <IndustrialStartupSplash onComplete={() => setIsBootSplashVisible(false)} />
+      )}
+
       {/* Top Navbar */}
       <TopNavbar
         appState={appState}
@@ -321,6 +345,7 @@ function AppContent() {
         activeDashboardId={activeDashboardId}
         setActiveDashboardId={setActiveDashboardId}
         isHmiEditMode={isHmiEditMode}
+        setIsHmiEditMode={setIsHmiEditMode}
         isLocked={isLocked}
         handleToggleLock={handleToggleLock}
         isFullscreen={isFullscreen}
@@ -619,7 +644,6 @@ function AppContent() {
               dashboards={appState.dashboards}
               onNavigateTo2dDashboard={(dashId) => {
                 setActiveDashboardId(dashId);
-                setActiveMode('hmi');
                 setCurrentView(AppView.DASHBOARD);
               }}
               userRole={userRole}
@@ -731,7 +755,6 @@ function AppContent() {
             latestValues={latestValues}
             onNavigateTo2dDashboard={(dashId) => {
               setActiveDashboardId(dashId);
-              setActiveMode('hmi');
               setCurrentView(AppView.DASHBOARD);
             }}
           />

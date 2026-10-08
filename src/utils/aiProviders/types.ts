@@ -4,6 +4,34 @@ export interface ImageAttachment {
   name?: string;
 }
 
+export interface JevProbItem {
+  name: string;
+  prob: number;
+}
+
+export interface JevDiagnosticPayload {
+  diagnosticType: 'RCA' | 'TRIAGE';
+  targetAsset: string;
+  initiatingEvent: string;
+  primaryResult: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'NORMAL';
+  confidence: number;
+  latencyMs: number;
+  backend: string;
+  secondaryRisk?: string;
+  immediateAction?: string;
+  targetTag?: string;
+  actionCommand?: number | boolean;
+  probabilities: JevProbItem[];
+  timestamp: string; // ISO string
+  telemetrySnapshot?: Record<string, any>;
+  interlockExecuted?: {
+    operator: string;
+    executedAt: string;
+    tagWritten: string;
+  };
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'tool' | 'system';
   content: string;
@@ -14,6 +42,10 @@ export interface ChatMessage {
   images?: ImageAttachment[];
   responseTimeMs?: number;
   timestamp?: string;
+  // Industrial SCADA diagnostic extensions
+  jevDiagnostic?: JevDiagnosticPayload;
+  statusType?: 'NOMINAL' | 'FAULT_DETECTED' | 'UNBOUND' | 'AMBIGUOUS';
+  candidateAssets?: Array<{ id: string; name: string; panelId?: string }>;
 }
 
 export interface ChatChunk {

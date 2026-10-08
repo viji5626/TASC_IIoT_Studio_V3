@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { ActiveAlarm } from '../types';
 import { triggerAckHaptic, triggerClickHaptic } from '../utils/hapticFeedback';
+import { SmsAlertConfigModal } from './alarms/SmsAlertConfigModal';
+import { EmailAlertConfigModal } from './alarms/EmailAlertConfigModal';
 
 interface AlarmModalProps {
   activeAlarms: ActiveAlarm[];
@@ -16,6 +18,22 @@ interface AlarmModalProps {
   onToggleAutoPopup?: () => void;
   latestAlarmTriggered?: ActiveAlarm | null;
   onOpenHistorian?: () => void;
+}
+
+function formatAlarmDateTime(ts: any): string {
+  if (!ts) return new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'medium' });
+  if (typeof ts === 'number') {
+    const d = new Date(ts);
+    return !isNaN(d.getTime())
+      ? d.toLocaleString([], { dateStyle: 'short', timeStyle: 'medium' })
+      : new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'medium' });
+  }
+  const d = new Date(ts);
+  if (!isNaN(d.getTime())) {
+    return d.toLocaleString([], { dateStyle: 'short', timeStyle: 'medium' });
+  }
+  const today = new Date().toLocaleDateString([], { dateStyle: 'short' });
+  return `${today} ${ts}`;
 }
 
 export const AlarmModal: React.FC<AlarmModalProps> = ({
@@ -35,6 +53,8 @@ export const AlarmModal: React.FC<AlarmModalProps> = ({
 }) => {
   const [isMaximized, setIsMaximized] = useState(false);
   const [viewMode, setViewMode] = useState<'CARDS' | 'TABLE'>('CARDS');
+  const [isSmsConfigOpen, setIsSmsConfigOpen] = useState(false);
+  const [isEmailConfigOpen, setIsEmailConfigOpen] = useState(false);
 
   if (!isOpen && activeAlarms.length === 0) return null;
   if (!isOpen) return null;
@@ -146,6 +166,32 @@ export const AlarmModal: React.FC<AlarmModalProps> = ({
               </button>
             )}
 
+            {/* Free Telecom Email-to-SMS Gateway Config */}
+            <button
+              onClick={() => {
+                triggerClickHaptic();
+                setIsSmsConfigOpen(true);
+              }}
+              className="px-2 sm:px-3 py-1 sm:py-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/50 rounded-lg text-[10px] sm:text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shadow-sm active:scale-95"
+              title="Configure Free Carrier Email-to-SMS Alerts"
+            >
+              <i className="fas fa-comment-sms text-[10px] text-sky-400"></i>
+              <span className="hidden md:inline">SMS Alerts</span>
+            </button>
+
+            {/* Industrial Real-Time Alarm Email Alerts Config */}
+            <button
+              onClick={() => {
+                triggerClickHaptic();
+                setIsEmailConfigOpen(true);
+              }}
+              className="px-2 sm:px-3 py-1 sm:py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/50 rounded-lg text-[10px] sm:text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shadow-sm active:scale-95"
+              title="Configure Real-Time Alarm Email Alerts (Secondary SMTP)"
+            >
+              <i className="fas fa-envelope-open-text text-[10px] text-rose-400"></i>
+              <span className="hidden md:inline">Email Alerts</span>
+            </button>
+
             <button
               onClick={() => setIsMaximized(!isMaximized)}
               className="p-1 sm:p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800/80 transition-all cursor-pointer"
@@ -216,8 +262,14 @@ export const AlarmModal: React.FC<AlarmModalProps> = ({
           ) : viewMode === 'CARDS' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
               {activeAlarms.map((alarm) => {
-                const isTrip = alarm.alarmType === 'TRIP';
+                const alarmType = alarm.alarmType || alarm.zone || 'ALARM';
+                const isTrip = alarmType === 'TRIP' || alarm.zone === 'TRIP';
                 const isUnack = !alarm.acknowledged;
+                const panelTitle = alarm.panelTitle || alarm.panelName || 'Equipment';
+                const tagDisplay = alarm.topic || alarm.driverTagId || alarm.tagId || alarm.panelId || 'Parameter Tag';
+                const currentValue = alarm.currentValue !== undefined ? alarm.currentValue : (alarm.value !== undefined ? alarm.value : '--');
+                const limitThreshold = alarm.limitThreshold !== undefined ? alarm.limitThreshold : (alarm.threshold !== undefined ? alarm.threshold : 'Digital Trip');
+                const displayDateTime = formatAlarmDateTime(alarm.triggeredAt || alarm.timestamp);
 
                 return (
                   <div
@@ -243,9 +295,9 @@ export const AlarmModal: React.FC<AlarmModalProps> = ({
                           <i className={`fas ${isTrip ? 'fa-skull-crossbones' : 'fa-triangle-exclamation'}`}></i>
                         </div>
                         <div className="truncate">
-                          <h4 className="text-xs font-black text-white truncate">{alarm.panelTitle}</h4>
+                          <h4 className="text-xs font-black text-white truncate">{panelTitle}</h4>
                           <span className="text-[10px] font-mono text-slate-400 truncate block">
-                            {alarm.topic || alarm.driverTagId || 'Parameter Tag'}
+                            {tagDisplay}
                           </span>
                         </div>
                       </div>
@@ -257,7 +309,7 @@ export const AlarmModal: React.FC<AlarmModalProps> = ({
                             : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                           }`}
                       >
-                        {alarm.alarmType}
+                        {alarmType}
                       </span>
                     </div>
 
@@ -266,13 +318,13 @@ export const AlarmModal: React.FC<AlarmModalProps> = ({
                       <div className="flex items-center justify-between text-slate-300">
                         <span className="text-slate-400">Current Value:</span>
                         <span className="font-mono font-black text-rose-400 text-xs">
-                          {alarm.currentValue}
+                          {currentValue}
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-slate-400 text-[10px]">
                         <span>Threshold Limit:</span>
                         <span className="font-mono text-slate-300">
-                          {alarm.limitThreshold !== undefined ? alarm.limitThreshold : 'Digital Trip'}
+                          {limitThreshold}
                         </span>
                       </div>
                       <div className="text-[10px] font-medium text-slate-300 pt-0.5 border-t border-slate-800/60 truncate">
@@ -282,9 +334,9 @@ export const AlarmModal: React.FC<AlarmModalProps> = ({
 
                     {/* Card Footer: Timestamp & Action */}
                     <div className="flex items-center justify-between pt-1 border-t border-slate-800/60 text-[10px]">
-                      <div className="text-slate-400 font-mono flex items-center space-x-1">
+                      <div className="text-slate-400 font-mono flex items-center space-x-1" title={displayDateTime}>
                         <i className="fas fa-clock text-[9px] text-slate-500"></i>
-                        <span>{new Date(alarm.triggeredAt).toLocaleTimeString()}</span>
+                        <span>{displayDateTime}</span>
                       </div>
 
                       {isUnack ? (
@@ -319,45 +371,54 @@ export const AlarmModal: React.FC<AlarmModalProps> = ({
                     <th className="p-2.5">Tag / Topic</th>
                     <th className="p-2.5">Value</th>
                     <th className="p-2.5">Limit</th>
-                    <th className="p-2.5">Triggered Time</th>
+                    <th className="p-2.5">Triggered Date & Time</th>
                     <th className="p-2.5 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {activeAlarms.map((alarm) => (
-                    <tr key={alarm.alarmKey} className="hover:bg-slate-800/40 transition-colors">
-                      <td className="p-2.5">
-                        <span
-                          className={`px-1.5 py-0.5 rounded font-mono font-black text-[9px] uppercase border ${alarm.alarmType === 'TRIP'
-                              ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                              : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                            }`}
-                        >
-                          {alarm.alarmType}
-                        </span>
-                      </td>
-                      <td className="p-2.5 font-bold text-white">{alarm.panelTitle}</td>
-                      <td className="p-2.5 font-mono text-slate-400">{alarm.topic || alarm.driverTagId || 'Tag'}</td>
-                      <td className="p-2.5 font-mono font-bold text-rose-400">{alarm.currentValue}</td>
-                      <td className="p-2.5 font-mono text-slate-400">{alarm.limitThreshold ?? 'Trip'}</td>
-                      <td className="p-2.5 font-mono text-slate-400">{new Date(alarm.triggeredAt).toLocaleTimeString()}</td>
-                      <td className="p-2.5 text-right">
-                        {!alarm.acknowledged ? (
-                          <button
-                            onClick={() => {
-                              triggerAckHaptic();
-                              onAcknowledgeAlarm(alarm.alarmKey);
-                            }}
-                            className="px-2 py-0.5 bg-rose-500 hover:bg-rose-400 text-black font-black uppercase rounded text-[9px] transition-all active:scale-95 cursor-pointer"
+                  {activeAlarms.map((alarm) => {
+                    const alarmType = alarm.alarmType || alarm.zone || 'ALARM';
+                    const panelTitle = alarm.panelTitle || alarm.panelName || 'Equipment';
+                    const tagDisplay = alarm.topic || alarm.driverTagId || alarm.tagId || alarm.panelId || 'Parameter Tag';
+                    const currentValue = alarm.currentValue !== undefined ? alarm.currentValue : (alarm.value !== undefined ? alarm.value : '--');
+                    const limitThreshold = alarm.limitThreshold !== undefined ? alarm.limitThreshold : (alarm.threshold !== undefined ? alarm.threshold : 'Digital Trip');
+                    const displayDateTime = formatAlarmDateTime(alarm.triggeredAt || alarm.timestamp);
+
+                    return (
+                      <tr key={alarm.alarmKey} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="p-2.5">
+                          <span
+                            className={`px-1.5 py-0.5 rounded font-mono font-black text-[9px] uppercase border ${alarmType === 'TRIP'
+                                ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                                : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                              }`}
                           >
-                            ACK
-                          </button>
-                        ) : (
-                          <span className="text-emerald-400 font-mono text-[9px] font-bold">✓ ACKED</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                            {alarmType}
+                          </span>
+                        </td>
+                        <td className="p-2.5 font-bold text-white">{panelTitle}</td>
+                        <td className="p-2.5 font-mono text-slate-400">{tagDisplay}</td>
+                        <td className="p-2.5 font-mono font-bold text-rose-400">{currentValue}</td>
+                        <td className="p-2.5 font-mono text-slate-400">{limitThreshold}</td>
+                        <td className="p-2.5 font-mono text-slate-400">{displayDateTime}</td>
+                        <td className="p-2.5 text-right">
+                          {!alarm.acknowledged ? (
+                            <button
+                              onClick={() => {
+                                triggerAckHaptic();
+                                onAcknowledgeAlarm(alarm.alarmKey);
+                              }}
+                              className="px-2 py-0.5 bg-rose-500 hover:bg-rose-400 text-black font-black uppercase rounded text-[9px] transition-all active:scale-95 cursor-pointer"
+                            >
+                              ACK
+                            </button>
+                          ) : (
+                            <span className="text-emerald-400 font-mono text-[9px] font-bold">✓ ACKED</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -409,6 +470,18 @@ export const AlarmModal: React.FC<AlarmModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Free Telecom SMS Alert Configuration Modal */}
+      <SmsAlertConfigModal
+        isOpen={isSmsConfigOpen}
+        onClose={() => setIsSmsConfigOpen(false)}
+      />
+
+      {/* Industrial Real-Time Alarm Email Alert Configuration Modal */}
+      <EmailAlertConfigModal
+        isOpen={isEmailConfigOpen}
+        onClose={() => setIsEmailConfigOpen(false)}
+      />
     </div>
   );
 };

@@ -255,7 +255,7 @@ export const MultiDriverStatusPill: React.FC<MultiDriverStatusPillProps> = ({
         ref={buttonRef}
         type="button"
         onClick={toggleDropdown}
-        className={`flex items-center space-x-1.5 bg-slate-950/85 hover:bg-slate-900 px-2 py-1 rounded-lg border transition-all cursor-pointer group shrink-0 min-h-[28px] shadow-sm ${
+        className={`flex items-center space-x-1.5 bg-slate-950/85 hover:bg-slate-900 px-2.5 h-10 rounded-xl border transition-all cursor-pointer group shrink-0 shadow-sm ${
           isOpen
             ? 'border-sky-500/70 ring-1 ring-sky-500/50 bg-slate-900'
             : isAllOnline

@@ -106,10 +106,7 @@ The system consists of three main architecture layers:
 ### 18. `ShareConnectionModal.tsx`
 * **Purpose**: QR-code and link generator for sharing connection credentials across team members.
 
-### 19. `EngineeringChoiceModal.tsx`
-* **Purpose**: Mode toggle modal between Standard Grid Dashboards and Web HMI Canvas Layouts.
-
-### 20. `ColorPicker.tsx`, `IconPicker.tsx`, `KeypadModal.tsx`
+### 19. `ColorPicker.tsx`, `IconPicker.tsx`, `KeypadModal.tsx`
 * **Purpose**: Touchscreen-optimized input helpers for color selection, Lucide icon browsing, and numeric keypad PIN entry.
 
 ---

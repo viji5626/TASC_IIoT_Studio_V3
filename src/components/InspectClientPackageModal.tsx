@@ -19,7 +19,7 @@ export const InspectClientPackageModal: React.FC<InspectClientPackageModalProps>
     generatedAt?: string;
     expiresAt?: string;
     clearPassword?: string;
-    preferredWorkstationMode?: 'hmi' | 'grid';
+    preferredWorkstationMode?: 'hmi';
     isSignedPackage?: boolean;
     connectionsCount: number;
     dashboardsCount: number;
@@ -160,7 +160,7 @@ export const InspectClientPackageModal: React.FC<InspectClientPackageModalProps>
               </div>
               <div>
                 <span className="text-[10px] font-bold text-slate-500 uppercase block">Preferred View Mode</span>
-                <span className="font-semibold text-sky-400 uppercase">{packageDetails.preferredWorkstationMode} Mode</span>
+                <span className="font-semibold text-sky-400">Web HMI Canvas</span>
               </div>
               <div>
                 <span className="text-[10px] font-bold text-slate-500 uppercase block">Generated At</span>

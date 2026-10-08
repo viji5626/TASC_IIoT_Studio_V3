@@ -36,6 +36,7 @@ export const HmiCanvasConfigInspector: React.FC<HmiCanvasConfigInspectorProps> =
 }) => {
   // Collapsible section states
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    staticText: true,
     visual: true,
     geometry: true,
     telemetry: true,
@@ -251,34 +252,6 @@ export const HmiCanvasConfigInspector: React.FC<HmiCanvasConfigInspectorProps> =
                 </div>
               </div>
             )}
-          </div>
-
-          {/* Sub-Part Animation Override Card */}
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">
-            <div className="px-3 py-2 bg-slate-900/90 border-b border-slate-800/80 font-bold text-slate-200 text-xs flex items-center space-x-1.5">
-              <i className="fas fa-wand-magic-sparkles text-indigo-400"></i>
-              <span>Part Animation</span>
-            </div>
-            <div className="p-3 space-y-2">
-              <div className="space-y-1">
-                <label className="text-[10px] text-slate-400 font-medium">Animation Effect:</label>
-                <select
-                  value={targetSubPart.config.animType || 'none'}
-                  onChange={(e) =>
-                    onUpdateSvgSubPart(targetPanel.panelId, activeSubPartSelection.partId, {
-                      animType: e.target.value as any
-                    })
-                  }
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-200 outline-none cursor-pointer"
-                >
-                  <option value="none">None (Static)</option>
-                  <option value="spin">Continuous Rotation Spin</option>
-                  <option value="pulse">Pulse / Glow Flashing</option>
-                  <option value="level_fill">Dynamic Level Fill</option>
-                  <option value="color_shift">Tag Threshold Color Shift</option>
-                </select>
-              </div>
-            </div>
           </div>
         </div>
       )}
@@ -551,10 +524,29 @@ export const HmiCanvasConfigInspector: React.FC<HmiCanvasConfigInspectorProps> =
                 placeholder="Element Name"
                 className="bg-transparent font-extrabold text-white text-xs outline-none w-full focus:bg-slate-950 focus:px-1 rounded"
               />
-              <div className="flex items-center space-x-1 text-[9px] text-slate-400 font-mono mt-0.5">
-                <span className="uppercase text-sky-400">{targetPanel.type}</span>
-                <span>•</span>
-                <span>ID: {targetPanel.panelId.slice(-6)}</span>
+              <div className="flex items-center justify-between text-[9px] text-slate-400 font-mono mt-1">
+                <div className="flex items-center space-x-1">
+                  <span className="uppercase text-sky-400">{targetPanel.type}</span>
+                  <span>•</span>
+                  <span>ID: {targetPanel.panelId.slice(-6)}</span>
+                </div>
+                <div className="flex items-center space-x-0.5 bg-slate-950 p-0.5 rounded border border-slate-800">
+                  {(['left', 'center', 'right', 'justify'] as const).map(align => (
+                    <button
+                      key={align}
+                      type="button"
+                      onClick={() => onUpdatePanelProp(targetPanel.panelId, 'textAlign', align)}
+                      className={`px-1 py-0.5 rounded text-[8px] font-bold uppercase transition-all ${
+                        (targetPanel.textAlign || (targetPanel.type === 'gauge' ? 'center' : 'left')) === align
+                          ? 'bg-amber-500 text-slate-950 shadow-sm'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                      title={`Align Name / Text ${align.toUpperCase()}`}
+                    >
+                      <i className={`fas fa-align-${align}`}></i>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -569,6 +561,96 @@ export const HmiCanvasConfigInspector: React.FC<HmiCanvasConfigInspectorProps> =
               </button>
             )}
           </div>
+
+          {/* Static Text & Formatting Card (for STATIC_TEXT panels) */}
+          {targetPanel.type === 'static_text' && (
+            <div className="rounded-xl border border-sky-800/60 bg-slate-900/80 overflow-hidden shadow-lg shadow-sky-950/30">
+              <div
+                onClick={() => toggleSection('staticText')}
+                className="flex items-center justify-between px-3 py-2 bg-sky-950/40 cursor-pointer border-b border-sky-800/50"
+              >
+                <div className="flex items-center space-x-1.5 font-bold text-sky-300 text-xs">
+                  <i className="fas fa-font text-sky-400"></i>
+                  <span>Text Content & Formatting</span>
+                </div>
+                <i className={`fas ${openSections.staticText !== false ? 'fa-chevron-up' : 'fa-chevron-down'} text-[10px] text-sky-400`}></i>
+              </div>
+
+              {openSections.staticText !== false && (
+                <div className="p-3 space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] text-slate-300 font-semibold">Static Text Content:</label>
+                      <span className="text-[8px] text-amber-400 font-mono">ENTER = New Row</span>
+                    </div>
+                    <textarea
+                      rows={3}
+                      value={targetPanel.staticText ?? targetPanel.panelName ?? ''}
+                      onChange={(e) => onUpdatePanelProp(targetPanel.panelId, 'staticText', e.target.value)}
+                      placeholder="Enter label text (supports multi-line)..."
+                      className="w-full bg-slate-950 border border-slate-700 focus:border-sky-500 rounded p-2 text-xs text-sky-400 font-bold outline-none resize-y leading-relaxed font-sans"
+                    />
+                  </div>
+
+                  {/* Wrap Text Toggle */}
+                  <div className="flex items-center justify-between py-1 border-t border-slate-800/80">
+                    <div className="flex flex-col">
+                      <span className="text-[11px] text-slate-200 font-medium">Wrap Text</span>
+                      <span className="text-[9px] text-slate-400">Auto-wrap lines to panel width</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={targetPanel.textWrap !== false}
+                        onChange={(e) => onUpdatePanelProp(targetPanel.panelId, 'textWrap', e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-sky-500"></div>
+                    </label>
+                  </div>
+
+                  {/* Horizontal Alignment */}
+                  <div className="flex items-center justify-between py-1 border-t border-slate-800/80">
+                    <span className="text-[11px] text-slate-200 font-medium">Text Alignment:</span>
+                    <div className="flex items-center space-x-1 bg-slate-950 p-0.5 rounded border border-slate-800">
+                      {(['left', 'center', 'right', 'justify'] as const).map(align => (
+                        <button
+                          key={align}
+                          type="button"
+                          onClick={() => onUpdatePanelProp(targetPanel.panelId, 'textAlign', align)}
+                          className={`px-2 py-1 rounded text-[9px] font-bold uppercase transition-all ${
+                            (targetPanel.textAlign || 'center') === align
+                              ? 'bg-sky-500 text-slate-950 shadow-sm'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                          title={`Align ${align.toUpperCase()}`}
+                        >
+                          <i className={`fas fa-align-${align}`}></i>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Font Size */}
+                  <div className="space-y-1 border-t border-slate-800/80 pt-1.5">
+                    <div className="flex justify-between text-[10px] text-slate-400">
+                      <span>Font Size:</span>
+                      <span className="font-mono text-sky-300">{targetPanel.fontSize ?? 16}px</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="9"
+                      max="72"
+                      step="1"
+                      value={targetPanel.fontSize ?? 16}
+                      onChange={(e) => onUpdatePanelProp(targetPanel.panelId, 'fontSize', parseInt(e.target.value) || 16)}
+                      className="w-full accent-sky-500 cursor-pointer h-1.5 bg-slate-700 rounded-lg appearance-none"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Visual Styling Card */}
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden">

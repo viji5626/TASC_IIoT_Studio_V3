@@ -3,6 +3,7 @@ import { DriverTagValue, DriverConnectionHealthPayload } from '../types';
 export type DriverTagValueCallback = (update: DriverTagValue) => void;
 export type DriverConnectionHealthCallback = (payload: DriverConnectionHealthPayload) => void;
 export type DriverReconnectCallback = () => void;
+export type DriverAlarmEventCallback = (payload: any) => void;
 
 const RECONNECT_INTERVAL_MS = 3000;
 const DRIVER_BRIDGE_PATH = '/api/driver-bridge';
@@ -12,6 +13,7 @@ export class DriverBridgeClient {
   private onTagValue: DriverTagValueCallback;
   private onConnectionHealth?: DriverConnectionHealthCallback;
   private onReconnect?: DriverReconnectCallback;
+  private onAlarmEvent?: DriverAlarmEventCallback;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private shouldConnect = false;
   private subscribedTagIds: Set<string> = new Set();
@@ -21,11 +23,13 @@ export class DriverBridgeClient {
   constructor(
     onTagValue: DriverTagValueCallback,
     onConnectionHealth?: DriverConnectionHealthCallback,
-    onReconnect?: DriverReconnectCallback
+    onReconnect?: DriverReconnectCallback,
+    onAlarmEvent?: DriverAlarmEventCallback
   ) {
     this.onTagValue = onTagValue;
     this.onConnectionHealth = onConnectionHealth;
     this.onReconnect = onReconnect;
+    this.onAlarmEvent = onAlarmEvent;
   }
 
   connect() {
@@ -73,6 +77,18 @@ export class DriverBridgeClient {
     }
   }
 
+  acknowledgeAlarm(alarmKey: string, operator = 'Operator') {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'ack_alarm', alarmKey, operator }));
+    }
+  }
+
+  requestActiveAlarms() {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'get_active_alarms' }));
+    }
+  }
+
   private openSocket() {
     if (!this.shouldConnect) return;
     try {
@@ -104,6 +120,8 @@ export class DriverBridgeClient {
           const data = JSON.parse(event.data);
           if (data && data.type === 'connection_health' && this.onConnectionHealth) {
             this.onConnectionHealth(data as DriverConnectionHealthPayload);
+          } else if (data && (data.type === 'alarm_event' || data.type === 'active_alarms' || data.type === 'alarm_ack_result') && this.onAlarmEvent) {
+            this.onAlarmEvent(data);
           } else if (data && data.tagId && data.panelId !== undefined) {
             this.onTagValue(data as DriverTagValue);
           }

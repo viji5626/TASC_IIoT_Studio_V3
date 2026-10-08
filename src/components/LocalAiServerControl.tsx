@@ -649,7 +649,7 @@ export const LocalAiServerControl: React.FC<LocalAiServerControlProps> = ({
               }`}
             >
               <i className="fas fa-wand-magic-sparkles text-[9px] text-amber-300 animate-pulse"></i>
-              <span>✨ Auto-Adaptive Mode</span>
+              <span>Auto-Adaptive Mode</span>
             </button>
 
             {models.map((m, idx) => {

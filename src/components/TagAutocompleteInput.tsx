@@ -365,7 +365,7 @@ export const TagAutocompleteInput: React.FC<TagAutocompleteInputProps> = ({
                       <span className="font-mono truncate">Use "{value.trim()}"</span>
                     </div>
                     <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider shrink-0">
-                      ✨ BIND CUSTOM
+                      BIND CUSTOM
                     </span>
                   </button>
                 )}

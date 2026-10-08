@@ -13,6 +13,22 @@ export function clearChatSession(): void {
   chatSession = [];
 }
 
+export function buildCompactSlmSystemPrompt(extraLearnedEvidence?: string): string {
+  const liveSnapshot = getLiveContextSnapshot();
+
+  let prompt = `You are the TASC IIoT Studio AI Assistant — an industrial IoT, SCADA, and Web-HMI engineering copilot.
+Always respond concisely and accurately. Present telemetry and status summaries in structured Markdown tables with industrial status badges ([OK], [WARN], [CRITICAL]). Answer directly without filler phrases.
+
+PROJECT CONTEXT:
+${liveSnapshot}`;
+
+  if (extraLearnedEvidence) {
+    prompt += `\n\nEVIDENCE:\n${extraLearnedEvidence}`;
+  }
+
+  return prompt;
+}
+
 export function buildDynamicSystemPrompt(extraLearnedEvidence?: string): string {
   const liveSnapshot = getLiveContextSnapshot();
 
@@ -50,7 +66,7 @@ OPERATIONAL GUIDELINES:
    - When asked about Alarms, use \`get_active_alarms\` or \`get_alarm_history\`.
 3. Output Quality:
    - Always respond in the language used by the user (English, Hindi, etc.) unless instructed otherwise.
-   - Present telemetry and status summaries in structured Markdown tables with clear status emojis (✅, ⚠️, ❌).
+   - Present telemetry and status summaries in structured Markdown tables with clear industrial status badges ([OK], [WARN], [CRITICAL]).
    - Be precise, accurate, safety-minded, and fast.
 
 ==================================================
@@ -178,7 +194,11 @@ export async function runAiTurn(
   }
 
   // 3. Update dynamic system prompt with fresh live snapshot & specialist evidence
-  const dynamicSystemPrompt = buildDynamicSystemPrompt(multiAgentEvidence);
+  const isLocalSlm = activeAdapter.id === 'embedded_gguf';
+  const dynamicSystemPrompt = isLocalSlm
+    ? buildCompactSlmSystemPrompt(multiAgentEvidence)
+    : buildDynamicSystemPrompt(multiAgentEvidence);
+
   if (chatSession.length === 0 || chatSession[0].role !== 'system') {
     chatSession = [{ role: 'system', content: dynamicSystemPrompt }, ...chatSession.filter(m => m.role !== 'system')];
   } else {
@@ -241,7 +261,7 @@ export async function runAiTurn(
         if (chunk.reasoningDelta) {
           currentTurnReasoning += chunk.reasoningDelta;
           if (!currentTurnText) {
-            onDelta(`💭 *Thinking...*\n\n${currentTurnReasoning}`);
+            onDelta(`*Thinking...*\n\n${currentTurnReasoning}`);
           }
         }
 
@@ -288,10 +308,10 @@ export async function runAiTurn(
           'supervisor',
           'OOM Recovery',
           'running',
-          `⚠️ GPU memory exhausted. Auto-switching to lightweight model "${smallestModel}" in CPU mode...`
+          `GPU memory exhausted. Auto-switching to lightweight model "${smallestModel}" in CPU mode...`
         );
 
-        onDelta(`⚠️ **GPU Memory Error** — The selected model is too large for your GPU.\nAuto-switching to a smaller model (${smallestModel}) in CPU-only mode...\n\n`);
+        onDelta(`**GPU Memory Error** — The selected model is too large for your GPU.\nAuto-switching to a smaller model (${smallestModel}) in CPU-only mode...\n\n`);
         activeAdapter = options.adapterFactory(smallestModel, { temperature: 0.1, contextLength: 2048 });
         // Remove the failed user message echo and retry
         currentTurnText = '';

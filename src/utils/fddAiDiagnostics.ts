@@ -188,31 +188,31 @@ export function queryFddNaturalLanguage(
 
   if (query.includes('active') || query.includes('current') || query.includes('what faults') || query.includes('status')) {
     if (state.activeFaults.length === 0) {
-      return '✅ **All Systems Normal**: No active faults or operating envelope violations are currently detected.';
+      return '**All Systems Normal**: No active faults or operating envelope violations are currently detected.';
     }
     const rows = state.activeFaults.map(f => 
       `| **${f.assetName}** | ${f.severity} | ${f.ruleName} | ${Math.floor(f.durationSeconds / 60)} min | ${sym}${f.costPerHour}/hr |`
     ).join('\n');
 
-    return `### 🚨 Active Faults Detected (${state.activeFaults.length})\n\n| Asset | Severity | Fault Description | Duration | Financial Impact |\n| :--- | :--- | :--- | :--- | :--- |\n${rows}\n\n**Total Financial Waste Rate:** ${sym}${state.kpis.totalCostPerHour}/hr (${state.kpis.totalEnergyWasteKw} kW excess power)`;
+    return `### Active Faults Detected (${state.activeFaults.length})\n\n| Asset | Severity | Fault Description | Duration | Financial Impact |\n| :--- | :--- | :--- | :--- | :--- |\n${rows}\n\n**Total Financial Waste Rate:** ${sym}${state.kpis.totalCostPerHour}/hr (${state.kpis.totalEnergyWasteKw} kW excess power)`;
   }
 
   if (query.includes('chiller')) {
     const chillerFaults = state.activeFaults.filter(f => f.category === 'chiller' || f.assetName.toLowerCase().includes('chiller'));
     const chillerAsset = state.assets.find(a => a.category === 'chiller');
-    return `### ❄️ Chiller Health & Fault Summary\n- **Asset:** ${chillerAsset?.name || 'York 450 TR Chiller'}\n- **Health Index:** ${chillerAsset?.healthIndex || 88}%\n- **Active Faults:** ${chillerFaults.length}\n${chillerFaults.map(f => `- **${f.severity}:** ${f.ruleName} (Wasting ${sym}${f.costPerHour}/hr)`).join('\n') || '- Operating within optimal thermal envelope.'}`;
+    return `### Chiller Health & Fault Summary\n- **Asset:** ${chillerAsset?.name || 'York 450 TR Chiller'}\n- **Health Index:** ${chillerAsset?.healthIndex || 88}%\n- **Active Faults:** ${chillerFaults.length}\n${chillerFaults.map(f => `- **${f.severity}:** ${f.ruleName} (Wasting ${sym}${f.costPerHour}/hr)`).join('\n') || '- Operating within optimal thermal envelope.'}`;
   }
 
   if (query.includes('cost') || query.includes('money') || query.includes('financial') || query.includes('waste')) {
-    return `### 💰 FDD Financial Impact & Energy Waste\n- **Current Financial Waste Rate:** ${sym}${state.kpis.totalCostPerHour}/hr\n- **Excess Power Draw:** ${state.kpis.totalEnergyWasteKw} kW\n- **Accumulated Today:** ${sym}${state.kpis.accumulatedDailyCost}\n- **Top Offender:** ${state.activeFaults[0]?.assetName || 'None'} (${sym}${state.activeFaults[0]?.costPerHour || 0}/hr)`;
+    return `### FDD Financial Impact & Energy Waste\n- **Current Financial Waste Rate:** ${sym}${state.kpis.totalCostPerHour}/hr\n- **Excess Power Draw:** ${state.kpis.totalEnergyWasteKw} kW\n- **Accumulated Today:** ${sym}${state.kpis.accumulatedDailyCost}\n- **Top Offender:** ${state.activeFaults[0]?.assetName || 'None'} (${sym}${state.activeFaults[0]?.costPerHour || 0}/hr)`;
   }
 
   if (query.includes('work order') || query.includes('maintenance') || query.includes('schedule')) {
     const orders = state.workOrders;
-    if (orders.length === 0) return '📅 **Maintenance Schedule**: No open work orders currently scheduled.';
-    return `### 📋 Maintenance Schedule (${orders.length} orders)\n` + orders.map(o => `- **[${o.priority}] ${o.title}** on *${o.assetName}* (Status: \`${o.status}\`, Due: ${o.dueIso.split('T')[0]})`).join('\n');
+    if (orders.length === 0) return '**Maintenance Schedule**: No open work orders currently scheduled.';
+    return `### Maintenance Schedule (${orders.length} orders)\n` + orders.map(o => `- **[${o.priority}] ${o.title}** on *${o.assetName}* (Status: \`${o.status}\`, Due: ${o.dueIso.split('T')[0]})`).join('\n');
   }
 
   // Default overview
-  return `### 🛡️ TASC FDD Predictive Module Status\n- **Monitored Assets:** ${state.assets.length}\n- **Active Faults:** ${state.kpis.activeCount} (${state.kpis.criticalCount} Critical, ${state.kpis.highCount} High)\n- **Plant Average Health Index:** ${state.kpis.avgHealthIndex}%\n- **Energy Waste Rate:** ${state.kpis.totalEnergyWasteKw} kW (${sym}${state.kpis.totalCostPerHour}/hr)\n- **Open Work Orders:** ${state.kpis.openWorkOrdersCount}`;
+  return `### TASC FDD Predictive Module Status\n- **Monitored Assets:** ${state.assets.length}\n- **Active Faults:** ${state.kpis.activeCount} (${state.kpis.criticalCount} Critical, ${state.kpis.highCount} High)\n- **Plant Average Health Index:** ${state.kpis.avgHealthIndex}%\n- **Energy Waste Rate:** ${state.kpis.totalEnergyWasteKw} kW (${sym}${state.kpis.totalCostPerHour}/hr)\n- **Open Work Orders:** ${state.kpis.openWorkOrdersCount}`;
 }

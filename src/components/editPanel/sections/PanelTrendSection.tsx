@@ -39,12 +39,12 @@ export const PanelTrendSection: React.FC<PanelTrendSectionProps> = ({
             onChange={handleChange}
             className="w-full bg-slate-900 border border-slate-700 text-white rounded-lg p-2 text-xs outline-none focus:border-sky-500 cursor-pointer"
           >
-            <option value="line">📈 Line — Crisp linear trend</option>
-            <option value="curve">〰️ Curve — Smooth Bézier spline</option>
-            <option value="stepped">⬜ Stepped — SCADA digital step</option>
-            <option value="bar">📊 Bar — Vertical bar chart</option>
-            <option value="hbar">▬ H-Bar — Horizontal level gauge</option>
-            <option value="area">🏔 Area — Filled area chart</option>
+            <option value="line">Line — Crisp linear trend</option>
+            <option value="curve">Curve — Smooth Bézier spline</option>
+            <option value="stepped">Stepped — SCADA digital step</option>
+            <option value="bar">Bar — Vertical bar chart</option>
+            <option value="hbar">H-Bar — Horizontal level gauge</option>
+            <option value="area">Area — Filled area chart</option>
           </select>
         </div>
 
@@ -241,7 +241,7 @@ export const PanelTrendSection: React.FC<PanelTrendSectionProps> = ({
                     }}
                     className="bg-violet-950/60 border border-violet-500/40 text-violet-200 rounded px-2 py-1 text-xs font-bold outline-none cursor-pointer hover:bg-violet-900/50 transition-colors"
                   >
-                    <option value="" disabled>📈 Add from Historian Tags...</option>
+                    <option value="" disabled>Add from Historian Tags...</option>
                     {historianTagList.map(ht => (
                       <option key={ht.id} value={ht.id}>
                         {ht.name} ({ht.sourceType.toUpperCase()} • {ht.topic || ht.driverTagId})
@@ -531,8 +531,8 @@ export const PanelTrendSection: React.FC<PanelTrendSectionProps> = ({
             <i className="fas fa-info-circle text-sky-400 text-sm mt-0.5 shrink-0"></i>
             <p className="text-[11px] text-slate-400">
               {dataSourceMode === 'driver'
-                ? <>Single pen mode — click <strong className="text-violet-300">+ Add Pen</strong> or select a tag from <strong className="text-sky-300">📈 Add from Historian Tags</strong>.</>
-                : <>Single pen mode — uses the Primary MQTT Topic above. Click <strong className="text-sky-300">+ Add Pen</strong> or choose from <strong className="text-violet-300">📈 Add from Historian Tags</strong>.</>
+                ? <>Single pen mode — click <strong className="text-violet-300">+ Add Pen</strong> or select a tag from <strong className="text-sky-300">Add from Historian Tags</strong>.</>
+                : <>Single pen mode — uses the Primary MQTT Topic above. Click <strong className="text-sky-300">+ Add Pen</strong> or choose from <strong className="text-violet-300">Add from Historian Tags</strong>.</>
               }
             </p>
           </div>

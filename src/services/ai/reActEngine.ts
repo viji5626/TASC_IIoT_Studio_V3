@@ -180,7 +180,7 @@ export async function executeReActWorkflow(
   const totalTimeMs = Date.now() - startTime;
 
   return {
-    finalAnswer: `### 🏭 Industrial AI Diagnostic Analysis\n\n**Operator Query**: *"${userQuery}"*\n\n` +
+    finalAnswer: `### Industrial AI Diagnostic Analysis\n\n**Operator Query**: *"${userQuery}"*\n\n` +
       `- **Active Alarms**: ${alarms.length > 0 ? alarms.map(a => `\`${a.tag}\`: ${a.message}`).join(', ') : 'All safety limits normal'}\n` +
       `- **Monitored Telemetry**: ${liveValuesSummary || 'Standard baseline active'}\n\n` +
       `**Diagnostic Conclusion**:\n` +

@@ -23,17 +23,23 @@ export const EmbeddedGgufControl: React.FC<EmbeddedGgufControlProps> = ({
   const [bridgeStatus, setBridgeStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [latencyMs, setLatencyMs] = useState<number>(0);
   const [customPath, setCustomPath] = useState<string>(currentModelPath || '');
-  const [customSearchDir, setCustomSearchDir] = useState<string>('C:\\Users\\vijay\\.lmstudio\\models\\lmstudio-community');
+  const [customSearchDir, setCustomSearchDir] = useState<string>('');
   const [discoveredModels, setDiscoveredModels] = useState<DiscoveredModel[]>([]);
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [isLoadingModel, setIsLoadingModel] = useState<boolean>(false);
   const [loadMessage, setLoadMessage] = useState<string | null>(null);
   const [searchFilter, setSearchFilter] = useState<string>('');
-  
+  const [autoLoaded, setAutoLoaded] = useState<boolean>(false);
+
   // Model hyperparameters
-  const [nThreads, setNThreads] = useState<number>(4);
+  const [nThreads, setNThreads] = useState<number>(0); // 0 = auto-detect all CPU cores
   const [nCtx, setNCtx] = useState<number>(2048);
-  const [gpuLayers, setGpuLayers] = useState<number>(0);
+  const [gpuLayers, setGpuLayers] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('tasc_gguf_gpu_layers');
+      return saved !== null ? parseInt(saved, 10) : 33;
+    } catch { return 33; }
+  });
   const [gbnfEnabled, setGbnfEnabled] = useState<boolean>(true);
 
   const checkBridge = useCallback(async () => {
@@ -70,11 +76,85 @@ export const EmbeddedGgufControl: React.FC<EmbeddedGgufControlProps> = ({
     }
   }, [customSearchDir]);
 
-  // Auto-check bridge and auto-scan on initial render
+  // Auto-check bridge, scan, and auto-reload the saved model on initial render
   useEffect(() => {
-    checkBridge();
-    handleScanModels();
-  }, [checkBridge, handleScanModels]);
+    let cancelled = false;
+    const init = async () => {
+      // 1. Check bridge health
+      setBridgeStatus('checking');
+      try {
+        let health = await pythonBridge.checkHealth();
+        if (cancelled) return;
+
+        // If daemon is not running yet, initiate startup and re-check
+        if (!health.isAvailable) {
+          await fetch('/api/ai/daemon/start', { method: 'POST' }).catch(() => {});
+          health = await pythonBridge.checkHealth();
+        }
+
+        if (health.isAvailable) {
+          setBridgeStatus('online');
+          setLatencyMs(health.latencyMs);
+
+          // 2. Auto-reload model: verify if savedPath exists, else fallback to inbuilt native model
+          if (!autoLoaded) {
+            let candidatePath = currentModelPath || (() => {
+              try { return localStorage.getItem('tasc_gguf_model_path') || ''; } catch { return ''; }
+            })();
+
+            // Verify with backend
+            try {
+              const verifyRes = await fetch(`/api/local-ai/verify-model?path=${encodeURIComponent(candidatePath)}`);
+              const verifyData = await verifyRes.json();
+              if (verifyData.inbuiltFallback && verifyData.fallbackPath) {
+                candidatePath = verifyData.fallbackPath;
+              } else if (!verifyData.exists) {
+                const inbuiltRes = await fetch('/api/local-ai/inbuilt-model');
+                const inbuiltData = await inbuiltRes.json();
+                if (inbuiltData.found && inbuiltData.modelPath) {
+                  candidatePath = inbuiltData.modelPath;
+                }
+              }
+            } catch { /* ignore */ }
+
+            if (candidatePath) {
+              setAutoLoaded(true);
+              setIsLoadingModel(true);
+              setLoadMessage('Auto-loading native model...');
+              try {
+                const res = await pythonBridge.loadGgufModel(candidatePath, nCtx, nThreads, gpuLayers);
+                if (!cancelled) {
+                  if (res.status === 'SUCCESS') {
+                    setLoadMessage(`✓ Native Model Ready: ${res.modelName} (${res.gpuLayers ?? gpuLayers} GPU layers)`);
+                    onSelectModelPath(candidatePath);
+                    setCustomPath(candidatePath);
+                    try { localStorage.setItem('tasc_gguf_model_path', candidatePath); } catch {}
+                  } else {
+                    setLoadMessage('Could not auto-load model. Please select from discovered models below.');
+                  }
+                  setTimeout(() => setLoadMessage(null), 5000);
+                }
+              } catch {
+                if (!cancelled) setLoadMessage('Auto-load failed. Please select model manually.');
+              } finally {
+                if (!cancelled) setIsLoadingModel(false);
+              }
+            }
+          }
+        } else {
+          setBridgeStatus('offline');
+        }
+      } catch {
+        if (!cancelled) setBridgeStatus('offline');
+      }
+
+      // 3. Scan for models
+      if (!cancelled) handleScanModels();
+    };
+    init();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only once on mount
 
   const handleLoadModel = async (path: string) => {
     setIsLoadingModel(true);
@@ -82,6 +162,9 @@ export const EmbeddedGgufControl: React.FC<EmbeddedGgufControlProps> = ({
     try {
       onSelectModelPath(path);
       setCustomPath(path);
+      // Persist path so daemon can auto-reload on next server restart
+      try { localStorage.setItem('tasc_gguf_model_path', path); } catch { /* ignore */ }
+
       const configJson = JSON.stringify({
         n_ctx: nCtx,
         n_threads: nThreads,
@@ -92,7 +175,8 @@ export const EmbeddedGgufControl: React.FC<EmbeddedGgufControlProps> = ({
 
       const res = await pythonBridge.loadGgufModel(path, nCtx, nThreads, gpuLayers);
       if (res.status === 'SUCCESS') {
-        setLoadMessage(`Model "${res.modelName || path}" loaded successfully!`);
+        const engineDesc = res.engine || (gpuLayers > 0 ? 'NVIDIA GPU (CUDA)' : 'CPU');
+        setLoadMessage(`✓ "${res.modelName}" loaded on ${engineDesc} (${res.gpuLayers ?? gpuLayers} layers, ctx=${res.nCtx ?? nCtx}). Ready!`);
       } else {
         setLoadMessage(`Selected "${path.split('\\').pop()}". (Config saved in profile)`);
       }
@@ -119,11 +203,11 @@ export const EmbeddedGgufControl: React.FC<EmbeddedGgufControlProps> = ({
           </div>
           <div>
             <h4 className="text-xs font-bold text-slate-100 flex items-center space-x-2">
-              <span>Local GGUF Runtime (llama-cpp-python)</span>
-              <span className="text-[10px] bg-sky-500/20 text-sky-300 px-1.5 py-0.2 rounded font-mono">Air-Gapped</span>
+              <span>Local GGUF Runtime (llama-server CUDA)</span>
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-mono">GPU Accelerated</span>
             </h4>
             <p className="text-[11px] text-slate-400">
-              Zero cloud latency & zero external app dependencies. Direct C++ inference with GBNF tool grammar.
+              Native CUDA llama-server binary. Direct GPU VRAM offloading with instant memory release.
             </p>
           </div>
         </div>
@@ -333,7 +417,11 @@ export const EmbeddedGgufControl: React.FC<EmbeddedGgufControlProps> = ({
             min={0}
             max={99}
             value={gpuLayers}
-            onChange={(e) => setGpuLayers(parseInt(e.target.value || '0', 10))}
+            onChange={(e) => {
+              const val = parseInt(e.target.value || '0', 10);
+              setGpuLayers(val);
+              try { localStorage.setItem('tasc_gguf_gpu_layers', String(val)); } catch { /* ignore */ }
+            }}
             className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
           />
         </div>

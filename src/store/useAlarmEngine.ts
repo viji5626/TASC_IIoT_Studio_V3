@@ -49,11 +49,16 @@ export function useAlarmEngine({ panels, latestValues }: UseAlarmEngineProps) {
       });
     });
 
-    // 2. Detect cleared alarms and record resolution in Historian Engine
+    // 2. Detect cleared alarms and record resolution in Historian Engine & Server
     const currentAlarmKeys = newAlarmsList.map(a => a.alarmKey);
     const clearedKeys = prevAlarmKeysRef.current.filter(k => !currentAlarmKeys.includes(k));
     clearedKeys.forEach(key => {
       recordAlarmResolvedEvent(key);
+      fetch('/api/alarms/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alarmKey: key })
+      }).catch(() => {});
     });
 
     // Check if new alarm triggered or alarm count changed
@@ -70,6 +75,20 @@ export function useAlarmEngine({ panels, latestValues }: UseAlarmEngineProps) {
       if (isAutoPopupEnabled) {
         setIsAlarmModalOpen(true);
       }
+
+      // Dispatch newly triggered alarms to Server for Telecom SMS & SMTP Email alerting
+      newKeysFound.forEach(key => {
+        const triggered = newAlarmsList.find(a => a.alarmKey === key);
+        if (triggered) {
+          fetch('/api/alarms/dispatch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(triggered)
+          }).catch(err => {
+            console.warn('[useAlarmEngine] Failed to dispatch alarm to server alerts:', err);
+          });
+        }
+      });
     }
 
     prevAlarmKeysRef.current = currentAlarmKeys;

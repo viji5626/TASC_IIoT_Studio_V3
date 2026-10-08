@@ -188,9 +188,9 @@ export function selectAdaptiveModel(
 ): AdaptiveRoutingDecision {
   const { tier, reason } = classifyQueryTier(userQuery, hasImages);
   const tierLabels: Record<AdaptiveTier, string> = {
-    tier1_fast: '⚡ Fast Operational (Tier 1)',
-    tier2_balanced: '🧠 Deep Analytics (Tier 2)',
-    tier3_heavy: '🚀 Vision & Synthesis (Tier 3)'
+    tier1_fast: 'Fast Operational (Tier 1)',
+    tier2_balanced: 'Deep Analytics (Tier 2)',
+    tier3_heavy: 'Vision & Synthesis (Tier 3)'
   };
 
   // Filter out embedding-only models

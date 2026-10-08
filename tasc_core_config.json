@@ -1,0 +1,21 @@
+{
+  "tags": [],
+  "connections": [
+    {
+      "connectionName": "broker1",
+      "brokerAddress": "test.mosquitto.org",
+      "port": 1883,
+      "protocol": "TCP",
+      "clientId": "",
+      "username": "",
+      "password": "",
+      "autoConnect": true,
+      "cleanSession": true,
+      "keepAlive": 60,
+      "enableWillMessage": false,
+      "connectionId": "conn_demo"
+    }
+  ],
+  "driverConnections": [],
+  "driverTags": []
+}

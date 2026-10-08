@@ -20,7 +20,6 @@ const ExportClientPackageModal: React.FC<ExportClientPackageModalProps> = ({
   const [clearPassword, setClearPassword] = useState('');
   const [showClearPass, setShowClearPass] = useState(false);
   const [fileFormat, setFileFormat] = useState<'tasc' | 'json'>('tasc');
-  const [preferredView, setPreferredView] = useState<'hmi' | 'grid'>('hmi');
   const [isGenerating, setIsGenerating] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -64,7 +63,7 @@ const ExportClientPackageModal: React.FC<ExportClientPackageModalProps> = ({
         clientName,
         notes,
         expiresAt,
-        preferredView,
+        'hmi',
         clearPassword,
         operatorCreds,
         clientFeatures,
@@ -134,37 +133,6 @@ const ExportClientPackageModal: React.FC<ExportClientPackageModalProps> = ({
         )}
 
         <form onSubmit={handleGenerate} className="space-y-4">
-          <div>
-            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-              Default Client View Interface Mode
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setPreferredView('hmi')}
-                className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center space-x-2 ${
-                  preferredView === 'hmi'
-                    ? 'bg-amber-500/20 border-amber-500 text-amber-300 shadow-lg'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >
-                <i className="fas fa-desktop text-amber-400"></i>
-                <span>Web HMI Canvas</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setPreferredView('grid')}
-                className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center space-x-2 ${
-                  preferredView === 'grid'
-                    ? 'bg-sky-500/20 border-sky-500 text-sky-300 shadow-lg'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >
-                <i className="fas fa-table-cells text-sky-400"></i>
-                <span>IIoT Grid Dashboard</span>
-              </button>
-            </div>
-          </div>
 
           <div>
             <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">

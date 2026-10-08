@@ -5,7 +5,7 @@ import { SymbolLibraryModal, IndustrialSymbolItem, convertSvgToPngDataUrl } from
 import { DynamicIndustrialSymbol } from './DynamicIndustrialSymbol';
 import LineGraph from './LineGraph';
 import Gauge from './Gauge';
-import { formatPublishPayload, getNormalizedOptions } from '../utils/mqttHelper';
+import { formatPublishPayload, getNormalizedOptions, resolveTagValueWithBit } from '../utils/mqttHelper';
 import { getSampleProject } from '../utils/sampleProjectPreset';
 import { getSmartIconAnimationClass, SmartIcon } from '../utils/iconAnimator';
 import { isPanelTripped } from '../utils/tripHelper';
@@ -43,6 +43,38 @@ import { getSmoothCurvePath, getPipeFilletPath } from '../utils/hmiPathMath';
 import { CANVAS_PRESET_COLORS, ELEMENT_PRESET_COLORS } from './canvas/CanvasPresetColors';
 import { LiveClockWidget } from './canvas/LiveClockWidget';
 import { AiCanvasBuilderModal } from './AiCanvasBuilderModal';
+
+const format24HourTime = (timeStr?: string): string => {
+  if (!timeStr) return '';
+  const str = String(timeStr).trim();
+  // Check if string contains AM or PM (12-hour format to 24-hour format conversion)
+  const ampmMatch = str.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AP]M)/i);
+  if (ampmMatch) {
+    let hours = parseInt(ampmMatch[1], 10);
+    const minutes = ampmMatch[2];
+    const seconds = ampmMatch[3] || '00';
+    const ampm = ampmMatch[4].toUpperCase();
+    if (ampm === 'PM' && hours < 12) hours += 12;
+    if (ampm === 'AM' && hours === 12) hours = 0;
+    return `${String(hours).padStart(2, '0')}:${minutes}:${seconds}`;
+  }
+  // If already standard 24-hour pattern (HH:mm:ss or H:mm:ss or HH:mm)
+  const standardMatch = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (standardMatch) {
+    const hours = parseInt(standardMatch[1], 10);
+    const minutes = standardMatch[2];
+    const seconds = standardMatch[3];
+    return `${String(hours).padStart(2, '0')}:${minutes}${seconds !== undefined ? `:${seconds}` : ''}`;
+  }
+  // Try date parse
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) {
+    return d.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+  return str.replace(/\s*[AP]M$/i, '').trim();
+};
+
+const formatConciseTime = format24HourTime;
 
 const DEMO_PRESETS = [
   { id: 'water_air_sample', title: 'Water & Air Sample System', icon: 'fa-droplet', bgClass: 'bg-sky-500/20', textClass: 'text-sky-400', elementCount: 9, desc: 'Pumps, water tank levels, flow rate indicators, ambient temperature, humidity, and exhaust fans' },
@@ -82,8 +114,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
   const userRole = userRoleProp ?? store.userRole ?? appState?.userRole;
   const productEdition = store.productEdition ?? appState?.productEdition;
+  // 'operator' role is managed by OperatorAuthContext and does NOT lock design mode.
+  // Only 'client' role, CLIENT_RUNTIME edition, or locked packages trigger client mode.
   const isClientMode =
-    userRole === 'operator' ||
     userRole === 'client' ||
     productEdition === ProductEdition.CLIENT_RUNTIME ||
     (productEdition as any) === 'client' ||
@@ -91,7 +124,30 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
   const [localEditMode, setLocalEditMode] = useState(!isClientMode);
   const isEditMode = store?.isHmiEditMode !== undefined ? store.isHmiEditMode : localEditMode;
-  const setIsEditMode = store?.setIsHmiEditMode || setLocalEditMode;
+  const setIsEditMode = useCallback((val: boolean | ((prev: boolean) => boolean)) => {
+    if (store?.setIsHmiEditMode) {
+      store.setIsHmiEditMode(val);
+    }
+    setLocalEditMode(val);
+  }, [store?.setIsHmiEditMode]);
+
+  useEffect(() => {
+    if (store?.isHmiEditMode !== undefined) {
+      setLocalEditMode(store.isHmiEditMode);
+    }
+  }, [store?.isHmiEditMode]);
+
+  useEffect(() => {
+    const handleSetEditMode = (e: any) => {
+      const target = typeof e?.detail === 'boolean' ? e.detail : !isEditMode;
+      if (store?.setIsHmiEditMode) {
+        store.setIsHmiEditMode(target);
+      }
+      setLocalEditMode(target);
+    };
+    window.addEventListener('tasc-set-edit-mode', handleSetEditMode);
+    return () => window.removeEventListener('tasc-set-edit-mode', handleSetEditMode);
+  }, [store?.setIsHmiEditMode, isEditMode]);
   const [gridSnap, setGridSnap] = useState(true);
   const [isMobileToolsCollapsed, setIsMobileToolsCollapsed] = useState<boolean>(false);
   const [isAiBuilderModalOpen, setIsAiBuilderModalOpen] = useState<boolean>(false);
@@ -425,6 +481,13 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
   const effectiveEditMode = !isClientMode && isEditMode && !isFullscreen;
 
+  // Clear selections when switching to Live RUN mode
+  useEffect(() => {
+    if (!effectiveEditMode) {
+      setSelectedPanelIds([]);
+      setMasterPanelId(null);
+    }
+  }, [effectiveEditMode]);
   // Keypad popup state
   const [keypadConfig, setKeypadConfig] = useState<{
     isOpen: boolean;
@@ -436,6 +499,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   const [sliderValues, setSliderValues] = useState<Record<string, number>>({});
   const [textInputValues, setTextInputValues] = useState<Record<string, string>>({});
   const [textInputErrors, setTextInputErrors] = useState<Record<string, string | null>>({});
+  const [focusedInputPanelId, setFocusedInputPanelId] = useState<string | null>(null);
+  const [pressedButtonPanelId, setPressedButtonPanelId] = useState<string | null>(null);
 
   // History Stack for Undo / Redo in Design Window
   const historyRef = useRef<AppState[]>([appState]);
@@ -1015,7 +1080,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
   const handleSendTextInput = (panel: Panel, rawVal: string) => {
     const trimmed = rawVal.trim();
-    if (!trimmed) return;
+    if (!trimmed) return false;
 
     if (panel.dataType !== 'text') {
       const numVal = Number(trimmed);
@@ -1027,19 +1092,23 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
             ...prev,
             [panel.panelId]: `Limit error: ${min}..${max}`
           }));
-          return;
+          return false;
         }
       }
     }
 
     setTextInputErrors(prev => ({ ...prev, [panel.panelId]: null }));
-    const targetTopic = panel.publishTopic?.trim() || panel.topic?.trim();
+    const targetTopic = panel.publishTopic?.trim() || panel.topic?.trim() || panel.driverWriteTagId?.trim() || panel.driverTagId?.trim();
     if (onPublish && targetTopic) {
       onPublish(targetTopic, formatPublishPayload(trimmed, panel));
     }
-    if (panel.clearOnPublish) {
-      setTextInputValues(prev => ({ ...prev, [panel.panelId]: '' }));
-    }
+    setTextInputValues(prev => {
+      const next = { ...prev };
+      delete next[panel.panelId];
+      return next;
+    });
+    setFocusedInputPanelId(null);
+    return true;
   };
 
   // Mouse dragging & marquee selection state
@@ -2439,7 +2508,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       }
     }
 
-    // Determine default symbol animation type based on category / id
+    // Determine default symbol state display mode based on category / id
     let defaultAnimType: 'digital_on_off' | 'analog_level' | 'analog_valve_angle' | 'motor_rotation' | 'none' = 'none';
     if (symbol.category === 'tanks' || symbol.category === 'silos') {
       defaultAnimType = 'analog_level';
@@ -2447,8 +2516,6 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       defaultAnimType = 'analog_valve_angle';
     } else if (symbol.category === 'valves') {
       defaultAnimType = 'digital_on_off';
-    } else if (symbol.category === 'motors' || symbol.category === 'agitators' || symbol.category === 'pumps') {
-      defaultAnimType = 'motor_rotation';
     }
 
     const dataSourceMode = bindingConfig?.dataSourceMode || 'driver';
@@ -2622,11 +2689,29 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     }
 
     if (panel.type === PanelType.BUTTON) {
-      const payload = panel.buttonPayload ?? '1';
-      const targetTopic = panel.publishTopic?.trim() || panel.topic?.trim();
-      if (onPublish && targetTopic) {
-        const formatted = formatPublishPayload(payload, panel);
-        onPublish(targetTopic, formatted);
+      const act = panel.buttonAction || (panel.buttonPayload === 'TOGGLE' ? 'toggle' : 'momentary');
+      const targetTopic = panel.publishTopic?.trim() || panel.topic?.trim() || panel.driverWriteTagId?.trim() || panel.driverTagId?.trim();
+      if (!onPublish || !targetTopic) return;
+
+      const onVal = panel.payloadOn !== undefined && panel.payloadOn !== '' ? panel.payloadOn : (panel.buttonPayload ?? '1');
+      const offVal = panel.payloadOff !== undefined && panel.payloadOff !== '' ? panel.payloadOff : '0';
+
+      if (act === 'toggle') {
+        const liveData = latestValues[panel.panelId] || (panel.topic ? latestValues[panel.topic] : undefined);
+        const currentVal = liveData?.val;
+        const isCurrentlyOn = String(currentVal) === String(onVal);
+        const nextPayload = isCurrentlyOn ? offVal : onVal;
+        onPublish(targetTopic, formatPublishPayload(nextPayload, panel));
+      } else if (act === 'set_bit') {
+        onPublish(targetTopic, formatPublishPayload(onVal, panel));
+      } else if (act === 'reset_bit') {
+        onPublish(targetTopic, formatPublishPayload(offVal, panel));
+      } else {
+        // Momentary button triggered on container: pulse ON then reset after 200ms
+        onPublish(targetTopic, formatPublishPayload(onVal, panel));
+        setTimeout(() => {
+          onPublish(targetTopic, formatPublishPayload(offVal, panel));
+        }, 200);
       }
       return;
     }
@@ -2900,9 +2985,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   return (
     <div className="flex flex-col h-full bg-[#030712] text-slate-100 select-none overflow-hidden relative">
 
-      {/* Web HMI Canvas Top Navigation Bar (Hidden in Fullscreen mode to allow full canvas auto-fit) */}
+      {/* Web HMI Canvas Top Navigation Bar (Hidden in Fullscreen mode or Live RUN mode to allow full canvas workspace) */}
       {/* Web HMI Canvas Main Studio Toolbar */}
-      {!isFullscreen && (
+      {!isFullscreen && effectiveEditMode && (
         <div
           onWheel={(e) => {
             if (isMobile && e.deltaY !== 0) {
@@ -3087,7 +3172,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold transition-all outline-none cursor-pointer shrink-0"
                   >
                     <option value="" disabled className="bg-slate-900 text-slate-400">
-                      ⚡ Load Demo...
+                      Load Template...
                     </option>
                     {DEMO_PRESETS.map((preset) => (
                       <option key={preset.id} value={preset.id} className="bg-slate-900 text-white font-medium">
@@ -3168,37 +3253,6 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   <span>{isAutoFit ? 'Fit ON' : 'Fit'}</span>
                 </button>
               </>
-            )}
-
-            {/* Edit Mode vs Live Run Mode */}
-            {isClientMode ? (
-              <div
-                className="px-2.5 py-1 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-extrabold tracking-wider uppercase flex items-center space-x-1 shadow-sm shrink-0"
-                title="Client Edition (Operator Mode) — Live Execution Active"
-              >
-                <i className="fas fa-play text-xs text-emerald-400 animate-pulse"></i>
-                <span className="hidden sm:inline">LIVE HMI RUN</span>
-                <span className="sm:hidden">LIVE</span>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setIsEditMode(!isEditMode);
-                  if (isEditMode) {
-                    setSelectedPanelIds([]);
-                    setMasterPanelId(null);
-                  }
-                }}
-                className={`px-2.5 py-1 rounded-xl border text-xs font-extrabold tracking-wider uppercase transition-all flex items-center space-x-1 cursor-pointer shrink-0 active:scale-95 ${isEditMode
-                  ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md shadow-amber-500/20'
-                  : 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shadow-emerald-500/20'
-                  }`}
-              >
-                <i className={`fas ${isEditMode ? 'fa-pen-to-square' : 'fa-play'} text-xs`}></i>
-                <span className="hidden sm:inline">{isEditMode ? 'Design' : 'Run'}</span>
-                <span className="sm:hidden">{isEditMode ? 'Design' : 'Run'}</span>
-              </button>
             )}
           </div>
         </div>
@@ -3437,44 +3491,52 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     className="bg-transparent font-mono text-[11px] font-bold text-amber-300 outline-none cursor-pointer max-w-[100px] sm:max-w-none"
                   >
                     <option value="none" className="bg-slate-900 text-slate-400">Standard Widget</option>
-                    <option value="rectangle" className="bg-slate-900 text-white">🔲 Rectangle</option>
-                    <option value="circle" className="bg-slate-900 text-white">⚪ Circle / Ellipse</option>
-                    <option value="line" className="bg-slate-900 text-white">➖ Vector Line</option>
-                    <option value="polyline" className="bg-slate-900 text-white">🐍 Polyline</option>
-                    <option value="pipe" className="bg-slate-900 text-white">🚰 Process Pipe</option>
-                    <option value="triangle" className="bg-slate-900 text-white">🔺 Triangle</option>
-                    <option value="polygon" className="bg-slate-900 text-white">⬡ Polygon</option>
-                    <option value="star" className="bg-slate-900 text-white">⭐ Vector Star</option>
-                    <option value="arrow" className="bg-slate-900 text-white">➔ Vector Arrow</option>
+                    <option value="rectangle" className="bg-slate-900 text-white">Rectangle</option>
+                    <option value="circle" className="bg-slate-900 text-white">Circle / Ellipse</option>
+                    <option value="line" className="bg-slate-900 text-white">Vector Line</option>
+                    <option value="polyline" className="bg-slate-900 text-white">Polyline</option>
+                    <option value="pipe" className="bg-slate-900 text-white">Process Pipe</option>
+                    <option value="triangle" className="bg-slate-900 text-white">Triangle</option>
+                    <option value="polygon" className="bg-slate-900 text-white">Polygon</option>
+                    <option value="star" className="bg-slate-900 text-white">Vector Star</option>
+                    <option value="arrow" className="bg-slate-900 text-white">Vector Arrow</option>
                   </select>
                 </div>
 
-                {/* Dynamics & Animation Quick Badges */}
+                {/* Dynamics & Animation Studio Dock Quick Links */}
                 <div className="flex items-center space-x-1 shrink-0">
                   <button
                     type="button"
-                    onClick={() => onEditPanel(selectedPanel)}
-                    className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold font-mono transition-all flex items-center space-x-1 border cursor-pointer ${selectedPanel.enableMotionDynamics
-                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
-                      : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800'
-                      }`}
-                    title={selectedPanel.enableMotionDynamics ? 'Motion Path Active - Click to Edit Dynamics' : 'Add Tag-Based Motion Path'}
+                    onClick={() => {
+                      setIsLeftDockOpen(true);
+                      setActiveDockTab('dynamics');
+                    }}
+                    className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold font-mono transition-all flex items-center space-x-1 border cursor-pointer ${
+                      selectedPanel.enableMotionDynamics || selectedPanel.dynamics?.some(d => d.type === 'motion_path')
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
+                        : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800'
+                    }`}
+                    title="Open Motion Dynamics in Studio Dock (Alt+D)"
                   >
                     <i className="fas fa-route text-[10px] text-amber-400"></i>
-                    <span>{selectedPanel.enableMotionDynamics ? `Path: ${selectedPanel.motionEndX ?? 150}px` : '+ Motion'}</span>
+                    <span>{selectedPanel.enableMotionDynamics || selectedPanel.dynamics?.some(d => d.type === 'motion_path') ? 'Motion Active' : '+ Motion'}</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => onEditPanel(selectedPanel)}
-                    className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold font-mono transition-all flex items-center space-x-1 border cursor-pointer ${selectedPanel.enableRotationDynamics
-                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
-                      : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800'
-                      }`}
-                    title={selectedPanel.enableRotationDynamics ? 'Rotation Dynamics Active - Click to Edit Dynamics' : 'Add Tag-Based Rotation'}
+                    onClick={() => {
+                      setIsLeftDockOpen(true);
+                      setActiveDockTab('dynamics');
+                    }}
+                    className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold font-mono transition-all flex items-center space-x-1 border cursor-pointer ${
+                      selectedPanel.enableRotationDynamics || selectedPanel.dynamics?.some(d => d.type === 'rotation')
+                        ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
+                        : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800'
+                    }`}
+                    title="Open Rotation Dynamics in Studio Dock (Alt+D)"
                   >
                     <i className="fas fa-rotate text-[10px] text-cyan-400"></i>
-                    <span>{selectedPanel.enableRotationDynamics ? (selectedPanel.rotationMode === 'variable' ? 'Rot: Var' : 'Rot: Spin') : '+ Rotate'}</span>
+                    <span>{selectedPanel.enableRotationDynamics || selectedPanel.dynamics?.some(d => d.type === 'rotation') ? 'Rotate Active' : '+ Rotate'}</span>
                   </button>
                 </div>
               </>
@@ -3871,10 +3933,20 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 const dynamicTag = panel.dynamics?.find(d => d.enabled && (d.driverTagId || d.topic))?.driverTagId
                   || panel.dynamics?.find(d => d.enabled && (d.driverTagId || d.topic))?.topic;
 
-                const liveData = latestValues[panel.panelId]
+                let liveData = latestValues[panel.panelId]
                   || (panel.driverTagId ? latestValues[panel.driverTagId] : undefined)
                   || (panel.topic ? latestValues[panel.topic] : undefined)
                   || (dynamicTag ? latestValues[dynamicTag] : undefined);
+
+                // Bit extraction fallback if panel or dynamic tag binds to a bit (e.g. Word.b3 or Word:3)
+                if (!liveData && (panel.driverTagId || panel.topic || dynamicTag)) {
+                  const bitVal = resolveTagValueWithBit(panel.driverTagId, latestValues)
+                    ?? resolveTagValueWithBit(panel.topic, latestValues)
+                    ?? resolveTagValueWithBit(dynamicTag, latestValues);
+                  if (bitVal !== undefined) {
+                    liveData = { val: bitVal };
+                  }
+                }
 
                 const liveValue = liveData?.val;
                 const rawStringValue = liveValue !== undefined && liveValue !== null ? String(liveValue) : '';
@@ -3985,7 +4057,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         : undefined
                     }}
                   >
-                    {/* Telemetry Disconnection / Timeout Badge Overlay (HMI Canvas View - Dynamically Scaled) */}
+                    {/* Telemetry Disconnection / Timeout Badge Overlay (Shown on Process Value area, NOT header/name) */}
                     {isOffline && panel.enableStaleTimeout !== false && panel.showOfflineBadge !== false && (() => {
                       const isMicro = pos.w < 65 || pos.h < 30;
                       const isMini = pos.w < 110 || pos.h < 50;
@@ -3997,140 +4069,244 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         ? 'Driver bad quality / socket error'
                         : `Offline: No telemetry payload received for ${telemetryStatus.secondsSinceUpdate || 10}s`;
 
+                      const isSwitchOrLed = panel.type === PanelType.SWITCH || panel.type === PanelType.LED;
+
                       if (isMicro) {
-                        // Ultra-compact beacon icon for small pipes/sensors (< 65x30)
+                        // Ultra-compact beacon icon centered on value
                         return (
                           <div
-                            className="absolute top-0.5 right-0.5 z-40 w-3.5 h-3.5 rounded-full bg-amber-500 text-slate-950 border border-amber-300 shadow-md flex items-center justify-center pointer-events-none animate-pulse"
+                            className={`absolute ${isSwitchOrLed ? 'top-1/2 right-4 -translate-y-1/2' : 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2'} z-40 w-4 h-4 rounded-full bg-amber-500 text-slate-950 border border-amber-300 shadow-md flex items-center justify-center pointer-events-none animate-pulse`}
                             title={titleText}
                           >
-                            <i className="fas fa-plug-circle-xmark text-[7px]"></i>
+                            <i className="fas fa-plug-circle-xmark text-[7.5px]"></i>
                           </div>
                         );
                       }
 
                       if (isMini) {
-                        // Mini icon-only badge (< 110x50)
+                        // Mini icon-only badge centered on value
                         return (
                           <div
-                            className="absolute top-0.5 right-0.5 z-40 text-[7.5px] font-black uppercase px-1 py-0.2 rounded-full bg-amber-500/40 text-amber-300 border border-amber-500/80 animate-pulse flex items-center space-x-0.5 shadow-md backdrop-blur-md pointer-events-none origin-top-right"
-                            style={{ transform: `scale(${scale})` }}
+                            className={`absolute ${isSwitchOrLed ? 'top-1/2 right-3 -translate-y-1/2' : 'top-[58%] left-1/2 -translate-x-1/2 -translate-y-1/2'} z-40 text-[7.5px] font-black uppercase px-1.5 py-0.5 rounded-full bg-amber-500 text-slate-950 border border-amber-300 animate-pulse flex items-center space-x-0.5 shadow-md pointer-events-none`}
+                            style={{ transform: isSwitchOrLed ? `translateY(-50%) scale(${scale})` : `translate(-50%, -50%) scale(${scale})` }}
                             title={titleText}
                           >
-                            <i className="fas fa-plug-circle-xmark text-[7px] text-amber-400"></i>
+                            <i className="fas fa-plug-circle-xmark text-[7px]"></i>
                             <span>OFF</span>
                           </div>
                         );
                       }
 
                       if (isCompact) {
-                        // Compact pill (< 160x70)
+                        // Compact pill centered on value
                         return (
                           <div
-                            className="absolute top-1 right-1 z-40 text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full bg-amber-500/35 text-amber-300 border border-amber-500/80 animate-pulse flex items-center space-x-1 shadow-md backdrop-blur-md pointer-events-none origin-top-right"
-                            style={{ transform: `scale(${scale})` }}
+                            className={`absolute ${isSwitchOrLed ? 'top-1/2 right-2.5 -translate-y-1/2' : 'top-[58%] left-1/2 -translate-x-1/2 -translate-y-1/2'} z-40 text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 border border-amber-300 animate-pulse flex items-center space-x-1 shadow-lg pointer-events-none whitespace-nowrap`}
+                            style={{ transform: isSwitchOrLed ? `translateY(-50%) scale(${scale})` : `translate(-50%, -50%) scale(${scale})` }}
                             title={titleText}
                           >
-                            <i className="fas fa-plug-circle-xmark text-[7.5px] text-amber-400"></i>
+                            <i className="fas fa-plug-circle-xmark text-[7.5px]"></i>
                             <span>OFFLINE</span>
                           </div>
                         );
                       }
 
-                      // Standard full pill
+                      // Standard full pill centered directly over the value area (for switch/LED placed over the right-hand toggle/lamp)
                       return (
                         <div
-                          className="absolute top-1.5 right-1.5 z-40 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-300 border border-amber-500/80 animate-pulse flex items-center space-x-1 shadow-lg backdrop-blur-md pointer-events-none origin-top-right"
-                          style={{ transform: scale < 1 ? `scale(${scale})` : undefined }}
+                          className={`absolute ${isSwitchOrLed ? 'top-1/2 right-2 -translate-y-1/2' : 'top-[58%] left-1/2 -translate-x-1/2 -translate-y-1/2'} z-40 text-[9px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 border border-amber-300 font-bold shadow-xl animate-pulse flex items-center space-x-1.5 pointer-events-none whitespace-nowrap`}
+                          style={{ transform: isSwitchOrLed ? `translateY(-50%) scale(${scale < 1 ? scale : 1})` : `translate(-50%, -50%) scale(${scale < 1 ? scale : 1})` }}
                           title={titleText}
                         >
-                          <i className="fas fa-plug-circle-xmark text-[9px] text-amber-400"></i>
+                          <i className="fas fa-plug-circle-xmark text-[9px] text-slate-950"></i>
                           <span>OFFLINE ({telemetryStatus.secondsSinceUpdate || 10}s)</span>
                         </div>
                       );
                     })()}
 
-                    {/* Top-Left Rx Received Timestamp Badge (below header title) */}
-                    {showRx && pos.w >= 90 && pos.h >= 50 && (
-                      <div className="absolute top-[26px] left-1.5 z-30 pointer-events-none">
-                        <span className="text-[9px] font-mono text-slate-300 flex items-center space-x-1 bg-slate-950/90 px-1.5 py-0.5 rounded-md border border-slate-800 shadow-md backdrop-blur-md">
-                          <i className="fas fa-arrow-down text-[8px] text-emerald-400"></i>
-                          <span>Rx: {lastRxTime}</span>
+                    {/* Rx Received Timestamp Badge */}
+                    {showRx && pos.w >= 85 && pos.h >= 40 && (
+                      <div
+                        className={`absolute ${panel.type === PanelType.TEXT_INPUT ? 'bottom-[38px]' : 'bottom-1'} right-1.5 z-30 pointer-events-none transition-all`}
+                        title={`Last received: ${lastRxTime}`}
+                      >
+                        <span className="text-[7.5px] font-mono text-emerald-300 font-semibold flex items-center space-x-1 bg-slate-950/90 px-1.5 py-0.5 rounded border border-emerald-500/40 shadow-sm backdrop-blur-md">
+                          <i className="fas fa-arrow-down text-[6px] text-emerald-400"></i>
+                          <span>Rx {format24HourTime(lastRxTime)}</span>
                         </span>
                       </div>
                     )}
 
-                    {/* Top-Right Tx Sent Timestamp Badge (below header title) */}
-                    {showTx && pos.w >= 90 && pos.h >= 50 && (
-                      <div className="absolute top-[26px] right-1.5 z-30 pointer-events-none">
-                        <span className="text-[9px] font-mono text-amber-300 flex items-center space-x-1 bg-amber-950/90 px-1.5 py-0.5 rounded-md border border-amber-800/80 shadow-md backdrop-blur-md">
-                          <i className="fas fa-arrow-up text-[8px] text-amber-400"></i>
-                          <span>Tx: {lastTxTime}</span>
+                    {/* Tx Sent Timestamp Badge */}
+                    {showTx && pos.w >= 85 && pos.h >= 40 && (
+                      <div
+                        className={`absolute ${panel.type === PanelType.TEXT_INPUT ? 'bottom-[38px]' : 'bottom-1'} z-30 pointer-events-none transition-all ${
+                          showRx ? 'right-[76px]' : 'right-1.5'
+                        }`}
+                        title={`Last transmitted: ${lastTxTime}`}
+                      >
+                        <span className="text-[7.5px] font-mono text-amber-300 font-semibold flex items-center space-x-1 bg-slate-950/90 px-1.5 py-0.5 rounded border border-amber-500/40 shadow-sm backdrop-blur-md">
+                          <i className="fas fa-arrow-up text-[6px] text-amber-400"></i>
+                          <span>Tx {format24HourTime(lastTxTime)}</span>
                         </span>
                       </div>
                     )}
                     {/* Element Content Renderers */}
                     {panel.type === PanelType.STATIC_TEXT ? (
-                      <div
-                        className="w-full h-full flex items-center justify-center p-2 font-bold truncate text-center"
-                        style={{
-                          fontSize: `${panel.fontSize || 16}px`,
-                          color: panel.textColor || '#38bdf8',
-                          textAlign: panel.textAlign || 'center',
-                          textShadow: panel.shadowEnabled
-                            ? `0 0 ${panel.shadowIntensity ?? 12}px ${panel.shadowColor || panel.textColor || '#38bdf8'}, 0 0 ${Math.round((panel.shadowIntensity ?? 12) / 2)}px ${panel.shadowColor || panel.textColor || '#38bdf8'}, 0 2px 4px rgba(0, 0, 0, 0.9)`
-                            : undefined
-                        }}
-                      >
-                        {panel.staticText || panel.panelName || 'STATIC LABEL'}
-                      </div>
+                      (() => {
+                        const align = panel.textAlign || 'center';
+                        const isWrap = panel.textWrap !== false;
+                        const alignClass =
+                          align === 'left'
+                            ? 'text-left items-start'
+                            : align === 'right'
+                            ? 'text-right items-end'
+                            : align === 'justify'
+                            ? 'text-justify items-stretch'
+                            : 'text-center items-center';
+
+                        return (
+                          <div
+                            className={`w-full h-full flex flex-col justify-center p-2 font-bold overflow-hidden select-text ${alignClass}`}
+                            style={{
+                              fontSize: `${panel.fontSize || 16}px`,
+                              color: panel.textColor || '#38bdf8',
+                              textAlign: align,
+                              textShadow: panel.shadowEnabled
+                                ? `0 0 ${panel.shadowIntensity ?? 12}px ${panel.shadowColor || panel.textColor || '#38bdf8'}, 0 0 ${Math.round((panel.shadowIntensity ?? 12) / 2)}px ${panel.shadowColor || panel.textColor || '#38bdf8'}, 0 2px 4px rgba(0, 0, 0, 0.9)`
+                                : undefined
+                            }}
+                          >
+                            <span
+                              className={`w-full ${isWrap ? 'break-words' : 'truncate'}`}
+                              style={{
+                                whiteSpace: isWrap ? 'pre-wrap' : 'pre',
+                                wordBreak: isWrap ? 'break-word' : 'normal',
+                                overflowWrap: isWrap ? 'break-word' : 'normal',
+                                textAlign: align,
+                                lineHeight: 1.35
+                              }}
+                            >
+                              {panel.staticText || panel.panelName || 'STATIC LABEL'}
+                            </span>
+                          </div>
+                        );
+                      })()
                     ) : panel.type === PanelType.BUTTON ? (
-                      /* Tactile 3D Push-Button Widget with state 0 / state 1 custom text & styles */
-                      <div className="w-full h-full p-1.5 flex items-center justify-center">
-                        <button
-                          type="button"
-                          disabled={effectiveEditMode}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (!effectiveEditMode && onPublish) {
-                              const pubTopic = panel.publishTopic || panel.topic;
-                              const payload = panel.buttonPayload || panel.payloadOn || '1';
-                              onPublish(pubTopic, formatPublishPayload(payload, panel));
-                            }
-                          }}
-                          className={`w-full h-full border-2 transition-all flex items-center justify-center space-x-2 px-3 py-1 cursor-pointer group/btn active:scale-95 shadow-md ${panel.buttonStyle === 'square'
-                            ? 'rounded-none'
-                            : panel.buttonStyle === 'pill'
-                              ? 'rounded-full'
-                              : panel.buttonStyle === 'circular'
-                                ? 'rounded-full aspect-square'
-                                : panel.buttonStyle === 'bevel'
-                                  ? 'rounded-lg border-b-4 border-r-4'
-                                  : panel.buttonStyle === 'glossy'
-                                    ? 'rounded-xl bg-gradient-to-b from-sky-400/20 via-sky-900/40 to-slate-950 border-sky-400/50'
-                                    : 'rounded-xl'
-                            }`}
-                          style={{
-                            backgroundColor: String(liveValue) === String(panel.payloadOn ?? '1')
-                              ? (panel.firstColor || '#10b981')
-                              : (panel.bgColor || '#1e293b'),
-                            borderColor: panel.borderColor || '#334155',
-                            borderRadius: panel.borderRadius !== undefined ? `${panel.borderRadius}px` : undefined
-                          }}
-                        >
-                          <div className={`w-2.5 h-2.5 rounded-full transition-transform shrink-0 ${String(liveValue) === String(panel.payloadOn ?? '1')
-                            ? 'bg-emerald-400 shadow-[0_0_10px_#10b981] scale-125'
-                            : 'bg-amber-500 shadow-[0_0_6px_#f59e0b]'
-                            }`}></div>
-                          <span className="font-extrabold text-xs uppercase tracking-wider truncate drop-shadow" style={{ color: panel.textColor || '#ffffff' }}>
-                            {String(liveValue) === String(panel.payloadOn ?? '1')
-                              ? (panel.payloadOnText || panel.panelName || 'PUSH BUTTON')
-                              : (panel.payloadOffText || panel.panelName || 'PUSH BUTTON')}
-                          </span>
-                          <i className="fas fa-hand-pointer text-amber-400 text-xs opacity-75 group-hover/btn:opacity-100 shrink-0"></i>
-                        </button>
-                      </div>
+                      /* Tactile HMI Action Button: Momentary, Toggle, Set Bit, Reset Bit */
+                      (() => {
+                        const btnAction = panel.buttonAction || (panel.buttonPayload === 'TOGGLE' ? 'toggle' : 'momentary');
+                        const isMomentary = btnAction === 'momentary';
+                        const isToggle = btnAction === 'toggle';
+                        const isSetBit = btnAction === 'set_bit';
+                        const isResetBit = btnAction === 'reset_bit';
+
+                        const isPressed = pressedButtonPanelId === panel.panelId;
+                        const onVal = panel.payloadOn !== undefined && panel.payloadOn !== '' ? panel.payloadOn : (panel.buttonPayload ?? '1');
+                        const offVal = panel.payloadOff !== undefined && panel.payloadOff !== '' ? panel.payloadOff : '0';
+                        const onValStr = String(onVal);
+
+                        const isLiveOn = liveValue !== undefined && liveValue !== null && String(liveValue) === onValStr;
+                        const isBtnActive = (isMomentary && isPressed) || (!isMomentary && isLiveOn);
+
+                        // Determine visible button label for all 4 functions
+                        let buttonLabel = panel.panelName || 'PUSH BUTTON';
+                        if (isMomentary || isToggle) {
+                          buttonLabel = isBtnActive
+                            ? (panel.payloadOnText || panel.panelName || 'ON / RUNNING')
+                            : (panel.payloadOffText || panel.panelName || 'OFF / STOPPED');
+                        } else if (isSetBit) {
+                          buttonLabel = panel.payloadOnText || panel.buttonText || panel.panelName || 'SET';
+                        } else if (isResetBit) {
+                          buttonLabel = panel.payloadOffText || panel.buttonText || panel.panelName || 'RESET';
+                        }
+
+                        const targetTopic = panel.publishTopic?.trim() || panel.topic?.trim() || panel.driverWriteTagId?.trim() || panel.driverTagId?.trim();
+
+                        const handleTriggerPressDown = () => {
+                          if (effectiveEditMode || !onPublish || !targetTopic) return;
+                          if (isMomentary) {
+                            setPressedButtonPanelId(panel.panelId);
+                            onPublish(targetTopic, formatPublishPayload(onVal, panel));
+                          }
+                        };
+
+                        const handleTriggerRelease = () => {
+                          if (effectiveEditMode || !onPublish || !targetTopic) return;
+                          if (isMomentary && pressedButtonPanelId === panel.panelId) {
+                            setPressedButtonPanelId(null);
+                            onPublish(targetTopic, formatPublishPayload(offVal, panel));
+                          }
+                        };
+
+                        const handleTriggerClick = (e: React.MouseEvent) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (effectiveEditMode || !onPublish || !targetTopic) return;
+
+                          if (isToggle) {
+                            const nextPayload = isLiveOn ? offVal : onVal;
+                            onPublish(targetTopic, formatPublishPayload(nextPayload, panel));
+                          } else if (isSetBit) {
+                            onPublish(targetTopic, formatPublishPayload(onVal, panel));
+                          } else if (isResetBit) {
+                            onPublish(targetTopic, formatPublishPayload(offVal, panel));
+                          }
+                        };
+
+                        return (
+                          <div className="w-full h-full p-1.5 flex items-center justify-center select-none">
+                            <button
+                              type="button"
+                              disabled={effectiveEditMode}
+                              onClick={handleTriggerClick}
+                              onMouseDown={handleTriggerPressDown}
+                              onMouseUp={handleTriggerRelease}
+                              onMouseLeave={handleTriggerRelease}
+                              onTouchStart={handleTriggerPressDown}
+                              onTouchEnd={handleTriggerRelease}
+                              onTouchCancel={handleTriggerRelease}
+                              className={`w-full h-full border-2 transition-all flex items-center justify-center space-x-2 px-3 py-1 cursor-pointer group/btn ${
+                                isPressed ? 'scale-95 shadow-inner' : 'active:scale-95 shadow-md'
+                              } ${panel.buttonStyle === 'square'
+                                ? 'rounded-none'
+                                : panel.buttonStyle === 'pill'
+                                  ? 'rounded-full'
+                                  : panel.buttonStyle === 'circular'
+                                    ? 'rounded-full aspect-square'
+                                    : panel.buttonStyle === 'bevel'
+                                      ? 'rounded-lg border-b-4 border-r-4'
+                                      : panel.buttonStyle === 'glossy'
+                                        ? 'rounded-xl bg-gradient-to-b from-sky-400/20 via-sky-900/40 to-slate-950 border-sky-400/50'
+                                        : 'rounded-xl'
+                              }`}
+                              style={{
+                                backgroundColor: isBtnActive
+                                  ? (panel.firstColor || '#10b981')
+                                  : (panel.bgColor || '#1e293b'),
+                                borderColor: isBtnActive
+                                  ? (panel.firstColor || '#10b981')
+                                  : (panel.borderColor || '#334155'),
+                                borderRadius: panel.borderRadius !== undefined ? `${panel.borderRadius}px` : undefined
+                              }}
+                            >
+                              <div className={`w-2.5 h-2.5 rounded-full transition-transform shrink-0 ${
+                                isBtnActive
+                                  ? 'bg-emerald-400 shadow-[0_0_10px_#10b981] scale-125'
+                                  : isResetBit
+                                    ? 'bg-rose-500 shadow-[0_0_6px_#f43f5e]'
+                                    : 'bg-amber-500 shadow-[0_0_6px_#f59e0b]'
+                              }`}></div>
+                              <span className="font-extrabold text-xs uppercase tracking-wider truncate drop-shadow" style={{ color: panel.textColor || '#ffffff' }}>
+                                {buttonLabel}
+                              </span>
+                              <i className={`fas ${
+                                isMomentary ? 'fa-hand-pointer' : isToggle ? 'fa-toggle-on' : isSetBit ? 'fa-circle-check' : 'fa-circle-xmark'
+                              } text-amber-400 text-xs opacity-75 group-hover/btn:opacity-100 shrink-0`}></i>
+                            </button>
+                          </div>
+                        );
+                      })()
                     ) : panel.type === PanelType.SWITCH ? (
                       /* Industrial Toggle Switch / Rocker Button */
                       <div className="w-full h-full p-1.5 flex items-center justify-between px-3">
@@ -4291,11 +4467,17 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
                         return (
                           <div className="w-full h-full p-2 flex flex-col justify-between overflow-hidden">
-                            <span className="text-[10px] font-bold truncate uppercase tracking-wider mb-0.5" style={{ color: panel.textColor || '#94a3b8' }}>
+                            <span
+                              className="text-[10px] font-bold truncate uppercase tracking-wider mb-0.5 w-full block"
+                              style={{
+                                color: panel.textColor || '#94a3b8',
+                                textAlign: panel.textAlign || 'left'
+                              }}
+                            >
                               {panel.panelName || 'TEXT DISPLAY'}
                             </span>
                             <div
-                              className="flex items-baseline justify-between px-2.5 py-1.5 rounded-lg my-auto transition-all duration-300"
+                              className="flex items-baseline justify-between px-2.5 py-1.5 rounded-lg my-auto transition-all duration-300 relative"
                               style={{
                                 backgroundColor: 'rgba(0, 0, 0, 0.7)',
                                 borderColor: `${dynamicColor}50`,
@@ -4303,12 +4485,19 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                               }}
                             >
                               <span
-                                className={`font-bold tracking-wider truncate ${panel.digitalDisplay !== false ? 'digital-font' : ''}`}
+                                className={`font-bold tracking-wider truncate ${panel.digitalDisplay !== false ? 'digital-font' : ''} ${isOffline ? 'opacity-30' : ''}`}
                                 style={{ fontSize: `${panel.fontSize || 16}px`, color: dynamicColor }}
                               >
                                 {rawStringValue !== '' ? rawStringValue : (liveValue !== undefined ? String(liveValue) : '0')}
                               </span>
-                              {panel.unit && <span className="text-[10px] font-mono font-bold ml-1.5 shrink-0" style={{ color: dynamicColor }}>{panel.unit}</span>}
+                              {panel.unit && (
+                                <span
+                                  className={`text-[10px] font-mono font-bold ml-1.5 shrink-0 ${isOffline ? 'opacity-30' : ''}`}
+                                  style={{ color: dynamicColor }}
+                                >
+                                  {panel.unit}
+                                </span>
+                              )}
                             </div>
                           </div>
                         );
@@ -4324,59 +4513,112 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         }}
                       >
                         <div className="flex items-center justify-between mb-0.5">
-                          <span className="text-[10px] font-bold truncate uppercase tracking-wider" style={{ color: panel.textColor || '#94a3b8' }}>
+                          <span
+                            className={`text-[10px] font-bold truncate uppercase tracking-wider ${
+                              panel.textAlign === 'center' ? 'text-center flex-1' : panel.textAlign === 'right' ? 'text-right flex-1' : ''
+                            }`}
+                            style={{ color: panel.textColor || '#94a3b8' }}
+                          >
                             {panel.panelName || 'TEXT INPUT'}
                           </span>
                           {panel.dataType !== 'text' && (panel.payloadMin !== undefined || panel.payloadMax !== undefined) && (
-                            <span className="text-[9px] font-mono text-slate-400 bg-slate-900 border border-slate-800 px-1.5 py-0.2 rounded">
+                            <span className="text-[9px] font-mono text-slate-400 bg-slate-900 border border-slate-800 px-1.5 py-0.2 rounded ml-1 shrink-0">
                               {panel.payloadMin ?? 0}..{panel.payloadMax ?? 100}
                             </span>
                           )}
                         </div>
 
                         <div className="flex items-center space-x-1.5 my-0.5">
-                          <input
-                            type={panel.dataType === 'text' ? 'text' : 'number'}
-                            value={
-                              textInputValues[panel.panelId] !== undefined
-                                ? textInputValues[panel.panelId]
-                                : (liveValue !== undefined ? String(liveValue) : '')
-                            }
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setTextInputValues(prev => ({ ...prev, [panel.panelId]: val }));
-                              if (textInputErrors[panel.panelId]) {
-                                setTextInputErrors(prev => ({ ...prev, [panel.panelId]: null }));
+                          <div className="relative flex-1 flex items-center min-w-0">
+                            <input
+                              type={panel.dataType === 'text' ? 'text' : 'number'}
+                              value={
+                                focusedInputPanelId === panel.panelId
+                                  ? (textInputValues[panel.panelId] ?? '')
+                                  : (liveValue !== undefined && liveValue !== null ? String(liveValue) : (textInputValues[panel.panelId] ?? ''))
                               }
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.stopPropagation();
-                                const val = textInputValues[panel.panelId] ?? String(liveValue ?? '');
-                                handleSendTextInput(panel, val);
-                              }
-                            }}
-                            onMouseDown={(e) => {
-                              if (!effectiveEditMode) e.stopPropagation();
-                            }}
-                            onTouchStart={(e) => {
-                              if (!effectiveEditMode) e.stopPropagation();
-                            }}
-                            onClick={(e) => {
-                              if (!effectiveEditMode) e.stopPropagation();
-                            }}
-                            placeholder={panel.dataType === 'text' ? 'Enter text...' : `Value (${panel.payloadMin ?? 0} - ${panel.payloadMax ?? 100})...`}
-                            className="flex-1 bg-black/80 border border-slate-700 focus:border-amber-500 text-amber-300 font-mono text-xs rounded-lg px-2 py-1 outline-none min-w-0"
-                          />
+                              onFocus={() => {
+                                setFocusedInputPanelId(panel.panelId);
+                                setTextInputValues(prev => ({
+                                  ...prev,
+                                  [panel.panelId]: liveValue !== undefined && liveValue !== null ? String(liveValue) : (prev[panel.panelId] ?? '')
+                                }));
+                                if (textInputErrors[panel.panelId]) {
+                                  setTextInputErrors(prev => ({ ...prev, [panel.panelId]: null }));
+                                }
+                              }}
+                              onBlur={() => {
+                                setFocusedInputPanelId(null);
+                                setTextInputValues(prev => {
+                                  const next = { ...prev };
+                                  delete next[panel.panelId];
+                                  return next;
+                                });
+                              }}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setTextInputValues(prev => ({ ...prev, [panel.panelId]: val }));
+                                if (textInputErrors[panel.panelId]) {
+                                  setTextInputErrors(prev => ({ ...prev, [panel.panelId]: null }));
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.stopPropagation();
+                                  const val = textInputValues[panel.panelId] ?? (liveValue !== undefined && liveValue !== null ? String(liveValue) : '');
+                                  const ok = handleSendTextInput(panel, val);
+                                  if (ok) {
+                                    (e.target as HTMLInputElement).blur();
+                                  }
+                                } else if (e.key === 'Escape') {
+                                  e.stopPropagation();
+                                  setFocusedInputPanelId(null);
+                                  setTextInputValues(prev => {
+                                    const next = { ...prev };
+                                    delete next[panel.panelId];
+                                    return next;
+                                  });
+                                  (e.target as HTMLInputElement).blur();
+                                }
+                              }}
+                              onMouseDown={(e) => {
+                                if (!effectiveEditMode) e.stopPropagation();
+                              }}
+                              onTouchStart={(e) => {
+                                if (!effectiveEditMode) e.stopPropagation();
+                              }}
+                              onClick={(e) => {
+                                if (!effectiveEditMode) e.stopPropagation();
+                              }}
+                              placeholder={panel.dataType === 'text' ? 'Enter text...' : `Value (${panel.payloadMin ?? 0} - ${panel.payloadMax ?? 100})...`}
+                              className={`w-full bg-black/80 border text-amber-300 font-mono text-xs rounded-lg px-2 py-1 outline-none min-w-0 transition-colors ${
+                                focusedInputPanelId === panel.panelId
+                                  ? 'border-amber-400 ring-1 ring-amber-400/50 shadow-[0_0_8px_rgba(245,158,11,0.25)]'
+                                  : 'border-slate-700 hover:border-slate-600'
+                              } ${panel.unit ? 'pr-7' : ''}`}
+                            />
+                            {panel.unit && (
+                              <span className="absolute right-2 text-[10px] font-mono font-bold text-sky-400 pointer-events-none select-none">
+                                {panel.unit}
+                              </span>
+                            )}
+                          </div>
                           <button
                             type="button"
                             onMouseDown={(e) => {
+                              // Prevent input from blurring before button click fires
+                              e.preventDefault();
                               if (!effectiveEditMode) e.stopPropagation();
                             }}
                             onClick={(e) => {
                               e.stopPropagation();
-                              const val = textInputValues[panel.panelId] ?? String(liveValue ?? '');
-                              handleSendTextInput(panel, val);
+                              const val = textInputValues[panel.panelId] ?? (liveValue !== undefined && liveValue !== null ? String(liveValue) : '');
+                              const ok = handleSendTextInput(panel, val);
+                              if (ok) {
+                                if (document.activeElement instanceof HTMLElement) {
+                                  document.activeElement.blur();
+                                }
+                              }
                             }}
                             className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition-transform active:scale-95 shrink-0 cursor-pointer flex items-center space-x-1"
                           >
@@ -4385,15 +4627,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                           </button>
                         </div>
 
-                        {textInputErrors[panel.panelId] ? (
+                        {textInputErrors[panel.panelId] && (
                           <span className="text-[9px] text-rose-400 font-semibold truncate block">
                             {textInputErrors[panel.panelId]}
                           </span>
-                        ) : (
-                          <div className="flex items-center justify-between text-[9px] font-mono text-slate-500">
-                            <span className="truncate">Val: {liveValue !== undefined ? String(liveValue) : '---'}</span>
-                            {panel.unit && <span className="text-sky-400 font-bold ml-1">{panel.unit}</span>}
-                          </div>
                         )}
                       </div>
                     ) : panel.type === PanelType.LED ? (

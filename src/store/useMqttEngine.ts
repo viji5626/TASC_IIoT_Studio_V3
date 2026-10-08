@@ -62,7 +62,7 @@ export function useMqttEngine({
 
   // Helper for message payload parsing
   const processIncomingMessage = useCallback((topic: string, payloadStr: string) => {
-    const timeStr = new Date().toLocaleTimeString();
+    const timeStr = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
     setMqttLogs(prev => [
       {
@@ -336,7 +336,7 @@ export function useMqttEngine({
     if (!isSimulated) return;
 
     const interval = setInterval(() => {
-      const timeStr = new Date().toLocaleTimeString();
+      const timeStr = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
       activePanels.forEach(panel => {
         if (panel.dataSourceMode === 'driver') return;
@@ -433,7 +433,7 @@ export function useMqttEngine({
     if (onResetRuntimeTimeout) {
       onResetRuntimeTimeout();
     }
-    const timeStr = new Date().toLocaleTimeString();
+    const timeStr = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const payloadStr = String(payload);
 
     // Driver Tag write path

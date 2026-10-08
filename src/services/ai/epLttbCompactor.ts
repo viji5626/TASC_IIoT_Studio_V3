@@ -242,12 +242,12 @@ function generateMarkdownSummary(
   series: Array<{ t: string; v: number; trip?: boolean }>
 ): string {
   const unitStr = unit ? ` ${unit}` : '';
-  const trendEmoji = env.delta > 0 ? '📈' : env.delta < 0 ? '📉' : '➡️';
-  const tripWarning = env.tripCrossingsCount > 0 ? ` ⚠️ **${env.tripCrossingsCount} SAFETY TRIPS/SPIKES DETECTED**` : '';
+  const trendLabel = env.delta > 0 ? '[RISING]' : env.delta < 0 ? '[FALLING]' : '[STABLE]';
+  const tripWarning = env.tripCrossingsCount > 0 ? ` [!] **${env.tripCrossingsCount} SAFETY TRIPS/SPIKES DETECTED**` : '';
 
-  const curveSamples = series.slice(0, 15).map(s => `${s.t}: ${s.v}${s.trip ? '⚡[TRIP]' : ''}`).join(' | ');
+  const curveSamples = series.slice(0, 15).map(s => `${s.t}: ${s.v}${s.trip ? ' [TRIP]' : ''}`).join(' | ');
 
-  return `### Telemetry: \`${tagName}\`${unitStr} ${trendEmoji}${tripWarning}
+  return `### Telemetry: \`${tagName}\`${unitStr} ${trendLabel}${tripWarning}
 - **Envelope**: Min: **${env.min}${unitStr}** | Max: **${env.max}${unitStr}** | Mean: **${env.mean}${unitStr}** | StdDev: **${env.stdDev}**
 - **Trend Dynamics**: Δ: **${env.delta > 0 ? '+' : ''}${env.delta}${unitStr}** (${env.rateOfChangePerMin > 0 ? '+' : ''}${env.rateOfChangePerMin.toFixed(2)}${unitStr}/min)
 - **Key Inflection Trajectory**: \`${curveSamples} ...\``;

@@ -175,7 +175,7 @@ const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
               <button 
                 onClick={() => {
                   if (isCommunity) {
-                    alert('🔒 Client Package Export is locked in Community Edition. Unlock with Engineering Edition or Client Package.');
+                    alert('Client Package Export is locked in Community Edition. Unlock with Engineering Edition or Client Package.');
                     return;
                   }
                   onRequestExportClientPackage();
@@ -202,7 +202,7 @@ const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
           <button 
             onClick={() => {
               if (isCommunity) {
-                alert('🔒 Export Backup is locked in Community Edition. Unlock with Engineering Edition or Client Package.');
+                alert('Export Backup is locked in Community Edition. Unlock with Engineering Edition or Client Package.');
                 return;
               }
               setShowExcludeDialog(true);
@@ -221,7 +221,7 @@ const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
           <button 
             onClick={() => {
               if (isCommunity) {
-                alert('🔒 Restore Backup is locked in Community Edition. Unlock with Engineering Edition or Client Package.');
+                alert('Restore Backup is locked in Community Edition. Unlock with Engineering Edition or Client Package.');
                 return;
               }
               fileInputRef.current?.click();
@@ -249,7 +249,7 @@ const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
         <button 
           onClick={() => {
             if (isCommunity) {
-              alert('🔒 Share Config Payload is locked in Community Edition. Unlock with Engineering Edition or Client Package.');
+              alert('Share Config Payload is locked in Community Edition. Unlock with Engineering Edition or Client Package.');
               return;
             }
             setShowShareModal(true);

@@ -953,7 +953,7 @@ export async function executeAiTool(name: string, args: Record<string, unknown>,
 
         const tableRows = results.map(t => {
           const valDisplay = typeof t.liveValue === 'number' ? (Number.isInteger(t.liveValue) ? t.liveValue : Number(t.liveValue.toFixed(4))) : t.liveValue;
-          const qualityBadge = t.quality === 'good' ? '✅ Good' : (t.quality === 'bad' ? '❌ Bad' : '⚠️ No Data');
+          const qualityBadge = t.quality === 'good' ? 'Good' : (t.quality === 'bad' ? 'Bad' : 'No Data');
           return `| **${t.tagName}** | **${valDisplay}** | ${t.driverName} (${t.protocol}) | ${t.address} | ${qualityBadge} | ${t.lastUpdated} |`;
         }).join('\n');
 
@@ -978,7 +978,7 @@ ${tableRows}`;
             const v = ctx.latestValues[t.tagId] || ctx.latestValues[t.tagName];
             return v && v.val !== undefined && v.quality !== 'bad';
           }).length;
-          const statusBadge = d.connected ? '✅ Connected' : '❌ Disconnected';
+          const statusBadge = d.connected ? 'Connected' : 'Disconnected';
           const endpoint = d.endpointUrl || (d.host ? `${d.host}:${d.port || 502}` : d.portPath || 'N/A');
 
           return `| **${d.connectionName}** | ${d.protocol} | ${statusBadge} | \`${endpoint}\` | ${tagsForDriver.length} (${goodCount} Good, ${tagsForDriver.length - goodCount} Bad) |`;
@@ -1006,7 +1006,7 @@ ${rows}`;
           return `No MQTT topics found matching "${filterStr}". Total unique topics: ${scan.totalUniqueTopics}.`;
         }
 
-        return `### 🏷️ MQTT Topic Registry (${scan.totalUniqueTopics} Unique Topics, ${scan.totalTopicReferences} References):
+        return `### MQTT Topic Registry (${scan.totalUniqueTopics} Unique Topics, ${scan.totalTopicReferences} References):
 
 | MQTT Topic Pattern | Direction | Usage Summary |
 |:---|:---|:---|
@@ -1042,10 +1042,10 @@ ${filtered.slice(0, 30).join('\n')}`;
           return `No active telemetry reading found for "${key}". The topic or driver tag may not have received data yet.`;
         }
 
-        const qualityEmoji = val.quality === 'bad' ? '❌ Bad Quality' : '✅ Good Quality';
+        const qualityBadge = val.quality === 'bad' ? 'Bad Quality' : 'Good Quality';
         return `**Live Telemetry for "${key}":**
 - **Live Value:** \`${val.val}\`
-- **Signal Quality:** ${qualityEmoji}
+- **Signal Quality:** ${qualityBadge}
 - **Last Updated:** ${val.time || 'N/A'}`;
       }
 
@@ -1106,14 +1106,14 @@ ${rows}`;
 
       case 'get_active_alarms': {
         if (ctx.activeAlarms.length === 0) {
-          return '✅ **No Active Alarms.** All process parameters and thresholds are operating normally.';
+          return '**No Active Alarms.** All process parameters and thresholds are operating normally.';
         }
 
         const alarmRows = ctx.activeAlarms.map(a => 
           `| **${a.panelName}** | **[${a.zone}]** | \`${a.value} ${a.unit || ''}\` (Threshold: ${a.threshold}) | ${a.message} | ${a.timestamp} |`
         ).join('\n');
 
-        return `### 🚨 Active Alarms (${ctx.activeAlarms.length} Active):
+        return `### Active Alarms (${ctx.activeAlarms.length} Active):
 
 | Equipment / Panel | Zone | Value / Limit | Alarm Message | Triggered Time |
 |:---|:---|:---|:---|:---|
@@ -1131,12 +1131,12 @@ ${alarmRows}`;
         }
 
         const rows = history.map(h => {
-          const statusText = (h.status as string).includes('RESOLVED') ? '✅ Resolved' : '🚨 Active';
+          const statusText = (h.status as string).includes('RESOLVED') ? 'Resolved' : 'Active';
           const timeStr = h.triggerTime ? new Date(h.triggerTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A';
           return `| **${h.panelName}** | **[${h.category}]** | \`${h.triggerValue} ${h.unit || ''}\` (Limit: ${h.threshold}) | ${h.message} | ${timeStr} | ${h.duration || '-'} | ${statusText} |`;
         }).join('\n');
 
-        return `### 📋 Alarm History Log (${history.length} Records):
+        return `### Alarm History Log (${history.length} Records):
 
 | Equipment / Panel | Category | Trigger Value | Message | Time | Duration | Status |
 |:---|:---|:---|:---|:---|:---|:---|
@@ -1155,10 +1155,10 @@ ${rows}`;
         }).join('\n') || '- None';
 
         const driverList = driverConns.map(dc => 
-          `- **${dc.connectionName}** (${dc.protocol}): ${dc.connected ? '✅ Connected' : '❌ Disconnected'}`
+          `- **${dc.connectionName}** (${dc.protocol}): ${dc.connected ? 'Connected' : 'Disconnected'}`
         ).join('\n') || '- None configured';
 
-        return `### 📊 Project Architecture Summary:
+        return `### Project Architecture Summary:
 
 **Dashboards (${dashboards.length}):**
 ${dashList}
@@ -1179,7 +1179,7 @@ ${connections.map(c => `- **${c.connectionName}** (${c.brokerAddress}:${c.port})
         const role = ctx.appState.userRole || 'admin';
         const pinConfigured = !!ctx.appState.editPin;
 
-        return `### ⚙️ System Settings & Runtime Info:
+        return `### System Settings & Runtime Info:
 - **Product Edition:** ${edition.toUpperCase()}
 - **Active User Role:** ${role.toUpperCase()}
 - **Application Theme:** ${ctx.appState.appTheme || 'sky'}
@@ -1664,7 +1664,7 @@ ${connections.map(c => `- **${c.connectionName}** (${c.brokerAddress}:${c.port})
           telemetrySlotsCount: telemetryHooks.length,
           telemetryHooks: telemetryHooks.map(h => `${h.displayName} [${h.channelType}]`),
           status: 'READY_IN_LIBRARY',
-          message: `3D Asset "${assetName}" has been successfully generated and compiled into the 3D SCADA Asset Library under "🤖 AI Assets".`
+          message: `3D Asset "${assetName}" has been successfully generated and compiled into the 3D SCADA Asset Library under "AI Assets".`
         });
       }
 

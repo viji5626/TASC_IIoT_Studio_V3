@@ -3,7 +3,7 @@ import { Panel } from '../types';
 import { getAnimationSpeedClass } from '../utils/iconAnimator';
 import { isPanelTripped } from '../utils/tripHelper';
 import { getPanelTelemetryStatus } from '../utils/staleHelper';
-import { getJsonValue } from '../utils/mqttHelper';
+import { getJsonValue, resolveTagValueWithBit } from '../utils/mqttHelper';
 import { symbolRegistry } from '../services/symbolRegistryService';
 
 interface DynamicIndustrialSymbolProps {
@@ -205,19 +205,9 @@ const DynamicIndustrialSymbolComponent: React.FC<DynamicIndustrialSymbolProps> =
         : (rule.topic || (rule as any).tagName);
       let rawVal: any = undefined;
 
-      if (tagKey) {
+      if (tagKey && latestValues) {
         const cleanKey = String(tagKey).trim();
-        if (latestValues[cleanKey] !== undefined) {
-          rawVal = latestValues[cleanKey]?.val !== undefined ? latestValues[cleanKey].val : latestValues[cleanKey];
-        } else {
-          for (const [k, v] of Object.entries(latestValues)) {
-            if (k.toLowerCase() === cleanKey.toLowerCase() || k === `tag_panel_${cleanKey}` || k.toLowerCase() === `tag_panel_${cleanKey.toLowerCase()}`) {
-              const valObj = v as any;
-              rawVal = valObj?.val !== undefined ? valObj.val : valObj;
-              break;
-            }
-          }
-        }
+        rawVal = resolveTagValueWithBit(cleanKey, latestValues);
       }
 
       if (rawVal === undefined) {

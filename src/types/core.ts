@@ -187,6 +187,8 @@ export interface Panel {
   staleTimeoutSeconds?: number;    // Timeout threshold in seconds (default: 10s)
   showOfflineBadge?: boolean;       // Display glowing OFFLINE badge overlay on element
   buttonPayload?: string; // For Button
+  buttonAction?: 'momentary' | 'toggle' | 'set_bit' | 'reset_bit'; // Action button mode: momentary (pushbutton), toggle, set bit, reset bit
+  buttonText?: string; // Variable visible text for button
   sliderStep?: number; // For Slider
   publishPattern?: string; // JSON pattern for publish, e.g. { "d": { "sensor_val": [<payload>] } }
   publishTopic?: string; // Separate publish topic for write actions (if different from subscribe topic)
@@ -206,7 +208,8 @@ export interface Panel {
   borderColor?: string;
   borderWidth?: number;
   borderRadius?: number;
-  textAlign?: 'left' | 'center' | 'right';
+  textAlign?: 'left' | 'center' | 'right' | 'justify';
+  textWrap?: boolean;
   isHmiMode?: boolean;
   groupId?: string;
   groupName?: string;

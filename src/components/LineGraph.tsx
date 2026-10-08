@@ -1074,7 +1074,7 @@ export const LineGraph: React.FC<LineGraphProps> = ({
                         ? 'text-slate-500 hover:text-slate-300'
                         : 'text-slate-400 hover:text-white'
                     }`}
-                    title={isLockedInCommunity ? "🔒 Free Demo Limit: 1 Hour max duration. Upgrade for 8H to 5-Year logging." : `Set time range to ${range}`}
+                    title={isLockedInCommunity ? "Free Demo Limit: 1 Hour max duration. Upgrade for 8H to 5-Year logging." : `Set time range to ${range}`}
                   >
                     <span>{range}</span>
                     {isLockedInCommunity && <i className="fas fa-lock text-[8px] text-amber-500"></i>}
@@ -1089,7 +1089,7 @@ export const LineGraph: React.FC<LineGraphProps> = ({
                 title="Custom Date & Time Range Picker"
               >
                 <i className="fas fa-calendar-alt text-[9px] text-amber-400"></i>
-                <span>📅</span>
+                <span className="text-[10px]">Custom</span>
               </button>
             </div>
 
@@ -1140,8 +1140,8 @@ export const LineGraph: React.FC<LineGraphProps> = ({
 
             {isDualCursor && (
               <div className="flex items-center space-x-1 bg-slate-900/90 p-0.5 rounded-lg border border-slate-800">
-                <button type="button" onClick={() => setActiveCursorSelect(1)} className={`px-2 py-0.5 rounded text-[9px] font-bold cursor-pointer ${activeCursorSelect === 1 ? 'bg-emerald-600 text-white' : 'text-emerald-400'}`}>📍 C1</button>
-                <button type="button" onClick={() => setActiveCursorSelect(2)} className={`px-2 py-0.5 rounded text-[9px] font-bold cursor-pointer ${activeCursorSelect === 2 ? 'bg-sky-600 text-white' : 'text-sky-400'}`}>📍 C2</button>
+                <button type="button" onClick={() => setActiveCursorSelect(1)} className={`px-2 py-0.5 rounded text-[9px] font-bold cursor-pointer ${activeCursorSelect === 1 ? 'bg-emerald-600 text-white' : 'text-emerald-400'}`}>C1</button>
+                <button type="button" onClick={() => setActiveCursorSelect(2)} className={`px-2 py-0.5 rounded text-[9px] font-bold cursor-pointer ${activeCursorSelect === 2 ? 'bg-sky-600 text-white' : 'text-sky-400'}`}>C2</button>
               </div>
             )}
 

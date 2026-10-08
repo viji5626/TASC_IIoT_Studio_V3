@@ -27,17 +27,21 @@ export const PanelMediaAndPipeSection: React.FC<PanelMediaAndPipeSectionProps> =
       {isStaticText && (
         <div className="space-y-4 pt-2 border-t border-[#262626]">
           <div className="relative border-b border-gray-700 py-2">
-            <label className="text-xs text-amber-500 absolute -top-2 font-bold">Static Text Content</label>
-            <input 
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs text-amber-500 font-bold">Static Text Content</label>
+              <span className="text-[10px] text-slate-400 font-mono">Press ENTER for new row</span>
+            </div>
+            <textarea 
               name="staticText" 
+              rows={4}
               value={formData.staticText ?? formData.panelName ?? ''} 
               onChange={handleChange} 
-              className="w-full bg-transparent outline-none text-sky-400 py-2 font-bold text-sm" 
-              placeholder="e.g. AMAN HATCHERY - AUTOMATION CONTROLS" 
+              className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-lg p-2.5 text-sky-400 font-bold text-sm outline-none font-sans resize-y leading-relaxed transition-colors" 
+              placeholder={"e.g. Timer Logic Work\n------>\nafter High Humidity limit"} 
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div className="relative border-b border-gray-700 py-2">
               <label className="text-xs text-gray-400 absolute -top-2">Font Size (pt)</label>
               <input 
@@ -56,14 +60,31 @@ export const PanelMediaAndPipeSection: React.FC<PanelMediaAndPipeSectionProps> =
                 onChange={handleChange} 
                 className="w-full bg-transparent outline-none text-white py-2"
               >
-                <option value="center">Center</option>
                 <option value="left">Left</option>
+                <option value="center">Center (Middle)</option>
                 <option value="right">Right</option>
+                <option value="justify">Justify</option>
               </select>
+            </div>
+            <div className="flex items-center justify-between py-2 border-b border-gray-700">
+              <div className="flex flex-col">
+                <label className="text-xs text-slate-200 font-semibold">Wrap Text</label>
+                <span className="text-[9px] text-slate-400">Auto-wrap width</span>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="textWrap"
+                  checked={formData.textWrap !== false}
+                  onChange={handleChange}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+              </label>
             </div>
           </div>
 
-          <div className="grid grid-cols-5 gap-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
             <div>
               <label className="text-[10px] text-slate-400 font-bold block mb-1">Text Color</label>
               <input 
@@ -109,24 +130,6 @@ export const PanelMediaAndPipeSection: React.FC<PanelMediaAndPipeSectionProps> =
                 />
                 <span className="text-[9px] font-mono text-purple-300 text-center block mt-1">
                   {Math.round((formData.opacity ?? 1) * 100)}%
-                </span>
-              </div>
-            </div>
-            <div>
-              <label className="text-[10px] text-amber-400 font-bold block mb-1">Rotation</label>
-              <div className="flex flex-col justify-center h-8">
-                <input 
-                  type="range"
-                  min="0"
-                  max="360"
-                  step="1"
-                  name="rotation"
-                  value={formData.rotation ?? 0}
-                  onChange={(e) => setFormData((prev: any) => ({ ...prev, rotation: parseInt(e.target.value) || 0 }))}
-                  className="w-full accent-amber-500 cursor-pointer h-1.5 bg-slate-700 rounded-lg appearance-none" 
-                />
-                <span className="text-[9px] font-mono text-amber-300 text-center block mt-1">
-                  {formData.rotation ?? 0}°
                 </span>
               </div>
             </div>
@@ -427,9 +430,9 @@ export const PanelMediaAndPipeSection: React.FC<PanelMediaAndPipeSectionProps> =
                 onChange={(e) => setFormData((prev: any) => ({ ...prev, pipeEndType: e.target.value }))}
                 className="w-full bg-slate-900 text-white rounded-lg p-2 text-xs border border-slate-700"
               >
-                <option value="flange">🛠️ Flange End (Collar + Bolts)</option>
-                <option value="round">⚪ Round End (Dome Cap)</option>
-                <option value="triangle">🔺 Triangle End (Conical Nozzle)</option>
+                <option value="flange">Flange End (Collar + Bolts)</option>
+                <option value="round">Round End (Dome Cap)</option>
+                <option value="triangle">Triangle End (Conical Nozzle)</option>
               </select>
             </div>
           </div>
@@ -443,8 +446,8 @@ export const PanelMediaAndPipeSection: React.FC<PanelMediaAndPipeSectionProps> =
                 onChange={(e) => setFormData((prev: any) => ({ ...prev, pipeAnimStyle: e.target.value }))}
                 className="w-full bg-slate-900 text-white rounded-lg p-2 text-xs border border-slate-700"
               >
-                <option value="bubbles">🫧 Floating Bubbles Set (Multi-Size)</option>
-                <option value="dashes">⚡ Pulse Dash Stream</option>
+                <option value="bubbles">Floating Bubbles Set (Multi-Size)</option>
+                <option value="dashes">Pulse Dash Stream</option>
               </select>
             </div>
 
@@ -456,8 +459,8 @@ export const PanelMediaAndPipeSection: React.FC<PanelMediaAndPipeSectionProps> =
                 onChange={(e) => setFormData((prev: any) => ({ ...prev, pipeFlowDirection: e.target.value }))}
                 className="w-full bg-slate-900 text-white rounded-lg p-2 text-xs border border-slate-700"
               >
-                <option value="ltr">➔ Left to Right (LTR / Forward)</option>
-                <option value="rtl">⬅️ Right to Left (RTL / Reverse)</option>
+                <option value="ltr">Left to Right (LTR / Forward)</option>
+                <option value="rtl">Right to Left (RTL / Reverse)</option>
               </select>
             </div>
 

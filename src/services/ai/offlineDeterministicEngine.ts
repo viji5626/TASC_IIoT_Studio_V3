@@ -32,11 +32,11 @@ export function generateDeterministicReport(options: DeterministicReportOptions)
   const totalKwWaste = faults.reduce((sum, f) => sum + (f.kwWaste || 0), 0);
   const totalFinancialWastePerHour = faults.reduce((sum, f) => sum + (f.costPerHour || 0), 0);
 
-  let statusBadge = faults.length === 0 ? '🟢 NORMAL / OPTIMAL' : faults.length < 3 ? '🟡 DEGRADED / ATTENTION REQUIRED' : '🔴 CRITICAL ANOMALY DETECTED';
+  let statusBadge = faults.length === 0 ? 'NORMAL / OPTIMAL' : faults.length < 3 ? 'DEGRADED / ATTENTION REQUIRED' : 'CRITICAL ANOMALY DETECTED';
 
-  let md = `# 🏭 ${options.reportTitle}\n`;
+  let md = `# ${options.reportTitle}\n`;
   md += `**Generated**: ${new Date().toLocaleString()} | **Execution Engine**: *Deterministic Local FDD Expert System (100% Offline / Air-Gapped Safe)*\n\n`;
-  md += `## 📊 Executive Plant Health Summary\n`;
+  md += `## Executive Plant Health Summary\n`;
   md += `- **Overall Condition**: **${statusBadge}**\n`;
   md += `- **Active Diagnostic Faults**: **${faults.length}**\n`;
   md += `- **Active Alarm Trip Interlocks**: **${alarms.length}**\n`;
@@ -44,7 +44,7 @@ export function generateDeterministicReport(options: DeterministicReportOptions)
   md += `- **Estimated Financial Loss**: **${curr} ${totalFinancialWastePerHour.toLocaleString()}/hour**\n\n`;
 
   // 1. Diagnostic Faults
-  md += `## 🔍 Active Condition-Based Maintenance (CBM) Findings\n`;
+  md += `## Active Condition-Based Maintenance (CBM) Findings\n`;
   if (faults.length > 0) {
     md += `| Equipment Asset | Fault Detection Rule | Severity | Est. Waste (${curr}/hr) | Recommended Action |\n`;
     md += `| :--- | :--- | :--- | :--- | :--- |\n`;
@@ -57,7 +57,7 @@ export function generateDeterministicReport(options: DeterministicReportOptions)
   }
 
   // 2. Alarm Events
-  md += `## 🚨 Recent Alarm Trip Log\n`;
+  md += `## Recent Alarm Trip Log\n`;
   if (alarms.length > 0) {
     for (const a of alarms) {
       md += `- **[${a.severity}] \`${a.tag}\`** — ${a.message} *(Time: ${a.timestamp})*\n`;
@@ -68,7 +68,7 @@ export function generateDeterministicReport(options: DeterministicReportOptions)
   }
 
   // 3. Telemetry Dynamics
-  md += `## 📈 Sensor Telemetry Dynamics & Statistical Envelopes\n`;
+  md += `## Sensor Telemetry Dynamics & Statistical Envelopes\n`;
   if (options.telemetrySummaries && options.telemetrySummaries.length > 0) {
     for (const t of options.telemetrySummaries) {
       md += t.compactMarkdownSummary + '\n\n';
@@ -78,7 +78,7 @@ export function generateDeterministicReport(options: DeterministicReportOptions)
   }
 
   // 4. Standard Corrective Actions
-  md += `## 🛠️ Recommended Corrective Maintenance SOPs\n`;
+  md += `## Recommended Corrective Maintenance SOPs\n`;
   if (faults.length > 0) {
     md += `1. **Immediate Inspection**: Dispatch maintenance technician to verify sensor calibrations on ${faults.map(f => f.assetId).join(', ')}.\n`;
     md += `2. **Electrical & Thermal Audit**: Check operating current draw against nameplate ratings.\n`;
@@ -93,7 +93,7 @@ export function generateDeterministicReport(options: DeterministicReportOptions)
   <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 24px; border-radius: 12px; border: 1px solid #334155;">
     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 16px; margin-bottom: 20px;">
       <div>
-        <h1 style="margin: 0; color: #38bdf8; font-size: 24px;">🏭 ${options.reportTitle}</h1>
+        <h1 style="margin: 0; color: #38bdf8; font-size: 24px;">${options.reportTitle}</h1>
         <p style="margin: 4px 0 0 0; color: #94a3b8; font-size: 12px;">Generated: ${new Date().toLocaleString()} | Engine: <strong>Local Deterministic FDD (Offline Safe)</strong></p>
       </div>
       <div style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); padding: 8px 16px; border-radius: 8px; font-weight: bold; color: #38bdf8;">
