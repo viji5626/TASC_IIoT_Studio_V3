@@ -110,12 +110,11 @@ export const PanelDataSourceSection: React.FC<PanelDataSourceSectionProps> = ({
           <div className={`grid grid-cols-1 ${isActionable ? 'sm:grid-cols-2' : ''} gap-4`}>
             <TopicAutocompleteInput
               name="topic"
-              label="MQTT Subscribe Topic (Read) *"
+              label="MQTT Subscribe Topic (Read)"
               direction="subscribe"
               value={formData.topic || ''}
               onChange={(val) => setFormData((prev: any) => ({ ...prev, topic: val }))}
               appState={appState}
-              required
               placeholder="e.g. myfactory123/v1/jay/sub"
             />
 
