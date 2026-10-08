@@ -37,13 +37,16 @@ export const TascBridgeModal: React.FC<TascBridgeModalProps> = ({ isOpen: propIs
     }
   };
 
-  const GITHUB_BRIDGE_REPO_URL = 'https://github.com/viji5626/TASC_IIoT_Studio_V3/tree/main/bridge_dist';
-  const GITHUB_DIRECT_EXE_URL = 'https://github.com/viji5626/TASC_IIoT_Studio_V3/raw/main/bridge_dist/TASC_Edge_Bridge_Setup.exe';
+  const GDRIVE_BRIDGE_FOLDER_URL = 'https://drive.google.com/drive/folders/18ghNYf__t5EsC-vVPrNcSU_0DEO8oX8l?usp=sharing';
   const DIRECT_INSTALLER_PATH = '/downloads/TASC_Edge_Bridge_Setup.exe';
 
   const handleDownloadExe = () => {
+    if (isHosted) {
+      window.open(GDRIVE_BRIDGE_FOLDER_URL, '_blank');
+      return;
+    }
     const a = document.createElement('a');
-    a.href = isHosted ? GITHUB_DIRECT_EXE_URL : DIRECT_INSTALLER_PATH;
+    a.href = DIRECT_INSTALLER_PATH;
     a.download = 'TASC_Edge_Bridge_Setup.exe';
     document.body.appendChild(a);
     a.click();
@@ -89,11 +92,8 @@ if %errorlevel% equ 0 (
     echo If you already cloned TASC Studio, place this file inside
     echo your project root folder (where package.json is) and run it again.
     echo.
-    echo To clone and run the full local bridge:
-    echo   git clone https://github.com/viji5626/TASC_IIoT_Studio_V3.git
-    echo   cd TASC_IIoT_Studio_V3
-    echo   npm install
-    echo   npm run dev
+    echo To download pre-built Windows 1-Click setup:
+    echo   https://drive.google.com/drive/folders/18ghNYf__t5EsC-vVPrNcSU_0DEO8oX8l?usp=sharing
     echo.
     pause
     goto end
@@ -355,7 +355,7 @@ pause
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={handleDownloadExe}
@@ -365,13 +365,13 @@ pause
                     <span>Download .EXE Setup</span>
                   </button>
                   <a
-                    href={GITHUB_BRIDGE_REPO_URL}
+                    href={GDRIVE_BRIDGE_FOLDER_URL}
                     target="_blank"
                     rel="noreferrer"
-                    className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center space-x-1.5 transition-colors group"
+                    className="px-3.5 py-2 rounded-lg bg-sky-600/30 hover:bg-sky-600/50 border border-sky-500/50 text-sky-200 text-xs font-bold flex items-center space-x-2 transition-colors group"
                   >
-                    <i className="fab fa-github text-slate-400 group-hover:text-white"></i>
-                    <span>GitHub Release (<code>bridge_dist/</code>)</span>
+                    <i className="fab fa-google-drive text-amber-400 group-hover:scale-110 transition-transform"></i>
+                    <span>Google Drive Mirror (All 3 Files)</span>
                   </a>
                 </div>
               </div>
@@ -393,9 +393,10 @@ pause
               </div>
 
               {/* Secondary Options */}
-              <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
-                <span className="text-slate-500">
-                  Direct setup: installs to user profile without requiring admin rights.
+              <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400">
+                <span className="text-slate-400 flex items-center space-x-1.5">
+                  <i className="fas fa-folder-open text-sky-400"></i>
+                  <span>Google Drive includes: <code>TASC_Edge_Bridge_Setup.exe</code>, portable <code>TascEdgeBridge.exe</code>, and <code>README.md</code>.</span>
                 </span>
 
                 <button
