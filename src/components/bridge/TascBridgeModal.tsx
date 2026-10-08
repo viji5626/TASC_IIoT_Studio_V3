@@ -37,6 +37,35 @@ export const TascBridgeModal: React.FC<TascBridgeModalProps> = ({ isOpen: propIs
     }
   };
 
+  const GITHUB_BRIDGE_REPO_URL = 'https://github.com/viji5626/TASC_IIoT_Studio_V3/tree/main/bridge_dist';
+  const DIRECT_INSTALLER_PATH = '/downloads/TASC_Edge_Bridge_Setup.exe';
+
+  // Shared Google Drive link state
+  const [gdriveUrl, setGdriveUrl] = useState<string>(() => {
+    return localStorage.getItem('tasc_bridge_gdrive_url') || '';
+  });
+  const [showGdriveConfig, setShowGdriveConfig] = useState<boolean>(false);
+  const [gdriveInput, setGdriveInput] = useState<string>(gdriveUrl);
+
+  const handleSaveGdriveUrl = () => {
+    localStorage.setItem('tasc_bridge_gdrive_url', gdriveInput.trim());
+    setGdriveUrl(gdriveInput.trim());
+    setShowGdriveConfig(false);
+  };
+
+  const handleDownloadExe = () => {
+    if (gdriveUrl) {
+      window.open(gdriveUrl, '_blank');
+      return;
+    }
+    const a = document.createElement('a');
+    a.href = DIRECT_INSTALLER_PATH;
+    a.download = 'TASC_Edge_Bridge_Setup.exe';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   const handleDownloadLauncherBat = () => {
     const batContent = `@echo off
 title TASC Edge Bridge - Local Industrial Hardware Gateway
@@ -87,7 +116,7 @@ if %errorlevel% equ 0 (
 )
 
 echo [!] Node.js not detected on system PATH.
-echo Please install Node.js (v18+) from https://nodejs.org
+echo Please download the standalone TASC_Edge_Bridge_Setup.exe installer.
 pause
 
 :end
@@ -319,90 +348,153 @@ pause
             </div>
 
             <p className="text-slate-400 text-[11px] leading-relaxed">
-              If the Edge Bridge is not yet running on your computer, choose one of the options below to start the local gateway daemon:
+              If the Edge Bridge is not yet running on your computer, download the standalone Windows setup below. No Git or Node.js installation is required:
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              {/* Option 1: Real Portable .BAT Download */}
-              <button
-                type="button"
-                onClick={handleDownloadLauncherBat}
-                className="p-3.5 rounded-xl bg-gradient-to-br from-indigo-600/30 to-purple-600/20 hover:from-indigo-600/40 hover:to-purple-600/30 border border-indigo-500/50 text-left transition-all group cursor-pointer shadow-lg hover:shadow-indigo-500/10"
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center space-x-2 text-indigo-300 font-bold">
-                    <i className="fas fa-file-arrow-down text-base text-indigo-400 group-hover:scale-110 transition-transform"></i>
-                    <span className="text-xs text-white">Download .BAT Launcher</span>
+            {/* Featured Hero: 1-Click Standalone Installer (.EXE) */}
+            <div className="p-4 rounded-xl bg-gradient-to-br from-emerald-950/40 via-slate-900 to-indigo-950/40 border border-emerald-500/40 text-left shadow-lg">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 text-sm">
+                    <i className="fab fa-windows"></i>
                   </div>
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                    1-Click
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-normal">
-                  Downloads <code className="text-indigo-300 font-mono">start-tasc-bridge.bat</code>. Double-click inside your project folder to launch port 3000.
-                </p>
-                <div className="mt-2.5 flex items-center text-[10px] text-indigo-400 font-semibold group-hover:text-indigo-200">
-                  <i className="fas fa-download mr-1.5"></i>
-                  <span>Click to Download Launcher File</span>
-                </div>
-              </button>
-
-              {/* Option 2: Quick Terminal Run for Cloned Projects */}
-              <div className="p-3.5 rounded-xl bg-slate-800/80 border border-slate-700/80 text-left flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center space-x-2 text-amber-300 font-bold">
-                      <i className="fas fa-terminal text-sm text-amber-400"></i>
-                      <span className="text-xs text-white">Run via Terminal</span>
-                    </div>
-                    <span className="text-[10px] font-mono text-slate-400">Local Dev</span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 leading-normal">
-                    Already cloned on this laptop? Run this directly in your terminal:
-                  </p>
-                  <div className="mt-2 bg-slate-950 px-2.5 py-1.5 rounded-lg border border-slate-800 font-mono text-[11px] text-emerald-300 flex items-center justify-between">
-                    <span>npm run dev</span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopyCmd('npm run dev')}
-                      className="ml-2 text-slate-400 hover:text-white px-1.5 py-0.5 rounded bg-slate-800 text-[10px] transition-colors cursor-pointer"
-                    >
-                      {copiedCmd === 'npm run dev' ? '✓ Copied!' : 'Copy'}
-                    </button>
+                  <div>
+                    <span className="text-xs font-bold text-white flex items-center space-x-2">
+                      <span>TASC Edge Bridge (Windows .EXE Setup)</span>
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        Recommended
+                      </span>
+                    </span>
+                    <span className="text-[10px] text-slate-400 block">
+                      Standalone Inno Setup Installer • Built for PLC & SCADA Engineers (~73.5 MB)
+                    </span>
                   </div>
                 </div>
 
-                <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
-                  <span>Or double-click:</span>
+                <div className="flex items-center space-x-2">
                   <button
                     type="button"
-                    onClick={() => handleCopyCmd('start-tasc.bat')}
-                    className="font-mono text-sky-400 hover:text-sky-300 flex items-center space-x-1 cursor-pointer"
+                    onClick={handleDownloadExe}
+                    className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center space-x-2 shadow-lg shadow-emerald-900/30 transition-all cursor-pointer group"
                   >
-                    <span>start-tasc.bat</span>
-                    <i className="fas fa-copy text-[9px]"></i>
+                    <i className="fas fa-download group-hover:scale-110 transition-transform"></i>
+                    <span>Download .EXE Setup</span>
                   </button>
+                  {gdriveUrl && (
+                    <a
+                      href={gdriveUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-3 py-2 rounded-lg bg-sky-600/30 hover:bg-sky-600/50 border border-sky-500/40 text-sky-200 text-xs font-bold flex items-center space-x-1.5 transition-colors"
+                      title="Download from Google Drive Mirror"
+                    >
+                      <i className="fab fa-google-drive"></i>
+                      <span>GDrive Mirror</span>
+                    </a>
+                  )}
                 </div>
               </div>
+
+              {/* Feature Highlights for PLC Engineers */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3 pt-3 border-t border-slate-800 text-[10px] text-slate-300">
+                <div className="flex items-center space-x-2">
+                  <i className="fas fa-microchip text-emerald-400"></i>
+                  <span>Zero setup: Includes Node + Drivers</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <i className="fas fa-window-minimize text-sky-400"></i>
+                  <span>Closing <strong>[X]</strong> minimizes to System Tray</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <i className="fas fa-power-off text-rose-400"></i>
+                  <span>Right-click tray icon & select <strong>Quit</strong></span>
+                </div>
+              </div>
+
+              {/* Mirror Link & GDrive Settings Bar */}
+              <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400">
+                <div className="flex items-center space-x-3">
+                  <a
+                    href={GITHUB_BRIDGE_REPO_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-slate-400 hover:text-indigo-300 flex items-center space-x-1 transition-colors"
+                  >
+                    <i className="fab fa-github"></i>
+                    <span>GitHub Release Folder (<code>bridge_dist/</code>)</span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setShowGdriveConfig(!showGdriveConfig)}
+                    className="text-slate-400 hover:text-sky-300 flex items-center space-x-1 cursor-pointer transition-colors"
+                  >
+                    <i className="fab fa-google-drive text-amber-400"></i>
+                    <span>{gdriveUrl ? 'Change GDrive Link' : '+ Add Google Drive Shared Link'}</span>
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadLauncherBat}
+                  className="text-slate-400 hover:text-slate-200 flex items-center space-x-1 cursor-pointer"
+                >
+                  <i className="fas fa-file-code"></i>
+                  <span>Download Portable .BAT Script</span>
+                </button>
+              </div>
+
+              {/* Optional GDrive Link Input Drawer */}
+              {showGdriveConfig && (
+                <div className="mt-3 p-2.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-semibold text-slate-300">Set Shared Google Drive Download URL:</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowGdriveConfig(false)}
+                      className="text-slate-500 hover:text-slate-300 text-xs"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="flex space-x-2">
+                    <input
+                      type="url"
+                      value={gdriveInput}
+                      onChange={(e) => setGdriveInput(e.target.value)}
+                      placeholder="https://drive.google.com/file/d/.../view?usp=sharing"
+                      className="flex-1 bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-slate-200 text-xs focus:outline-none focus:border-sky-500 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSaveGdriveUrl}
+                      className="px-3 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      Save Mirror
+                    </button>
+                  </div>
+                  <p className="text-[9px] text-slate-500">
+                    Paste your uploaded Google Drive shared link here. It will automatically be used for all 1-click bridge downloads.
+                  </p>
+                </div>
+              )}
             </div>
 
-            {/* Option 3: GitHub Source & Offline Installer link */}
-            <div className="pt-1">
-              <a
-                href="https://github.com/viji5626/TASC_IIoT_Studio_V3"
-                target="_blank"
-                rel="noreferrer"
-                className="w-full p-2.5 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 hover:text-white flex items-center justify-between transition-colors group text-xs"
+            {/* Local Developer Option (Terminal Run) */}
+            <div className="p-3 rounded-lg bg-slate-900/60 border border-slate-800/80 text-left flex items-center justify-between text-xs">
+              <div className="flex items-center space-x-2">
+                <i className="fas fa-terminal text-slate-400 text-xs"></i>
+                <span className="text-slate-400">Already cloned the repository locally? Run terminal:</span>
+                <code className="bg-slate-950 text-emerald-400 px-2 py-0.5 rounded font-mono text-[11px]">
+                  npm run dev
+                </code>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleCopyCmd('npm run dev')}
+                className="text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-800 text-[10px] transition-colors cursor-pointer"
               >
-                <div className="flex items-center space-x-2.5">
-                  <i className="fab fa-github text-slate-400 text-sm group-hover:text-white"></i>
-                  <span>
-                    <strong className="text-slate-200">GitHub Repository & Inno Setup Installer:</strong>{' '}
-                    <span className="text-slate-400 text-[11px]">View full source, clone repo, or compile with <code className="text-indigo-300 font-mono">tasc_installer.iss</code></span>
-                  </span>
-                </div>
-                <i className="fas fa-arrow-up-right-from-square text-[11px] text-slate-400 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-transform"></i>
-              </a>
+                {copiedCmd === 'npm run dev' ? '✓ Copied' : 'Copy'}
+              </button>
             </div>
           </div>
 

@@ -9,6 +9,8 @@
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "build:web": "vite build --mode web && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "build:desktop": "vite build --mode desktop && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "build:bridge-exe": "powershell -Command \"& 'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe' /target:winexe /out:dist\\TascEdgeBridge.exe /win32icon:app.ico /r:System.Windows.Forms.dll,System.Drawing.dll bridge_tray\\TascEdgeBridge.cs; Copy-Item -Path 'dist\\TascEdgeBridge.exe' -Destination 'staging\\TascEdgeBridge.exe' -Force; Copy-Item -Path 'dist\\TascEdgeBridge.exe' -Destination 'bridge_dist\\TascEdgeBridge.exe' -Force\"",
+    "build:bridge-installer": "powershell -Command \"& 'C:\\Program Files\\Inno Setup 7\\ISCC.exe' tasc_bridge_installer.iss; Copy-Item -Path 'public\\downloads\\TASC_Edge_Bridge_Setup.exe' -Destination 'bridge_dist\\TASC_Edge_Bridge_Setup.exe' -Force\"",
     "build:installer": "vite build --mode desktop && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && powershell -Command \"Remove-Item -Path 'staging\\dist' -Recurse -Force; Copy-Item -Path 'dist' -Destination 'staging\\dist' -Recurse -Force\" && \"C:\\Program Files\\Inno Setup 7\\ISCC.exe\" tasc_installer.iss",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
