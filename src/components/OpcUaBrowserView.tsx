@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { AppState, AppView, DriverTag, DriverConnection } from '../types';
 import { CoachMarkOverlay } from './CoachMarkOverlay';
 import { isTourSuppressed } from '../utils/tourRegistry';
+import { getBridgeWsUrl, openBridgeModal } from '../utils/bridgeConfig';
 
 interface OpcUaBrowserViewProps {
   onBack?: () => void;
@@ -87,8 +88,7 @@ const OpcUaBrowserView: React.FC<OpcUaBrowserViewProps> = ({ onBack, appState, o
       ws.current.close();
     }
 
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.host}/api/opc-ua-browse`;
+    const wsUrl = getBridgeWsUrl('/api/opc-ua-browse');
     const socket = new WebSocket(wsUrl);
     ws.current = socket;
 

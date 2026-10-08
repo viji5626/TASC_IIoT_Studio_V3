@@ -1,3 +1,5 @@
+import { getBridgeWsUrl } from './bridgeConfig';
+
 export function mqttWildcardMatch(pattern: string, topic: string): boolean {
   if (!pattern || !topic) return false;
   if (pattern === '#' || pattern === '+') return true;
@@ -360,9 +362,7 @@ export function formatBrokerWebSocketUrl(conn: { brokerAddress: string; port: nu
   // If TCP protocol or backend bridge requested, route via backend WS-to-TCP proxy
   if (isTcpProtocol || conn.useBackendBridge) {
     if (typeof window !== 'undefined') {
-      const wsScheme = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-      const bridgeHost = window.location.host;
-      return `${wsScheme}${bridgeHost}/api/mqtt-bridge?target=mqtt://${host}:${port}`;
+      return getBridgeWsUrl(`/api/mqtt-bridge?target=mqtt://${host}:${port}`);
     }
   }
 
@@ -382,9 +382,7 @@ export function formatBrokerWebSocketUrl(conn: { brokerAddress: string; port: nu
     }
   } else if (port === 1883) {
     if (typeof window !== 'undefined' && (rawProtocol.includes('tcp') || rawProtocol.includes('mqtt') || !rawProtocol.includes('ws'))) {
-      const wsScheme = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-      const bridgeHost = window.location.host;
-      return `${wsScheme}${bridgeHost}/api/mqtt-bridge?target=mqtt://${host}:${port}`;
+      return getBridgeWsUrl(`/api/mqtt-bridge?target=mqtt://${host}:${port}`);
     }
     wsPort = isSecure ? 8081 : 8083;
   }

@@ -42,6 +42,7 @@ import { CredentialManagementView } from './components/auth/CredentialManagement
 import { PermissionDeniedToast } from './components/auth/PermissionDeniedToast';
 import { AiAutomationWorkbenchView } from './components/AiAutomationWorkbenchView';
 import { IndustrialStartupSplash } from './components/IndustrialStartupSplash';
+import { TascBridgeModal } from './components/bridge/TascBridgeModal';
 
 function AppContent() {
   const {
@@ -867,6 +868,7 @@ function AppContent() {
       />
 
       <PermissionDeniedToast />
+      <TascBridgeModal />
     </div>
   );
 }

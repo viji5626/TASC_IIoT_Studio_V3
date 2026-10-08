@@ -8,6 +8,7 @@ import {
 } from '../types';
 import AppLogo from './AppLogo';
 import { MultiDriverStatusPill } from './MultiDriverStatusPill';
+import { EdgeBridgeStatusPill } from './bridge/EdgeBridgeStatusPill';
 import { useDeviceCapability } from '../utils/deviceDetection';
 import { EditionManager } from '../utils/EditionManager';
 import { OperatorStatusBar } from './auth/OperatorStatusBar';
@@ -185,7 +186,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
         </div>
 
         {/* Multi-Driver & MQTT Live Connection Status Pill */}
-        <div data-tour="drivers-pill">
+        <div data-tour="drivers-pill" className="flex items-center space-x-2">
           <MultiDriverStatusPill
             mqttConnection={activeConnection}
             allMqttConnections={appState.connections}
@@ -196,6 +197,9 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
             onOpenMqttSettings={handleOpenActiveBrokerSettings}
             onOpenDriverConnections={() => setCurrentView(AppView.DRIVER_CONNECTIONS)}
           />
+
+          {/* TASC Edge Bridge Companion Status Pill */}
+          <EdgeBridgeStatusPill />
         </div>
 
         {/* Inbuilt Alarm Center Bell Button */}

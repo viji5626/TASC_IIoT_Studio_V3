@@ -158,6 +158,19 @@ async function startServer() {
     }
   }));
 
+  // Cross-Origin Resource Sharing (CORS) & W3C Private Network Access (PNA)
+  // Allows cloud-hosted studio (https://app.tascautomation.com) to communicate with local Edge Bridge
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-operator-user, x-target-url');
+    res.header('Access-Control-Allow-Private-Network', 'true');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    next();
+  });
+
   // Phase 1: Rate Limiting
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes

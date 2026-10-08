@@ -1,4 +1,5 @@
 import { DriverTagValue, DriverConnectionHealthPayload } from '../types';
+import { getBridgeWsUrl } from './bridgeConfig';
 
 export type DriverTagValueCallback = (update: DriverTagValue) => void;
 export type DriverConnectionHealthCallback = (payload: DriverConnectionHealthPayload) => void;
@@ -30,6 +31,19 @@ export class DriverBridgeClient {
     this.onConnectionHealth = onConnectionHealth;
     this.onReconnect = onReconnect;
     this.onAlarmEvent = onAlarmEvent;
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('tasc-bridge-host-changed', () => {
+        if (this.shouldConnect) {
+          console.log('[DriverBridge] Bridge host changed, reconnecting...');
+          if (this.ws) {
+            this.ws.close();
+            this.ws = null;
+          }
+          this.openSocket();
+        }
+      });
+    }
   }
 
   connect() {
@@ -92,8 +106,7 @@ export class DriverBridgeClient {
   private openSocket() {
     if (!this.shouldConnect) return;
     try {
-      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const url = `${wsProtocol}//${window.location.host}${DRIVER_BRIDGE_PATH}`;
+      const url = getBridgeWsUrl(DRIVER_BRIDGE_PATH);
       this.ws = new WebSocket(url);
 
       this.ws.onopen = () => {
