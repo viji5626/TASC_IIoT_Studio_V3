@@ -26,7 +26,82 @@ export const TascBridgeModal: React.FC<TascBridgeModalProps> = ({ isOpen: propIs
   const [healthStatus, setHealthStatus] = useState<BridgeHealthStatus>({ online: false, host: getBridgeHost() });
   const [isProbing, setIsProbing] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
+  const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
   const isHosted = isHostedMode();
+
+  const handleCopyCmd = (cmd: string) => {
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(cmd);
+      setCopiedCmd(cmd);
+      setTimeout(() => setCopiedCmd(null), 2500);
+    }
+  };
+
+  const handleDownloadLauncherBat = () => {
+    const batContent = `@echo off
+title TASC Edge Bridge - Local Industrial Hardware Gateway
+echo =========================================================================
+echo   TASC IIoT Studio - Local Edge Bridge Daemon
+echo   Connecting app.tascautomation.com to Local Hardware ^& AI
+echo =========================================================================
+echo.
+
+cd /d "%~dp0"
+
+:: 1. Check if running inside project root
+if exist "dist\\server.cjs" (
+    echo [OK] Found local TASC server build.
+    echo Starting Edge Bridge on http://127.0.0.1:3000 ...
+    echo Keep this terminal window open while using app.tascautomation.com
+    echo.
+    if exist "nodejs\\node.exe" (
+        "nodejs\\node.exe" "dist\\server.cjs"
+    ) else (
+        node "dist\\server.cjs"
+    )
+    goto end
+)
+
+if exist "server.ts" (
+    echo [OK] Found server.ts in folder. Launching via npx tsx...
+    npx -y tsx server.ts
+    goto end
+)
+
+:: 2. Check if Node.js is installed
+where node >nul 2>nul
+if %errorlevel% equ 0 (
+    echo [OK] Node.js is installed.
+    echo.
+    echo If you already cloned TASC Studio, place this file inside
+    echo your project root folder (where package.json is) and run it again.
+    echo.
+    echo To clone and run the full local bridge:
+    echo   git clone https://github.com/viji5626/TASC_IIoT_Studio_V3.git
+    echo   cd TASC_IIoT_Studio_V3
+    echo   npm install
+    echo   npm run dev
+    echo.
+    pause
+    goto end
+)
+
+echo [!] Node.js not detected on system PATH.
+echo Please install Node.js (v18+) from https://nodejs.org
+pause
+
+:end
+`;
+    const blob = new Blob([batContent], { type: 'application/x-bat' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'start-tasc-bridge.bat';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   useEffect(() => {
     const handleOpenEvent = () => setInternalIsOpen(true);
@@ -232,62 +307,138 @@ export const TascBridgeModal: React.FC<TascBridgeModalProps> = ({ isOpen: propIs
           </div>
 
           {/* Download & Launch Instructions */}
-          <div className="bg-gradient-to-r from-indigo-950/40 to-slate-900 border border-indigo-500/30 rounded-xl p-4 space-y-3">
-            <div className="flex items-center space-x-2 text-indigo-300 font-bold">
-              <i className="fas fa-download"></i>
-              <span>Download & Start Edge Bridge on Your PC</span>
+          <div className="bg-gradient-to-r from-indigo-950/40 to-slate-900 border border-indigo-500/30 rounded-xl p-4 space-y-3.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2 text-indigo-300 font-bold">
+                <i className="fas fa-rocket"></i>
+                <span>Start Edge Bridge on This PC</span>
+              </div>
+              <span className="text-[10px] text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded font-mono">
+                Port :3000
+              </span>
             </div>
+
             <p className="text-slate-400 text-[11px] leading-relaxed">
-              If the bridge is not running on this computer, download the standalone lightweight package or run the portable launcher script:
+              If the Edge Bridge is not yet running on your computer, choose one of the options below to start the local gateway daemon:
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-              {/* Option 1: Full Installer */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              {/* Option 1: Real Portable .BAT Download */}
+              <button
+                type="button"
+                onClick={handleDownloadLauncherBat}
+                className="p-3.5 rounded-xl bg-gradient-to-br from-indigo-600/30 to-purple-600/20 hover:from-indigo-600/40 hover:to-purple-600/30 border border-indigo-500/50 text-left transition-all group cursor-pointer shadow-lg hover:shadow-indigo-500/10"
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center space-x-2 text-indigo-300 font-bold">
+                    <i className="fas fa-file-arrow-down text-base text-indigo-400 group-hover:scale-110 transition-transform"></i>
+                    <span className="text-xs text-white">Download .BAT Launcher</span>
+                  </div>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                    1-Click
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-normal">
+                  Downloads <code className="text-indigo-300 font-mono">start-tasc-bridge.bat</code>. Double-click inside your project folder to launch port 3000.
+                </p>
+                <div className="mt-2.5 flex items-center text-[10px] text-indigo-400 font-semibold group-hover:text-indigo-200">
+                  <i className="fas fa-download mr-1.5"></i>
+                  <span>Click to Download Launcher File</span>
+                </div>
+              </button>
+
+              {/* Option 2: Quick Terminal Run for Cloned Projects */}
+              <div className="p-3.5 rounded-xl bg-slate-800/80 border border-slate-700/80 text-left flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center space-x-2 text-amber-300 font-bold">
+                      <i className="fas fa-terminal text-sm text-amber-400"></i>
+                      <span className="text-xs text-white">Run via Terminal</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-400">Local Dev</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-normal">
+                    Already cloned on this laptop? Run this directly in your terminal:
+                  </p>
+                  <div className="mt-2 bg-slate-950 px-2.5 py-1.5 rounded-lg border border-slate-800 font-mono text-[11px] text-emerald-300 flex items-center justify-between">
+                    <span>npm run dev</span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyCmd('npm run dev')}
+                      className="ml-2 text-slate-400 hover:text-white px-1.5 py-0.5 rounded bg-slate-800 text-[10px] transition-colors cursor-pointer"
+                    >
+                      {copiedCmd === 'npm run dev' ? '✓ Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
+                  <span>Or double-click:</span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyCmd('start-tasc.bat')}
+                    className="font-mono text-sky-400 hover:text-sky-300 flex items-center space-x-1 cursor-pointer"
+                  >
+                    <span>start-tasc.bat</span>
+                    <i className="fas fa-copy text-[9px]"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Option 3: GitHub Source & Offline Installer link */}
+            <div className="pt-1">
               <a
-                href="https://github.com/viji5626/TASC_IIoT_Studio_V3/releases"
+                href="https://github.com/viji5626/TASC_IIoT_Studio_V3"
                 target="_blank"
                 rel="noreferrer"
-                className="p-3 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-200 flex items-center justify-between group transition-colors"
+                className="w-full p-2.5 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 hover:text-white flex items-center justify-between transition-colors group text-xs"
               >
                 <div className="flex items-center space-x-2.5">
-                  <i className="fab fa-windows text-lg text-indigo-400"></i>
-                  <div>
-                    <span className="font-bold text-xs block group-hover:text-white">Windows Installer</span>
-                    <span className="text-[10px] text-slate-400">Includes Inno Setup & Background Service</span>
-                  </div>
+                  <i className="fab fa-github text-slate-400 text-sm group-hover:text-white"></i>
+                  <span>
+                    <strong className="text-slate-200">GitHub Repository & Inno Setup Installer:</strong>{' '}
+                    <span className="text-slate-400 text-[11px]">View full source, clone repo, or compile with <code className="text-indigo-300 font-mono">tasc_installer.iss</code></span>
+                  </span>
                 </div>
-                <i className="fas fa-arrow-up-right-from-square text-xs text-indigo-400 group-hover:translate-x-0.5 transition-transform"></i>
+                <i className="fas fa-arrow-up-right-from-square text-[11px] text-slate-400 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-transform"></i>
               </a>
-
-              {/* Option 2: Portable Script */}
-              <div className="p-3 rounded-lg bg-slate-800/80 border border-slate-700 text-slate-300 flex items-center justify-between">
-                <div className="flex items-center space-x-2.5">
-                  <i className="fas fa-terminal text-lg text-amber-400"></i>
-                  <div>
-                    <span className="font-bold text-xs block text-slate-100">Portable 1-Click Launcher</span>
-                    <span className="text-[10px] text-slate-400 font-mono">start-tasc.bat (in project root)</span>
-                  </div>
-                </div>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 text-slate-400">
-                  port :3000
-                </span>
-              </div>
             </div>
           </div>
 
           {/* Browser Permission Guide (Mixed Content on HTTPS) */}
           {isHosted && (
-            <div className="bg-amber-950/20 border border-amber-500/30 rounded-xl p-3.5 space-y-2 text-[11px] text-amber-200/90">
-              <div className="flex items-center space-x-2 font-bold text-amber-300">
-                <i className="fas fa-shield-halved"></i>
-                <span>Browser Security Tip (Chrome & Edge on HTTPS):</span>
+            <div className="bg-amber-950/25 border border-amber-500/40 rounded-xl p-4 space-y-2.5 text-[11px] text-amber-200/95">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2 font-bold text-amber-300 text-xs">
+                  <i className="fas fa-shield-halved text-amber-400"></i>
+                  <span>Important: Allow Insecure Content in Chrome & Edge</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 text-[10px] font-bold flex items-center space-x-1 transition-colors cursor-pointer"
+                >
+                  <i className="fas fa-rotate-right text-[9px]"></i>
+                  <span>Reload Page</span>
+                </button>
               </div>
-              <p className="leading-relaxed">
-                When loading <strong>https://app.tascautomation.com</strong>, browsers block connections to local IP addresses (<code className="bg-amber-900/40 px-1 py-0.5 rounded text-amber-100">http://127.0.0.1</code>) by default.
+
+              <p className="leading-relaxed text-slate-300">
+                Because <strong>https://app.tascautomation.com</strong> is loaded over secure HTTPS, Chrome & Edge automatically block requests to local addresses (<code className="bg-slate-900 px-1.5 py-0.5 rounded text-amber-300 font-mono">http://127.0.0.1:3000</code>) as mixed content by default.
               </p>
-              <div className="flex items-center space-x-2 bg-slate-900/60 p-2 rounded-lg border border-amber-500/20 text-slate-300">
-                <span className="font-bold text-amber-400">Fix:</span>
-                <span>Click the <strong>Tune / Lock icon</strong> next to the URL ➔ <strong>Site settings</strong> ➔ Set <strong>Insecure content</strong> to <strong>Allow</strong> ➔ Reload.</span>
+
+              <div className="bg-slate-950/80 p-3 rounded-lg border border-amber-500/30 space-y-1.5">
+                <div className="font-semibold text-amber-300 text-xs flex items-center space-x-1.5">
+                  <i className="fas fa-wrench"></i>
+                  <span>2-Click Fix in Chrome / Edge:</span>
+                </div>
+                <ol className="list-decimal list-inside space-y-1 text-slate-300 pl-1 text-[11px]">
+                  <li>Click the <strong>Tune / Lock icon</strong> <i className="fas fa-sliders text-amber-400 mx-1"></i> on the left side of the address bar next to <code className="text-sky-300 font-mono">app.tascautomation.com</code>.</li>
+                  <li>Click <strong>Site settings</strong>.</li>
+                  <li>Scroll down to <strong>Insecure content</strong> and change from <em>Block (default)</em> to <strong className="text-emerald-400">Allow</strong>.</li>
+                  <li>Come back and click <strong>Reload Page</strong> — your Edge Bridge pill will turn <span className="text-emerald-400 font-bold">🟢 ONLINE</span> immediately!</li>
+                </ol>
               </div>
             </div>
           )}
