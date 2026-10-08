@@ -457,10 +457,10 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
           ))}
 
           {/* Group 2: Data Connections & Drivers */}
-          {renderAccordionSection('data', 'Data & Drivers', 'fa-network-wired', 'text-emerald-400', renderNavList(dataItems))}
+          {dataItems.length > 0 && renderAccordionSection('data', 'Data & Drivers', 'fa-network-wired', 'text-emerald-400', renderNavList(dataItems))}
 
           {/* Group 3: Analysis & Reporting */}
-          {renderAccordionSection('analysis', 'Analysis & AI', 'fa-chart-line', 'text-indigo-400', renderNavList(analysisItems))}
+          {analysisItems.length > 0 && renderAccordionSection('analysis', 'Analysis & AI', 'fa-chart-line', 'text-indigo-400', renderNavList(analysisItems))}
 
           {/* Group 4: System & Maintenance */}
           {renderAccordionSection('system', 'System & Setup', 'fa-gear', 'text-amber-400', (

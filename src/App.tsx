@@ -594,6 +594,7 @@ function AppContent() {
             productEdition={productEdition}
             onRequestClearAll={handleRequestClearAll}
             onSaveRuntimeTimeout={(mins) => setAppState(prev => ({ ...prev, runtimePinTimeoutMinutes: mins }))}
+            onToggleBridgeIndication={(show) => setAppState(prev => ({ ...prev, showBridgeIndication: show }))}
           />
         )}
 

@@ -21,9 +21,9 @@ interface SettingsViewProps {
   onOpenTopicManager?: () => void;
   onOpenTagManager?: () => void;
   userRole?: string;
-  productEdition?: ProductEdition;
   onRequestClearAll?: () => void;
   onSaveRuntimeTimeout?: (minutes: number) => void;
+  onToggleBridgeIndication?: (show: boolean) => void;
 }
 
 const SettingsView: React.FC<SettingsViewProps> = ({ 
@@ -41,7 +41,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   userRole,
   productEdition,
   onRequestClearAll,
-  onSaveRuntimeTimeout
+  onSaveRuntimeTimeout,
+  onToggleBridgeIndication
 }) => {
   const [settings, setSettings] = useState({
     darkTheme: true,
@@ -458,6 +459,23 @@ const SettingsView: React.FC<SettingsViewProps> = ({
               className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${settings.autoReconnect ? 'bg-amber-500' : 'bg-gray-700'}`}
             >
               <div className={`absolute top-1 left-1 w-3 h-3 rounded-full bg-black transition-transform ${settings.autoReconnect ? 'translate-x-5' : ''}`}></div>
+            </div>
+          </div>
+
+          {/* Show / Hide Edge Bridge Status Indication in Navbar */}
+          <div className="flex items-center justify-between py-3 px-2 border-b border-[#1f1f1f]">
+            <div>
+              <span className="text-sm font-medium text-gray-200">Show Edge Bridge Status in Navbar</span>
+              <p className="text-xs text-gray-400 mt-0.5">Toggle visibility of the TASC Edge Bridge status pill in the top navigation bar</p>
+            </div>
+            <div 
+              onClick={() => {
+                const currentVal = appState?.showBridgeIndication !== false;
+                onToggleBridgeIndication?.(!currentVal);
+              }}
+              className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${appState?.showBridgeIndication !== false ? 'bg-amber-500' : 'bg-gray-700'}`}
+            >
+              <div className={`absolute top-1 left-1 w-3 h-3 rounded-full bg-black transition-transform ${appState?.showBridgeIndication !== false ? 'translate-x-5' : ''}`}></div>
             </div>
           </div>
 

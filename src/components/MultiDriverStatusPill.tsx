@@ -170,21 +170,16 @@ export const MultiDriverStatusPill: React.FC<MultiDriverStatusPillProps> = ({
       });
     }
 
-    return items;
   }, [mqttConnection, allMqttConnections, mqttConnected, isSimulated, driverConnections]);
-
-  // If NO drivers / sources are configured at all, do NOT render the pill
-  if (driverItems.length === 0) {
-    return null;
-  }
 
   const onlineCount = driverItems.filter(d => d.status === 'connected').length;
   const totalCount = driverItems.length;
-  const isAllOnline = onlineCount === totalCount;
-  const isAllOffline = onlineCount === 0;
+  const isAllOnline = totalCount > 0 && onlineCount === totalCount;
+  const isAllOffline = totalCount === 0 || onlineCount === 0;
 
   // Text summary beside the dots
   const summaryText = (() => {
+    if (totalCount === 0) return 'NO DRIVERS';
     if (totalCount === 1) {
       const single = driverItems[0];
       if (single.status === 'connected') return `${single.protocol} CONNECTED`;
@@ -258,6 +253,8 @@ export const MultiDriverStatusPill: React.FC<MultiDriverStatusPillProps> = ({
         className={`flex items-center space-x-1.5 bg-slate-950/85 hover:bg-slate-900 px-2.5 h-10 rounded-xl border transition-all cursor-pointer group shrink-0 shadow-sm ${
           isOpen
             ? 'border-sky-500/70 ring-1 ring-sky-500/50 bg-slate-900'
+            : totalCount === 0
+            ? 'border-slate-800 hover:border-slate-700'
             : isAllOnline
             ? 'border-slate-800 hover:border-emerald-500/40'
             : !isAllOffline
@@ -268,33 +265,40 @@ export const MultiDriverStatusPill: React.FC<MultiDriverStatusPillProps> = ({
       >
         {/* Row of Micro Dynamic Status Dots (4px size) */}
         <div className="flex items-center space-x-1 shrink-0">
-          {driverItems.map(item => {
-            if (item.status === 'connected') {
+          {totalCount === 0 ? (
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-slate-500/80"
+              title="No communication drivers configured yet"
+            />
+          ) : (
+            driverItems.map(item => {
+              if (item.status === 'connected') {
+                return (
+                  <span
+                    key={item.id}
+                    className="w-1 h-1 rounded-full bg-emerald-400 shadow-[0_0_4px_#10b981]"
+                    title={`${item.name} (${item.protocol}): ONLINE`}
+                  />
+                );
+              }
+              if (item.status === 'connecting' || item.status === 'simulated') {
+                return (
+                  <span
+                    key={item.id}
+                    className="w-1 h-1 rounded-full bg-amber-400 animate-pulse shadow-[0_0_4px_#f59e0b]"
+                    title={`${item.name} (${item.protocol}): ${item.status.toUpperCase()}`}
+                  />
+                );
+              }
               return (
                 <span
                   key={item.id}
-                  className="w-1 h-1 rounded-full bg-emerald-400 shadow-[0_0_4px_#10b981]"
-                  title={`${item.name} (${item.protocol}): ONLINE`}
+                  className="w-1 h-1 rounded-full bg-rose-500 shadow-[0_0_3px_#f43f5e]"
+                  title={`${item.name} (${item.protocol}): OFFLINE`}
                 />
               );
-            }
-            if (item.status === 'connecting' || item.status === 'simulated') {
-              return (
-                <span
-                  key={item.id}
-                  className="w-1 h-1 rounded-full bg-amber-400 animate-pulse shadow-[0_0_4px_#f59e0b]"
-                  title={`${item.name} (${item.protocol}): ${item.status.toUpperCase()}`}
-                />
-              );
-            }
-            return (
-              <span
-                key={item.id}
-                className="w-1 h-1 rounded-full bg-rose-500 shadow-[0_0_3px_#f43f5e]"
-                title={`${item.name} (${item.protocol}): OFFLINE`}
-              />
-            );
-          })}
+            })
+          )}
         </div>
 
         {/* Small "COM" Label */}
@@ -331,27 +335,60 @@ export const MultiDriverStatusPill: React.FC<MultiDriverStatusPillProps> = ({
               <div>
                 <h4 className="text-xs font-bold text-slate-100">Communication Drivers</h4>
                 <p className="text-[10px] text-slate-400 font-mono">
-                  {onlineCount} of {totalCount} Connected
+                  {totalCount === 0 ? '0 Drivers Configured' : `${onlineCount} of ${totalCount} Connected`}
                 </p>
               </div>
             </div>
 
             {/* Quick Status Count Badges */}
             <div className="flex items-center space-x-1.5">
-              <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
-                {onlineCount} ON
-              </span>
-              {totalCount - onlineCount > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-rose-500/10 text-rose-300 border border-rose-500/30">
-                  {totalCount - onlineCount} OFF
+              {totalCount === 0 ? (
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700">
+                  READY
                 </span>
+              ) : (
+                <>
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                    {onlineCount} ON
+                  </span>
+                  {totalCount - onlineCount > 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-rose-500/10 text-rose-300 border border-rose-500/30">
+                      {totalCount - onlineCount} OFF
+                    </span>
+                  )}
+                </>
               )}
             </div>
           </div>
 
           {/* Drivers List */}
           <div className="p-2 space-y-1.5 max-h-72 overflow-y-auto divide-y divide-slate-800/40">
-            {driverItems.map(item => (
+            {driverItems.length === 0 ? (
+              <div className="p-5 text-center text-slate-400 space-y-2.5">
+                <div className="w-9 h-9 rounded-xl bg-slate-800/80 border border-slate-700/80 mx-auto flex items-center justify-center text-slate-400 text-sm">
+                  <i className="fas fa-plug-circle-xmark"></i>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-200">No Drivers Configured</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+                    Configure industrial Modbus, OPC-UA, Siemens S7, MELSEC, or MQTT connections.
+                  </p>
+                </div>
+                {!isClient && onOpenDriverConnections && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOpen(false);
+                      onOpenDriverConnections();
+                    }}
+                    className="mt-1 px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-semibold cursor-pointer shadow-sm transition-all"
+                  >
+                    + Add Driver Connection
+                  </button>
+                )}
+              </div>
+            ) : (
+              driverItems.map(item => (
               <div
                 key={item.id}
                 className="p-2.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/50 border border-slate-800/60 transition-colors space-y-1.5"
@@ -409,7 +446,7 @@ export const MultiDriverStatusPill: React.FC<MultiDriverStatusPillProps> = ({
                   </div>
                 )}
               </div>
-            ))}
+            )))}
           </div>
 
           {/* Footer Quick Configuration Navigation (Only in Studio / Non-Client) */}

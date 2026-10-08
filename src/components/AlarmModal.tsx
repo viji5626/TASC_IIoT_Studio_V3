@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActiveAlarm } from '../types';
+import { ActiveAlarm, ClientRuntimeFeatures } from '../types';
 import { triggerAckHaptic, triggerClickHaptic } from '../utils/hapticFeedback';
 import { SmsAlertConfigModal } from './alarms/SmsAlertConfigModal';
 import { EmailAlertConfigModal } from './alarms/EmailAlertConfigModal';
@@ -18,6 +18,8 @@ interface AlarmModalProps {
   onToggleAutoPopup?: () => void;
   latestAlarmTriggered?: ActiveAlarm | null;
   onOpenHistorian?: () => void;
+  clientFeatures?: ClientRuntimeFeatures;
+  isClient?: boolean;
 }
 
 function formatAlarmDateTime(ts: any): string {
@@ -49,12 +51,17 @@ export const AlarmModal: React.FC<AlarmModalProps> = ({
   isAutoPopupEnabled = true,
   onToggleAutoPopup,
   latestAlarmTriggered,
-  onOpenHistorian
+  onOpenHistorian,
+  clientFeatures,
+  isClient = false
 }) => {
   const [isMaximized, setIsMaximized] = useState(false);
   const [viewMode, setViewMode] = useState<'CARDS' | 'TABLE'>('CARDS');
   const [isSmsConfigOpen, setIsSmsConfigOpen] = useState(false);
   const [isEmailConfigOpen, setIsEmailConfigOpen] = useState(false);
+
+  const canShowSmsAlerts = !isClient || clientFeatures?.enableSmsAlerts !== false;
+  const canShowEmailAlerts = !isClient || clientFeatures?.enableEmailAlerts !== false;
 
   if (!isOpen && activeAlarms.length === 0) return null;
   if (!isOpen) return null;
@@ -167,30 +174,34 @@ export const AlarmModal: React.FC<AlarmModalProps> = ({
             )}
 
             {/* Free Telecom Email-to-SMS Gateway Config */}
-            <button
-              onClick={() => {
-                triggerClickHaptic();
-                setIsSmsConfigOpen(true);
-              }}
-              className="px-2 sm:px-3 py-1 sm:py-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/50 rounded-lg text-[10px] sm:text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shadow-sm active:scale-95"
-              title="Configure Free Carrier Email-to-SMS Alerts"
-            >
-              <i className="fas fa-comment-sms text-[10px] text-sky-400"></i>
-              <span className="hidden md:inline">SMS Alerts</span>
-            </button>
+            {canShowSmsAlerts && (
+              <button
+                onClick={() => {
+                  triggerClickHaptic();
+                  setIsSmsConfigOpen(true);
+                }}
+                className="px-2 sm:px-3 py-1 sm:py-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/50 rounded-lg text-[10px] sm:text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shadow-sm active:scale-95"
+                title="Configure Free Carrier Email-to-SMS Alerts"
+              >
+                <i className="fas fa-comment-sms text-[10px] text-sky-400"></i>
+                <span className="hidden md:inline">SMS Alerts</span>
+              </button>
+            )}
 
             {/* Industrial Real-Time Alarm Email Alerts Config */}
-            <button
-              onClick={() => {
-                triggerClickHaptic();
-                setIsEmailConfigOpen(true);
-              }}
-              className="px-2 sm:px-3 py-1 sm:py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/50 rounded-lg text-[10px] sm:text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shadow-sm active:scale-95"
-              title="Configure Real-Time Alarm Email Alerts (Secondary SMTP)"
-            >
-              <i className="fas fa-envelope-open-text text-[10px] text-rose-400"></i>
-              <span className="hidden md:inline">Email Alerts</span>
-            </button>
+            {canShowEmailAlerts && (
+              <button
+                onClick={() => {
+                  triggerClickHaptic();
+                  setIsEmailConfigOpen(true);
+                }}
+                className="px-2 sm:px-3 py-1 sm:py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/50 rounded-lg text-[10px] sm:text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shadow-sm active:scale-95"
+                title="Configure Real-Time Alarm Email Alerts (Secondary SMTP)"
+              >
+                <i className="fas fa-envelope-open-text text-[10px] text-rose-400"></i>
+                <span className="hidden md:inline">Email Alerts</span>
+              </button>
+            )}
 
             <button
               onClick={() => setIsMaximized(!isMaximized)}

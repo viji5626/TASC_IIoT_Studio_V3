@@ -353,6 +353,8 @@ export const ModalRegistry: React.FC<ModalRegistryProps> = React.memo(({
           setIsAlarmModalOpen(false);
           setIsAlarmHistorianModalOpen(true);
         }}
+        clientFeatures={appState.clientFeatures}
+        isClient={editionMgr.IsClient() || userRole === 'client' || !!appState.isLockedPackage}
       />
 
       {/* Industrial Alarm Historian (Lazy Loaded) */}

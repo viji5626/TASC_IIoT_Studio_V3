@@ -485,6 +485,9 @@ export interface ClientRuntimeFeatures {
   enableAiWorkbench?: boolean;
   enableFdd?: boolean;
   enableVpn?: boolean;
+  showBridgeIndication?: boolean;
+  enableSmsAlerts?: boolean;
+  enableEmailAlerts?: boolean;
 }
 
 export interface ClientSecuritySettings {
@@ -510,6 +513,7 @@ export interface AppState {
   packageOrigin?: 'community' | 'commercial' | 'engineering';
   currency?: '$' | '₹';
   clientFeatures?: ClientRuntimeFeatures;
+  showBridgeIndication?: boolean; // Toggle Edge Bridge status indication in top navbar
 
   // Centralized Historian & Persistence Settings
   historianConfig?: HistorianConfig;

@@ -114,31 +114,38 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
   const userRole = userRoleProp ?? store.userRole ?? appState?.userRole;
   const productEdition = store.productEdition ?? appState?.productEdition;
-  // 'operator' role is managed by OperatorAuthContext and does NOT lock design mode.
-  // Only 'client' role, CLIENT_RUNTIME edition, or locked packages trigger client mode.
+  const editionMgrInstance = EditionManager.fromState(appState || ({} as AppState));
+  // Strict Client Mode detection: 'client' role, CLIENT_RUNTIME edition, locked packages, or EditionManager
   const isClientMode =
     userRole === 'client' ||
     productEdition === ProductEdition.CLIENT_RUNTIME ||
     (productEdition as any) === 'client' ||
-    !!appState?.isLockedPackage;
+    !!appState?.isLockedPackage ||
+    editionMgrInstance.IsClient();
 
   const [localEditMode, setLocalEditMode] = useState(!isClientMode);
-  const isEditMode = store?.isHmiEditMode !== undefined ? store.isHmiEditMode : localEditMode;
+  const isEditMode = isClientMode ? false : (store?.isHmiEditMode !== undefined ? store.isHmiEditMode : localEditMode);
   const setIsEditMode = useCallback((val: boolean | ((prev: boolean) => boolean)) => {
+    if (isClientMode) return; // Strict lock in client mode
     if (store?.setIsHmiEditMode) {
       store.setIsHmiEditMode(val);
     }
     setLocalEditMode(val);
-  }, [store?.setIsHmiEditMode]);
+  }, [store?.setIsHmiEditMode, isClientMode]);
 
   useEffect(() => {
+    if (isClientMode) {
+      setLocalEditMode(false);
+      return;
+    }
     if (store?.isHmiEditMode !== undefined) {
       setLocalEditMode(store.isHmiEditMode);
     }
-  }, [store?.isHmiEditMode]);
+  }, [store?.isHmiEditMode, isClientMode]);
 
   useEffect(() => {
     const handleSetEditMode = (e: any) => {
+      if (isClientMode) return; // Strictly ignore edit mode requests in client mode
       const target = typeof e?.detail === 'boolean' ? e.detail : !isEditMode;
       if (store?.setIsHmiEditMode) {
         store.setIsHmiEditMode(target);
@@ -147,7 +154,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     };
     window.addEventListener('tasc-set-edit-mode', handleSetEditMode);
     return () => window.removeEventListener('tasc-set-edit-mode', handleSetEditMode);
-  }, [store?.setIsHmiEditMode, isEditMode]);
+  }, [store?.setIsHmiEditMode, isEditMode, isClientMode]);
   const [gridSnap, setGridSnap] = useState(true);
   const [isMobileToolsCollapsed, setIsMobileToolsCollapsed] = useState<boolean>(false);
   const [isAiBuilderModalOpen, setIsAiBuilderModalOpen] = useState<boolean>(false);
@@ -481,13 +488,14 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
   const effectiveEditMode = !isClientMode && isEditMode && !isFullscreen;
 
-  // Clear selections when switching to Live RUN mode
+  // Clear selections & close context menu when switching to Live RUN mode or in Client Mode
   useEffect(() => {
-    if (!effectiveEditMode) {
+    if (!effectiveEditMode || isClientMode) {
       setSelectedPanelIds([]);
       setMasterPanelId(null);
+      setContextMenu({ isOpen: false, x: 0, y: 0 });
     }
-  }, [effectiveEditMode]);
+  }, [effectiveEditMode, isClientMode]);
   // Keypad popup state
   const [keypadConfig, setKeypadConfig] = useState<{
     isOpen: boolean;
@@ -560,6 +568,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
   // Cut, Copy, and Paste Handlers
   const handleCopySelected = useCallback(() => {
+    if (!effectiveEditMode || isClientMode) return;
     if (selectedPanelIds.length === 0) return;
     const selected = appState.panels.filter(p => selectedPanelIds.includes(p.panelId));
     const cloned = JSON.parse(JSON.stringify(selected));
@@ -576,9 +585,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
     setPropertyCopiedToast(`Copied ${selected.length} element(s) to clipboard`);
     setTimeout(() => setPropertyCopiedToast(null), 2200);
-  }, [selectedPanelIds, appState.panels]);
+  }, [selectedPanelIds, appState.panels, effectiveEditMode, isClientMode]);
 
   const handleCutSelected = useCallback(() => {
+    if (!effectiveEditMode || isClientMode) return;
     if (selectedPanelIds.length === 0) return;
     handleCopySelected();
     const nextPanels = appState.panels.filter(p => !selectedPanelIds.includes(p.panelId));
@@ -588,9 +598,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     setSelectedNodeInfo(null);
     setPropertyCopiedToast(`Cut ${selectedPanelIds.length} element(s) to clipboard`);
     setTimeout(() => setPropertyCopiedToast(null), 2200);
-  }, [selectedPanelIds, appState.panels, handleCopySelected, updateAppStateWithHistory]);
+  }, [selectedPanelIds, appState.panels, handleCopySelected, updateAppStateWithHistory, effectiveEditMode, isClientMode]);
 
   const handlePasteFromClipboard = useCallback(async (targetPos?: { x: number; y: number }) => {
+    if (!effectiveEditMode || isClientMode) return;
     const pasteX = targetPos ? targetPos.x : 140;
     const pasteY = targetPos ? targetPos.y : 140;
     const activeConnId = appState.connections?.[0]?.connectionId || '';
@@ -1461,6 +1472,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
   // Select Panel with Shift/Ctrl multi-selection support
   const handlePanelSelect = (panelId: string, isShiftOrCtrl: boolean) => {
+    if (!effectiveEditMode || isClientMode) return;
     const targetPanel = panels.find(p => p.panelId === panelId);
     if (!targetPanel) return;
 
@@ -1490,7 +1502,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
   // Mouse Handlers for dragging multiple selected elements
   const handleMouseDown = (e: React.MouseEvent, panelId: string) => {
-    if (!effectiveEditMode) return;
+    if (!effectiveEditMode || isClientMode) return;
     e.stopPropagation();
 
     if (contextMenu.isOpen) setContextMenu({ isOpen: false, x: 0, y: 0 });
@@ -2451,6 +2463,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
   // Duplicate / Clone Selected
   const handleDuplicateSelected = () => {
+    if (!effectiveEditMode || isClientMode) return;
     if (selectedPanelIds.length === 0) return;
     const selectedPanels = appState.panels.filter(p => selectedPanelIds.includes(p.panelId));
     const newPanels: Panel[] = [];
@@ -2476,6 +2489,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
   // Delete Selected
   const handleDeleteSelected = () => {
+    if (!effectiveEditMode || isClientMode) return;
     if (selectedPanelIds.length === 0) return;
     const updatedPanels = appState.panels.filter(p => !selectedPanelIds.includes(p.panelId));
     updateAppStateWithHistory({ ...appState, panels: updatedPanels });
@@ -2485,6 +2499,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
   // Select All Elements
   const handleSelectAll = () => {
+    if (!effectiveEditMode || isClientMode) return;
     const allIds = panels.map(p => p.panelId);
     setSelectedPanelIds(allIds);
     if (allIds.length > 0) setMasterPanelId(allIds[0]);
@@ -2633,6 +2648,15 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   const handleContextMenu = (e: React.MouseEvent, panelId?: string) => {
     e.preventDefault();
     e.stopPropagation();
+
+    // STRICT: In Client Mode or in Live RUN mode (when not in effectiveEditMode),
+    // right-click must NEVER open the options context menu.
+    if (isClientMode || !effectiveEditMode) {
+      if (contextMenu.isOpen) {
+        setContextMenu({ isOpen: false, x: 0, y: 0 });
+      }
+      return;
+    }
 
     if (panelId && !selectedPanelIds.includes(panelId)) {
       setSelectedPanelIds([panelId]);
@@ -3811,7 +3835,12 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
             setMasterPanelId(null);
             setContextMenu({ isOpen: false, x: 0, y: 0 });
           }}
-          onContextMenu={(e) => handleContextMenu(e)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (isClientMode || !effectiveEditMode) return;
+            handleContextMenu(e);
+          }}
           className={`flex-1 relative p-0.5 transition-colors ${!isEditMode || isAutoFit ? 'overflow-hidden' : 'overflow-auto min-h-[600px] min-w-[1220px]'
             } ${isPanning
               ? 'cursor-grabbing select-none'
@@ -4012,16 +4041,24 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     key={panel.panelId}
                     id={`hmi-panel-${panel.panelId}`}
                     onMouseDown={(e) => {
+                      if (!effectiveEditMode || isClientMode) {
+                        return;
+                      }
                       if (panel.isLocked) {
                         handlePanelSelect(panel.panelId, e.shiftKey || e.ctrlKey || e.metaKey);
                         return;
                       }
                       handleMouseDown(e, panel.panelId);
                     }}
-                    onContextMenu={(e) => handleContextMenu(e, panel.panelId)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (isClientMode || !effectiveEditMode) return;
+                      handleContextMenu(e, panel.panelId);
+                    }}
                     onDoubleClick={(e) => {
                       e.stopPropagation();
-                      if (effectiveEditMode) {
+                      if (effectiveEditMode && !isClientMode) {
                         onEditPanel(panel);
                       }
                     }}
@@ -4819,18 +4856,20 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       <div
                         className="w-full h-full flex flex-col overflow-hidden select-none pointer-events-auto rounded-xl shadow-2xl p-0"
                         onMouseDown={(e) => {
-                          if (effectiveEditMode) {
+                          if (effectiveEditMode && !isClientMode) {
                             handlePanelSelect(panel.panelId, e.shiftKey || e.ctrlKey || e.metaKey);
                           }
                         }}
                         onDoubleClick={(e) => {
                           e.stopPropagation();
-                          if (effectiveEditMode) {
+                          if (effectiveEditMode && !isClientMode) {
                             onEditPanel(panel);
                           }
                         }}
                         onContextMenu={(e) => {
+                          e.preventDefault();
                           e.stopPropagation();
+                          if (isClientMode || !effectiveEditMode) return;
                           handleContextMenu(e, panel.panelId);
                         }}
                       >
@@ -5743,7 +5782,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       </div>
 
       {/* Floating Right-Click Context Menu */}
-      {contextMenu.isOpen && (
+      {contextMenu.isOpen && !isClientMode && effectiveEditMode && (
         <div
           onClick={(e) => e.stopPropagation()}
           className="absolute z-50 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-1.5 min-w-[220px] text-xs font-semibold animate-in fade-in duration-150 space-y-1"

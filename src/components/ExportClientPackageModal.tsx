@@ -34,7 +34,10 @@ const ExportClientPackageModal: React.FC<ExportClientPackageModalProps> = ({
     enableAiAssistant: true,
     enableAiWorkbench: true,
     enableFdd: true,
-    enableVpn: true
+    enableVpn: true,
+    showBridgeIndication: false,
+    enableSmsAlerts: true,
+    enableEmailAlerts: true
   });
 
   if (!isOpen) return null;
@@ -263,12 +266,15 @@ const ExportClientPackageModal: React.FC<ExportClientPackageModalProps> = ({
                 { key: 'enableReporting', label: 'Reporting', icon: 'fa-chart-bar', color: 'text-indigo-400' },
                 { key: 'enableAiAssistant', label: 'AI Copilot Assistant', icon: 'fa-wand-magic-sparkles', color: 'text-purple-400' },
                 { key: 'enableAiWorkbench', label: 'AI Code Workbench', icon: 'fa-microchip', color: 'text-pink-400' },
-                { key: 'enableVpn', label: 'NetBird VPN', icon: 'fa-shield-halved', color: 'text-amber-400' }
+                { key: 'enableVpn', label: 'NetBird VPN', icon: 'fa-shield-halved', color: 'text-amber-400' },
+                { key: 'enableSmsAlerts', label: 'SMS Alert System', icon: 'fa-comment-sms', color: 'text-sky-400' },
+                { key: 'enableEmailAlerts', label: 'Email Alert System', icon: 'fa-envelope-open-text', color: 'text-rose-400' },
+                { key: 'showBridgeIndication', label: 'Display Bridge Pill', icon: 'fa-network-wired', color: 'text-teal-400' }
               ].map(feat => (
                 <label key={feat.key} className="flex items-center space-x-2 cursor-pointer bg-slate-950/50 p-2 rounded-lg border border-slate-800/60 hover:bg-slate-900 transition-colors">
                   <input
                     type="checkbox"
-                    checked={clientFeatures[feat.key as keyof ClientRuntimeFeatures] !== false}
+                    checked={Boolean(clientFeatures[feat.key as keyof ClientRuntimeFeatures])}
                     onChange={(e) => setClientFeatures(prev => ({ ...prev, [feat.key]: e.target.checked }))}
                     className="accent-sky-500 w-3.5 h-3.5 cursor-pointer rounded bg-slate-900 border-slate-700 appearance-auto"
                   />

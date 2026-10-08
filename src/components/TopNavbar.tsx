@@ -199,7 +199,12 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
           />
 
           {/* TASC Edge Bridge Companion Status Pill */}
-          <EdgeBridgeStatusPill />
+          {((editionMgr.IsClient() || isClient || !!appState.isLockedPackage)
+            ? (clientFeatures?.showBridgeIndication === true)
+            : (appState.showBridgeIndication !== false)
+          ) && (
+            <EdgeBridgeStatusPill />
+          )}
         </div>
 
         {/* Inbuilt Alarm Center Bell Button */}
