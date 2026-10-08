@@ -7,6 +7,7 @@ import {
   executeTopicRename,
   previewBulkFindReplace,
   executeBulkFindReplace,
+  executeClearAllTopics,
   TopicRegistryEntry,
   TopicDirection,
   AffectedWidgetPreview,
@@ -49,10 +50,20 @@ export const TopicManagerView: React.FC<TopicManagerViewProps> = ({
   const [bulkFindStr, setBulkFindStr] = useState('');
   const [bulkReplaceStr, setBulkReplaceStr] = useState('');
 
+  // Clear All Topics & Dummy Tags state
+  const [isClearAllModalOpen, setIsClearAllModalOpen] = useState(false);
+
   // Success Toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const isReadOnly = userRole === 'client';
+
+  const handleExecuteClearAllTopics = () => {
+    const { newState, clearedCount } = executeClearAllTopics(appState);
+    onUpdateAppState(newState);
+    setIsClearAllModalOpen(false);
+    showToast(`Successfully cleared topics and dummy tags from ${clearedCount} widget(s). On-screen widgets preserved.`);
+  };
 
   // Scan app state
   const scanSummary = useMemo(() => scanAppTopics(appState), [appState]);
@@ -227,6 +238,18 @@ export const TopicManagerView: React.FC<TopicManagerViewProps> = ({
             >
               <i className="fas fa-arrow-right-arrow-left text-xs"></i>
               <span className="hidden sm:inline">Bulk Replace / Prefix Swap</span>
+            </button>
+          )}
+
+          {!isReadOnly && (
+            <button
+              type="button"
+              onClick={() => setIsClearAllModalOpen(true)}
+              className="py-2 px-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold rounded-xl transition-all flex items-center space-x-1.5 cursor-pointer"
+              title="Remove all topics and dummy tags from all widgets, keeping on-screen widgets intact"
+            >
+              <i className="fas fa-trash-can text-rose-400"></i>
+              <span className="hidden sm:inline">Clear All Topics</span>
             </button>
           )}
 
@@ -794,6 +817,51 @@ export const TopicManagerView: React.FC<TopicManagerViewProps> = ({
                 className="py-2.5 px-5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 disabled:opacity-50 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
               >
                 Execute Bulk Replacement
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear All Topics & Dummy Tags Modal */}
+      {isClearAllModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-rose-500/40 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center space-x-3 text-rose-400">
+              <div className="w-10 h-10 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-lg shrink-0">
+                <i className="fas fa-triangle-exclamation"></i>
+              </div>
+              <div>
+                <h3 className="text-base font-black text-white">Clear All Topics & Dummy Tags?</h3>
+                <p className="text-xs text-rose-300/80">Keep on-screen widgets only</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 text-xs text-slate-300 space-y-2">
+              <p>
+                This operation will cleanly remove all MQTT topics (<code className="text-sky-300 font-mono">topic</code> and <code className="text-sky-300 font-mono">publishTopic</code>) and dummy driver tags from all widgets.
+              </p>
+              <p className="text-emerald-400 font-semibold flex items-center space-x-1.5">
+                <i className="fas fa-shield-check"></i>
+                <span>All on-screen widgets, positions, dimensions, icons, styling, and navigation jump links will remain completely intact.</span>
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsClearAllModalOpen(false)}
+                className="py-2 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteClearAllTopics}
+                className="py-2 px-4 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all cursor-pointer flex items-center space-x-1.5"
+              >
+                <i className="fas fa-trash-can"></i>
+                <span>Confirm: Clear Topics & Tags</span>
               </button>
             </div>
           </div>

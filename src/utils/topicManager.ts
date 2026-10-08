@@ -516,3 +516,51 @@ export function executeBulkFindReplace(
     affectedWidgetsCount: affectedCount,
   };
 }
+
+/**
+ * Strips all MQTT topics, publish topics, and dummy tags from all panels while preserving
+ * all on-screen widgets, positions, dimensions, styling, and navigation bindings.
+ */
+export function executeClearAllTopics(
+  appState: AppState
+): { newState: AppState; clearedCount: number } {
+  let clearedCount = 0;
+
+  const updatedPanels = (appState.panels || []).map(panel => {
+    const hadTopic = Boolean(
+      panel.topic?.trim() ||
+      panel.publishTopic?.trim() ||
+      panel.tripTopic?.trim() ||
+      (panel as any).driverTagId ||
+      (panel as any).tagId
+    );
+    if (hadTopic) clearedCount++;
+
+    const cleaned: Panel = {
+      ...panel,
+      topic: '',
+      publishTopic: '',
+      tripTopic: '',
+    };
+    delete (cleaned as any).driverTagId;
+    delete (cleaned as any).tagId;
+    return cleaned;
+  });
+
+  const updatedDashboards = (appState.dashboards || []).map(dash => ({
+    ...dash,
+    prefixTopic: '',
+  }));
+
+  return {
+    newState: {
+      ...appState,
+      panels: updatedPanels,
+      dashboards: updatedDashboards,
+      driverTags: [],
+      driverConnections: [],
+    },
+    clearedCount,
+  };
+}
+
