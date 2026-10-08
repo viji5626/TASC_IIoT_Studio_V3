@@ -18,12 +18,24 @@ export interface OpenAiConfig {
 }
 
 async function fetchWithProxyFallback(url: string, init?: RequestInit): Promise<Response> {
+  const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+  const isLocalTarget = url.includes('localhost') || url.includes('127.0.0.1');
+
   try {
     const res = await fetch(url, init);
     return res;
   } catch (err: any) {
-    // If browser CORS or network error ("Failed to fetch"), retry via transparent local backend proxy
+    // If browser CORS or network error ("Failed to fetch"), retry via transparent local backend proxy if running locally
     if (typeof window !== 'undefined') {
+      const isLocalHostSite = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      
+      // If we are on a remote HTTPS site and trying to talk to localhost, give actionable guidance
+      if (!isLocalHostSite && isHttps && isLocalTarget) {
+        throw new Error(
+          `Browser blocked communication from HTTPS (${window.location.hostname}) to local LLM (${url}). To enable: in Chrome, click the Lock/Tune icon in the address bar -> Site settings -> set "Insecure content" to "Allow", and reload.`
+        );
+      }
+
       try {
         const proxyUrl = `/api/ai/proxy?url=${encodeURIComponent(url)}`;
         const headers: Record<string, string> = {
@@ -38,10 +50,18 @@ async function fetchWithProxyFallback(url: string, init?: RequestInit): Promise<
             Object.assign(headers, init.headers);
           }
         }
-        return await fetch(proxyUrl, {
+        const proxyRes = await fetch(proxyUrl, {
           ...init,
           headers
         });
+
+        // If the proxy returns HTML (Netlify SPA fallback), reject it cleanly
+        const contentType = proxyRes.headers.get('content-type') || '';
+        if (contentType.includes('text/html')) {
+          throw new Error('Local backend proxy endpoint is unavailable on static web hosting.');
+        }
+
+        return proxyRes;
       } catch (proxyErr) {
         throw err;
       }

@@ -99,18 +99,32 @@ export const LocalAiServerControl: React.FC<LocalAiServerControlProps> = ({
     setTimeout(() => setCopiedCmd(null), 2500);
   };
 
+  const isHosted = typeof window !== 'undefined' && 
+    window.location.hostname !== 'localhost' && 
+    window.location.hostname !== '127.0.0.1';
+
+  // Safe JSON helper prevents HTML (e.g. Netlify 404/redirect) from throwing raw syntax errors
+  const safeParseJson = async (res: Response) => {
+    const text = await res.text();
+    if (text.trim().startsWith('<')) {
+      throw new Error('API server returned HTML response instead of JSON.');
+    }
+    return JSON.parse(text);
+  };
+
   // Fetch hardware specs
   const fetchHwSpecs = useCallback(async () => {
+    if (isHosted) return;
     try {
       const res = await fetch('/api/local-ai/hardware-specs');
       if (res.ok) {
-        const data = await res.json();
+        const data = await safeParseJson(res);
         if (data.success) {
           setHwSpecs(data);
         }
       }
     } catch (e) {}
-  }, []);
+  }, [isHosted]);
 
   // Auto-Calculate Optimal Hardware Settings for current model
   const calculateOptimalSettings = useCallback(async (modelName?: string, autoApply = true) => {
@@ -119,10 +133,14 @@ export const LocalAiServerControl: React.FC<LocalAiServerControlProps> = ({
 
     lastCalculatedModelRef.current = `${provider}:${targetModel}`;
     setIsCalculating(true);
+    if (isHosted) {
+      setIsCalculating(false);
+      return;
+    }
     try {
       const res = await fetch(`/api/local-ai/recommend-settings?provider=${provider}&model=${encodeURIComponent(targetModel)}&port=${targetPort}`);
       if (res.ok) {
-        const data = await res.json();
+        const data = await safeParseJson(res);
         if (data.success && data.recommendations) {
           setRecommendation({
             ...data.modelDetails,
@@ -145,7 +163,7 @@ export const LocalAiServerControl: React.FC<LocalAiServerControlProps> = ({
     } finally {
       setIsCalculating(false);
     }
-  }, [currentModel, provider, targetPort]);
+  }, [currentModel, provider, targetPort, isHosted]);
 
   // Auto-calculate on model switch only when model or provider actually changes
   useEffect(() => {
@@ -156,9 +174,38 @@ export const LocalAiServerControl: React.FC<LocalAiServerControlProps> = ({
 
   const checkStatus = useCallback(async (isSilent = false) => {
     if (!isSilent) setStatus(prev => (prev === 'starting' || prev === 'stopping' ? prev : 'checking'));
+
+    // In hosted cloud mode (e.g. app.tascautomation.com), probe local engine directly via browser fetch
+    if (isHosted) {
+      try {
+        const probeUrl = isOllama
+          ? `http://localhost:${targetPort}/api/tags`
+          : (baseUrl ? `${baseUrl.replace(/\/+$/, '')}/models` : `http://localhost:${targetPort}/v1/models`);
+        const res = await fetch(probeUrl, { method: 'GET', mode: 'cors' });
+        if (res.ok) {
+          const data = await res.json();
+          const list = isOllama
+            ? (Array.isArray(data.models) ? data.models.map((m: any) => m.name || m.model) : [])
+            : (Array.isArray(data.data) ? data.data.map((m: any) => m.id) : []);
+          setStatus('online');
+          setErrorMessage(null);
+          if (list.length > 0) setModels(list);
+          return;
+        } else {
+          setStatus('offline');
+          setModels([]);
+          return;
+        }
+      } catch (err: any) {
+        setStatus('offline');
+        setModels([]);
+        return;
+      }
+    }
+
     try {
       const res = await fetch(`/api/local-ai/status?type=${provider}&port=${targetPort}`);
-      const data = await res.json();
+      const data = await safeParseJson(res);
 
       if (data.running) {
         setStatus('online');
@@ -174,7 +221,7 @@ export const LocalAiServerControl: React.FC<LocalAiServerControlProps> = ({
       setStatus('offline');
       setModels([]);
     }
-  }, [provider, targetPort]);
+  }, [provider, targetPort, isHosted, isOllama, baseUrl]);
 
   // Initial and regular polling
   useEffect(() => {
@@ -192,6 +239,15 @@ export const LocalAiServerControl: React.FC<LocalAiServerControlProps> = ({
 
   // Handle Start Server
   const handleStartServer = async () => {
+    if (isHosted) {
+      setStatus('offline');
+      setActionMessage(null);
+      setErrorMessage(
+        `Cloud-Hosted Mode: A website on the internet cannot start desktop programs on your laptop. Please launch ${isOllama ? 'Ollama' : 'LM Studio'} directly on your PC, make sure "Enable CORS" is ON, and click "Start Server". (In Chrome: set "Insecure content" to "Allow" in Site Settings for ${window.location.hostname} to allow localhost communication).`
+      );
+      return;
+    }
+
     setStatus('starting');
     setActionMessage(`Opening terminal & starting ${isOllama ? 'Ollama' : 'LM Studio'} on port ${targetPort}...`);
     setErrorMessage(null);
@@ -202,7 +258,7 @@ export const LocalAiServerControl: React.FC<LocalAiServerControlProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: provider, port: targetPort })
       });
-      const data = await res.json();
+      const data = await safeParseJson(res);
 
       if (data.success) {
         setActionMessage('Command dispatched! Waiting for local server to initialize...');
@@ -213,7 +269,7 @@ export const LocalAiServerControl: React.FC<LocalAiServerControlProps> = ({
           attempts++;
           try {
             const probeRes = await fetch(`/api/local-ai/status?type=${provider}&port=${targetPort}`);
-            const probeData = await probeRes.json();
+            const probeData = await safeParseJson(probeRes);
             if (probeData.running) {
               setStatus('online');
               if (Array.isArray(probeData.models)) setModels(probeData.models);
@@ -245,6 +301,11 @@ export const LocalAiServerControl: React.FC<LocalAiServerControlProps> = ({
 
   // Handle Stop Server
   const handleStopServer = async () => {
+    if (isHosted) {
+      setErrorMessage(`Cloud-Hosted Mode: Please stop the server inside the ${isOllama ? 'Ollama' : 'LM Studio'} application on your PC.`);
+      return;
+    }
+
     setStatus('stopping');
     setActionMessage(`Stopping ${isOllama ? 'Ollama' : 'LM Studio'} server...`);
     setErrorMessage(null);
@@ -255,7 +316,7 @@ export const LocalAiServerControl: React.FC<LocalAiServerControlProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: provider, port: targetPort })
       });
-      const data = await res.json();
+      const data = await safeParseJson(res);
 
       if (data.success) {
         setTimeout(async () => {
@@ -273,12 +334,20 @@ export const LocalAiServerControl: React.FC<LocalAiServerControlProps> = ({
   };
 
   // Explicit Load Model with Hardware Offload & Context Length
-  // Explicit Load Model with Hardware Offload & Context Length
   const handleLoadModel = async () => {
     if (!currentModel) {
       setErrorMessage('Please select a model identifier first.');
       return;
     }
+
+    if (isHosted) {
+      setLoadResult({
+        ok: true,
+        message: `Model "${currentModel}" parameters applied for chat requests in ${isOllama ? 'Ollama' : 'LM Studio'}.`
+      });
+      return;
+    }
+
     setIsLoadingModel(true);
     setLoadResult(null);
     setActionMessage(`Applying hardware offload & loading "${currentModel}" into ${isOllama ? 'Ollama' : 'LM Studio'}...`);
@@ -298,7 +367,7 @@ export const LocalAiServerControl: React.FC<LocalAiServerControlProps> = ({
           ttl: 3600
         })
       });
-      const data = await res.json();
+      const data = await safeParseJson(res);
       if (data.success) {
         setLoadResult({ ok: true, message: data.message || `Model loaded successfully in ${isOllama ? 'Ollama' : 'LM Studio'}!` });
         setActionMessage(null);
@@ -316,6 +385,12 @@ export const LocalAiServerControl: React.FC<LocalAiServerControlProps> = ({
 
   // Unload All Models to free VRAM
   const handleUnloadAll = async () => {
+    if (isHosted) {
+      setActionMessage(null);
+      setErrorMessage(`Cloud-Hosted Mode: Please unload models inside the ${isOllama ? 'Ollama' : 'LM Studio'} desktop application.`);
+      return;
+    }
+
     try {
       setActionMessage(`Freeing VRAM and unloading models from ${isOllama ? 'Ollama' : 'LM Studio'}...`);
       const res = await fetch('/api/local-ai/unload-model', {
@@ -323,7 +398,7 @@ export const LocalAiServerControl: React.FC<LocalAiServerControlProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider, model: currentModel })
       });
-      const data = await res.json();
+      const data = await safeParseJson(res);
       if (data.success) {
         setActionMessage(data.message || 'VRAM freed successfully!');
         setTimeout(() => setActionMessage(null), 3000);
