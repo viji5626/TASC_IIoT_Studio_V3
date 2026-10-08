@@ -24,8 +24,8 @@ export const INITIAL_STATE: AppState = {
   {
     "connectionName": "broker1",
     "brokerAddress": "test.mosquitto.org",
-    "port": 1883,
-    "protocol": "TCP",
+    "port": "1883",
+    "protocol": "Websocket",
     "clientId": "",
     "username": "",
     "password": "",
@@ -38,15 +38,6 @@ export const INITIAL_STATE: AppState = {
 ],
   dashboards: [
   {
-    "dashboardId": "dash_daman_home_1786206817829",
-    "dashboardName": "Daman Hatchery (Home)",
-    "connectionId": "conn_demo",
-    "isHome": true,
-    "icon": "fa-house",
-    "themeColor": "#0284c7",
-    "canvasBgColor": "#0b1329"
-  },
-  {
     "dashboardId": "dash_home",
     "dashboardName": "Smart Home Controls",
     "connectionId": "conn_demo",
@@ -55,6 +46,15 @@ export const INITIAL_STATE: AppState = {
     "themeColor": "#f59e0b",
     "bgColor": "#00a8db",
     "canvasBgColor": "#00a8db"
+  },
+  {
+    "dashboardId": "dash_daman_home_1786206817829",
+    "dashboardName": "Daman Hatchery (Home)",
+    "connectionId": "conn_demo",
+    "isHome": true,
+    "icon": "fa-house",
+    "themeColor": "#0284c7",
+    "canvasBgColor": "#0b1329"
   },
   {
     "dashboardId": "dash_daman_menu_1786206817829",
@@ -138,7 +138,7 @@ export const INITIAL_STATE: AppState = {
     "panelName": "Living Room Temperature",
     "type": "gauge",
     "topic": "home/livingroom/temperature",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "payloadMin": 10,
     "payloadMax": 50,
     "firstColor": "#10b981",
@@ -149,9 +149,7 @@ export const INITIAL_STATE: AppState = {
     "x": 530,
     "y": 170,
     "w": 160,
-    "h": 140,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 140
   },
   {
     "panelId": "panel_fan",
@@ -168,8 +166,9 @@ export const INITIAL_STATE: AppState = {
     "iconColorOff": "#4b5563",
     "x": 220,
     "y": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "iconSize": 24,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "panel_switch",
@@ -180,7 +179,9 @@ export const INITIAL_STATE: AppState = {
     "topic": "home/lights/livingroom",
     "payloadOn": "ON",
     "payloadOff": "OFF",
-    "dataSourceMode": "mqtt"
+    "switchSize": 48,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "panel_dimmer",
@@ -192,15 +193,14 @@ export const INITIAL_STATE: AppState = {
     "payloadMin": 0,
     "payloadMax": 100,
     "unit": "%",
-    "sliderStep": 5,
-    "dataSourceMode": "mqtt"
+    "sliderStep": 5
   },
   {
     "type": "gauge",
     "dashboardId": "dash_home",
     "connectionId": "conn_demo",
     "panelName": "New GAUGE",
-    "topic": "factory/sensors/gauge1",
+    "topic": "vijay",
     "qos": 0,
     "messageFactor": 1,
     "decimalPrecision": 1,
@@ -215,6 +215,9 @@ export const INITIAL_STATE: AppState = {
     "thirdColor": "#ef4444",
     "penColor": "#38bdf8",
     "penThickness": 2,
+    "graphType": "line",
+    "showGrid": true,
+    "fillArea": true,
     "iconOn": "fa-fan",
     "iconOff": "fa-fan",
     "iconColorOn": "#10b981",
@@ -224,24 +227,52 @@ export const INITIAL_STATE: AppState = {
     "payloadOff": "0",
     "showReceivedTimeStamp": true,
     "showSentTimeStamp": true,
+    "buttonPayload": "1",
     "sliderStep": 1,
+    "publishPattern": "",
+    "publishTopic": "",
+    "confirmPublish": false,
+    "clearOnPublish": false,
     "enableLowAlarm": false,
     "enableMidAlarm": false,
     "enableHighAlarm": false,
     "lowAlarmMsg": "Low Zone Warning",
     "midAlarmMsg": "Mid Zone Warning",
     "highAlarmMsg": "High Critical Alarm",
+    "options": [
+      "Selection 1:20",
+      "Selection 2:40",
+      "Selection 3:60",
+      "Selection 4:80"
+    ],
+    "optionItems": [
+      {
+        "label": "Selection 1",
+        "value": "20"
+      },
+      {
+        "label": "Selection 2",
+        "value": "40"
+      },
+      {
+        "label": "Selection 3",
+        "value": "60"
+      },
+      {
+        "label": "Selection 4",
+        "value": "80"
+      }
+    ],
     "isJSONPayload": true,
     "jsonPath": "$.d.write1[0]",
-    "panelId": "panel_1786194476444",
-    "dataSourceMode": "mqtt"
+    "panelId": "panel_1786194476444"
   },
   {
     "type": "gauge",
     "dashboardId": "dash_home",
     "connectionId": "conn_demo",
     "panelName": "New GAUGE",
-    "topic": "factory/sensors/gauge1",
+    "topic": "vijay",
     "qos": 0,
     "messageFactor": 1,
     "decimalPrecision": 1,
@@ -256,6 +287,9 @@ export const INITIAL_STATE: AppState = {
     "thirdColor": "#ef4444",
     "penColor": "#38bdf8",
     "penThickness": 2,
+    "graphType": "line",
+    "showGrid": true,
+    "fillArea": true,
     "iconOn": "fa-fan",
     "iconOff": "fa-fan",
     "iconColorOn": "#10b981",
@@ -265,17 +299,45 @@ export const INITIAL_STATE: AppState = {
     "payloadOff": "0",
     "showReceivedTimeStamp": true,
     "showSentTimeStamp": true,
+    "buttonPayload": "1",
     "sliderStep": 1,
+    "publishPattern": "",
+    "publishTopic": "",
+    "confirmPublish": false,
+    "clearOnPublish": false,
     "enableLowAlarm": false,
     "enableMidAlarm": false,
     "enableHighAlarm": false,
     "lowAlarmMsg": "Low Zone Warning",
     "midAlarmMsg": "Mid Zone Warning",
     "highAlarmMsg": "High Critical Alarm",
+    "options": [
+      "Selection 1:20",
+      "Selection 2:40",
+      "Selection 3:60",
+      "Selection 4:80"
+    ],
+    "optionItems": [
+      {
+        "label": "Selection 1",
+        "value": "20"
+      },
+      {
+        "label": "Selection 2",
+        "value": "40"
+      },
+      {
+        "label": "Selection 3",
+        "value": "60"
+      },
+      {
+        "label": "Selection 4",
+        "value": "80"
+      }
+    ],
     "isJSONPayload": true,
     "jsonPath": "$.d.data_shankar[0]",
-    "panelId": "panel_1786194604164",
-    "dataSourceMode": "mqtt"
+    "panelId": "panel_1786194604164"
   },
   {
     "panelId": "p_dh_title_1786206817829",
@@ -295,18 +357,16 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 15,
     "w": 1160,
-    "h": 55,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 55
   },
   {
     "panelId": "p_dh_gauge_temp_1786206817829",
     "dashboardId": "dash_daman_home_1786206817829",
     "connectionId": "conn_demo",
-    "panelName": "AVERAGE ROOM TEMPERATURE (°C)",
+    "panelName": "AVERAGE ROOM TEMPERATURE (\u00b0C)",
     "type": "gauge",
     "topic": "daman/room/temp",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "payloadMin": 0,
     "payloadMax": 100,
     "firstColor": "#10b981",
@@ -316,9 +376,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 85,
     "w": 380,
-    "h": 220,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 220
   },
   {
     "panelId": "p_dh_gauge_hum_1786206817829",
@@ -337,9 +395,7 @@ export const INITIAL_STATE: AppState = {
     "x": 800,
     "y": 85,
     "w": 380,
-    "h": 220,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 220
   },
   {
     "panelId": "p_dh_s1_1786206817829",
@@ -348,7 +404,7 @@ export const INITIAL_STATE: AppState = {
     "panelName": "SENSOR 01",
     "type": "text_output",
     "topic": "daman/sensor1",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "decimalPrecision": 1,
     "bgColor": "#022c22",
     "textColor": "#4ade80",
@@ -357,9 +413,7 @@ export const INITIAL_STATE: AppState = {
     "x": 420,
     "y": 100,
     "w": 170,
-    "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 80
   },
   {
     "panelId": "p_dh_s2_1786206817829",
@@ -368,7 +422,7 @@ export const INITIAL_STATE: AppState = {
     "panelName": "SENSOR 02",
     "type": "text_output",
     "topic": "daman/sensor2",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "decimalPrecision": 1,
     "bgColor": "#022c22",
     "textColor": "#4ade80",
@@ -377,9 +431,7 @@ export const INITIAL_STATE: AppState = {
     "x": 610,
     "y": 100,
     "w": 170,
-    "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 80
   },
   {
     "panelId": "p_dh_menu_btn_1786206817829",
@@ -396,9 +448,7 @@ export const INITIAL_STATE: AppState = {
     "x": 420,
     "y": 200,
     "w": 360,
-    "h": 65,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 65
   },
   {
     "panelId": "p_dh_hdr_status_1786206817829",
@@ -418,9 +468,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 325,
     "w": 1160,
-    "h": 40,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 40
   },
   {
     "panelId": "p_dh_ind_0_1786206817829",
@@ -440,8 +488,9 @@ export const INITIAL_STATE: AppState = {
     "y": 380,
     "w": 135,
     "h": 68,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "iconSize": 24,
+    "fontSize": 14,
+    "textAlign": "left"
   },
   {
     "panelId": "p_dh_ind_1_1786206817829",
@@ -461,8 +510,9 @@ export const INITIAL_STATE: AppState = {
     "y": 380,
     "w": 135,
     "h": 68,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "iconSize": 32,
+    "fontSize": 20,
+    "textAlign": "left"
   },
   {
     "panelId": "p_dh_ind_2_1786206817829",
@@ -482,8 +532,9 @@ export const INITIAL_STATE: AppState = {
     "y": 380,
     "w": 135,
     "h": 68,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "iconSize": 24,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_dh_ind_3_1786206817829",
@@ -503,8 +554,9 @@ export const INITIAL_STATE: AppState = {
     "y": 380,
     "w": 135,
     "h": 68,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "iconSize": 24,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_dh_ind_4_1786206817829",
@@ -524,8 +576,9 @@ export const INITIAL_STATE: AppState = {
     "y": 380,
     "w": 135,
     "h": 68,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "iconSize": 24,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_dh_ind_5_1786206817829",
@@ -545,8 +598,9 @@ export const INITIAL_STATE: AppState = {
     "y": 380,
     "w": 135,
     "h": 68,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "iconSize": 24,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_dh_ind_6_1786206817829",
@@ -566,8 +620,9 @@ export const INITIAL_STATE: AppState = {
     "y": 380,
     "w": 135,
     "h": 68,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "iconSize": 24,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_dh_ind_7_1786206817829",
@@ -587,8 +642,9 @@ export const INITIAL_STATE: AppState = {
     "y": 380,
     "w": 135,
     "h": 68,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "iconSize": 24,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_dh_ind2_0_1786206817829",
@@ -608,8 +664,9 @@ export const INITIAL_STATE: AppState = {
     "y": 460,
     "w": 180,
     "h": 68,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "iconSize": 24,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_dh_ind2_1_1786206817829",
@@ -629,8 +686,9 @@ export const INITIAL_STATE: AppState = {
     "y": 460,
     "w": 180,
     "h": 68,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "iconSize": 24,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_dh_ind2_2_1786206817829",
@@ -650,8 +708,9 @@ export const INITIAL_STATE: AppState = {
     "y": 460,
     "w": 180,
     "h": 68,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "iconSize": 24,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_dh_ind2_3_1786206817829",
@@ -671,8 +730,9 @@ export const INITIAL_STATE: AppState = {
     "y": 460,
     "w": 180,
     "h": 68,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "iconSize": 24,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_dh_ind2_4_1786206817829",
@@ -692,8 +752,9 @@ export const INITIAL_STATE: AppState = {
     "y": 460,
     "w": 180,
     "h": 68,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "iconSize": 24,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_dh_ind2_5_1786206817829",
@@ -713,8 +774,9 @@ export const INITIAL_STATE: AppState = {
     "y": 460,
     "w": 180,
     "h": 68,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "iconSize": 24,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_dm_title_1786206817829",
@@ -735,9 +797,7 @@ export const INITIAL_STATE: AppState = {
     "y": 15,
     "w": 1160,
     "h": 55,
-    "shadowEnabled": true,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "shadowEnabled": true
   },
   {
     "panelId": "p_dm_hum_1786206817829",
@@ -755,9 +815,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 85,
     "w": 340,
-    "h": 70,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 70
   },
   {
     "panelId": "p_dm_temp_1786206817829",
@@ -766,7 +824,7 @@ export const INITIAL_STATE: AppState = {
     "panelName": "AVERAGE TEMPERATURE",
     "type": "text_output",
     "topic": "daman/room/temp",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "decimalPrecision": 1,
     "bgColor": "#022c22",
     "textColor": "#4ade80",
@@ -775,9 +833,7 @@ export const INITIAL_STATE: AppState = {
     "x": 840,
     "y": 85,
     "w": 340,
-    "h": 70,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 70
   },
   {
     "panelId": "p_dm_btn_fantimer_1786206817829",
@@ -794,9 +850,7 @@ export const INITIAL_STATE: AppState = {
     "x": 60,
     "y": 180,
     "w": 240,
-    "h": 65,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 65
   },
   {
     "panelId": "p_dm_btn_humidity_1786206817829",
@@ -813,9 +867,7 @@ export const INITIAL_STATE: AppState = {
     "x": 340,
     "y": 180,
     "w": 240,
-    "h": 65,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 65
   },
   {
     "panelId": "p_dm_btn_alarm_1786206817829",
@@ -832,9 +884,7 @@ export const INITIAL_STATE: AppState = {
     "x": 620,
     "y": 180,
     "w": 240,
-    "h": 65,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 65
   },
   {
     "panelId": "p_dm_btn_sp_1786206817829",
@@ -851,9 +901,7 @@ export const INITIAL_STATE: AppState = {
     "x": 900,
     "y": 180,
     "w": 240,
-    "h": 65,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 65
   },
   {
     "panelId": "p_dm_btn_vfd_1786206817829",
@@ -870,9 +918,7 @@ export const INITIAL_STATE: AppState = {
     "x": 60,
     "y": 270,
     "w": 240,
-    "h": 65,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 65
   },
   {
     "panelId": "p_dm_btn_light_1786206817829",
@@ -889,9 +935,7 @@ export const INITIAL_STATE: AppState = {
     "x": 340,
     "y": 270,
     "w": 240,
-    "h": 65,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 65
   },
   {
     "panelId": "p_dm_btn_cal_1786206817829",
@@ -908,9 +952,7 @@ export const INITIAL_STATE: AppState = {
     "x": 620,
     "y": 270,
     "w": 240,
-    "h": 65,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 65
   },
   {
     "panelId": "p_dm_btn_home_1786206817829",
@@ -927,9 +969,7 @@ export const INITIAL_STATE: AppState = {
     "x": 900,
     "y": 270,
     "w": 240,
-    "h": 65,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 65
   },
   {
     "panelId": "p_dm_s1_1786206817829",
@@ -938,7 +978,7 @@ export const INITIAL_STATE: AppState = {
     "panelName": "SENSOR #1",
     "type": "text_output",
     "topic": "daman/sensor1",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "decimalPrecision": 1,
     "bgColor": "#022c22",
     "textColor": "#4ade80",
@@ -947,9 +987,7 @@ export const INITIAL_STATE: AppState = {
     "x": 340,
     "y": 370,
     "w": 240,
-    "h": 70,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 70
   },
   {
     "panelId": "p_dm_s2_1786206817829",
@@ -958,7 +996,7 @@ export const INITIAL_STATE: AppState = {
     "panelName": "SENSOR #2",
     "type": "text_output",
     "topic": "daman/sensor2",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "decimalPrecision": 1,
     "bgColor": "#022c22",
     "textColor": "#4ade80",
@@ -967,9 +1005,7 @@ export const INITIAL_STATE: AppState = {
     "x": 620,
     "y": 370,
     "w": 240,
-    "h": 70,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 70
   },
   {
     "panelId": "p_sub_hdr_dash_daman_fan_timer_1786206817829_1786206817829",
@@ -989,9 +1025,7 @@ export const INITIAL_STATE: AppState = {
     "x": 360,
     "y": 15,
     "w": 460,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_nav_home_dash_daman_fan_timer_1786206817829_1786206817829",
@@ -1008,9 +1042,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 15,
     "w": 150,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_nav_menu_dash_daman_fan_timer_1786206817829_1786206817829",
@@ -1027,9 +1059,7 @@ export const INITIAL_STATE: AppState = {
     "x": 185,
     "y": 15,
     "w": 150,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_hum_dash_daman_fan_timer_1786206817829_1786206817829",
@@ -1047,9 +1077,7 @@ export const INITIAL_STATE: AppState = {
     "x": 840,
     "y": 15,
     "w": 160,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_temp_dash_daman_fan_timer_1786206817829_1786206817829",
@@ -1058,7 +1086,7 @@ export const INITIAL_STATE: AppState = {
     "panelName": "AVG TEMP",
     "type": "text_output",
     "topic": "daman/room/temp",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "decimalPrecision": 1,
     "bgColor": "#022c22",
     "textColor": "#4ade80",
@@ -1067,9 +1095,7 @@ export const INITIAL_STATE: AppState = {
     "x": 1015,
     "y": 15,
     "w": 165,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_ft_on_12_1786206817829",
@@ -1088,9 +1114,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 90,
     "w": 360,
-    "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 80
   },
   {
     "panelId": "p_ft_off_12_1786206817829",
@@ -1109,9 +1133,7 @@ export const INITIAL_STATE: AppState = {
     "x": 400,
     "y": 90,
     "w": 360,
-    "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 80
   },
   {
     "panelId": "p_ft_status_logic_1786206817829",
@@ -1127,8 +1149,9 @@ export const INITIAL_STATE: AppState = {
     "y": 90,
     "w": 400,
     "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "iconSize": 24,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_ft_out1_1786206817829",
@@ -1144,9 +1167,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 190,
     "w": 360,
-    "h": 70,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 70
   },
   {
     "panelId": "p_ft_sw1_1786206817829",
@@ -1161,8 +1182,9 @@ export const INITIAL_STATE: AppState = {
     "y": 190,
     "w": 200,
     "h": 70,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "switchSize": 64,
+    "fontSize": 18,
+    "textAlign": "left"
   },
   {
     "panelId": "p_ft_led1_1786206817829",
@@ -1179,8 +1201,9 @@ export const INITIAL_STATE: AppState = {
     "y": 190,
     "w": 140,
     "h": 70,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "iconSize": 24,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_ft_out2_1786206817829",
@@ -1196,9 +1219,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 280,
     "w": 360,
-    "h": 70,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 70
   },
   {
     "panelId": "p_ft_sw2_1786206817829",
@@ -1213,8 +1234,9 @@ export const INITIAL_STATE: AppState = {
     "y": 280,
     "w": 200,
     "h": 70,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "switchSize": 48,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_ft_led2_1786206817829",
@@ -1231,8 +1253,9 @@ export const INITIAL_STATE: AppState = {
     "y": 280,
     "w": 140,
     "h": 70,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "iconSize": 24,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_ft_on_34_1786206817829",
@@ -1249,9 +1272,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 370,
     "w": 360,
-    "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 80
   },
   {
     "panelId": "p_ft_off_34_1786206817829",
@@ -1268,9 +1289,7 @@ export const INITIAL_STATE: AppState = {
     "x": 400,
     "y": 370,
     "w": 360,
-    "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 80
   },
   {
     "panelId": "p_ft_sw3_1786206817829",
@@ -1285,8 +1304,9 @@ export const INITIAL_STATE: AppState = {
     "y": 370,
     "w": 190,
     "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "switchSize": 48,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_ft_sw4_1786206817829",
@@ -1301,8 +1321,9 @@ export const INITIAL_STATE: AppState = {
     "y": 370,
     "w": 190,
     "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "switchSize": 48,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_sub_hdr_dash_daman_humidity_1786206817829_1786206817829",
@@ -1322,9 +1343,7 @@ export const INITIAL_STATE: AppState = {
     "x": 360,
     "y": 15,
     "w": 460,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_nav_home_dash_daman_humidity_1786206817829_1786206817829",
@@ -1341,9 +1360,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 15,
     "w": 150,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_nav_menu_dash_daman_humidity_1786206817829_1786206817829",
@@ -1360,9 +1377,7 @@ export const INITIAL_STATE: AppState = {
     "x": 185,
     "y": 15,
     "w": 150,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_hum_dash_daman_humidity_1786206817829_1786206817829",
@@ -1380,9 +1395,7 @@ export const INITIAL_STATE: AppState = {
     "x": 840,
     "y": 15,
     "w": 160,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_temp_dash_daman_humidity_1786206817829_1786206817829",
@@ -1391,7 +1404,7 @@ export const INITIAL_STATE: AppState = {
     "panelName": "AVG TEMP",
     "type": "text_output",
     "topic": "daman/room/temp",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "decimalPrecision": 1,
     "bgColor": "#022c22",
     "textColor": "#4ade80",
@@ -1400,9 +1413,7 @@ export const INITIAL_STATE: AppState = {
     "x": 1015,
     "y": 15,
     "w": 165,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_hum_hdr_1786206817829",
@@ -1422,9 +1433,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 85,
     "w": 1160,
-    "h": 42,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 42
   },
   {
     "panelId": "p_hum_sp_on_1786206817829",
@@ -1443,9 +1452,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 140,
     "w": 360,
-    "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 80
   },
   {
     "panelId": "p_hum_sp_off_1786206817829",
@@ -1464,9 +1471,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 235,
     "w": 360,
-    "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 80
   },
   {
     "panelId": "p_hum_sw_logic_1786206817829",
@@ -1481,8 +1486,9 @@ export const INITIAL_STATE: AppState = {
     "y": 330,
     "w": 360,
     "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "switchSize": 48,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_hum_led_pump_1786206817829",
@@ -1498,8 +1504,9 @@ export const INITIAL_STATE: AppState = {
     "y": 425,
     "w": 360,
     "h": 75,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "iconSize": 24,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_hum_on_time_1786206817829",
@@ -1516,9 +1523,7 @@ export const INITIAL_STATE: AppState = {
     "x": 410,
     "y": 140,
     "w": 360,
-    "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 80
   },
   {
     "panelId": "p_hum_off_time_1786206817829",
@@ -1535,9 +1540,7 @@ export const INITIAL_STATE: AppState = {
     "x": 800,
     "y": 140,
     "w": 380,
-    "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 80
   },
   {
     "panelId": "p_hum_act_on_1786206817829",
@@ -1554,9 +1557,7 @@ export const INITIAL_STATE: AppState = {
     "x": 410,
     "y": 235,
     "w": 360,
-    "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 80
   },
   {
     "panelId": "p_hum_act_off_1786206817829",
@@ -1573,9 +1574,7 @@ export const INITIAL_STATE: AppState = {
     "x": 800,
     "y": 235,
     "w": 380,
-    "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 80
   },
   {
     "panelId": "p_sub_hdr_dash_daman_fan_setpoint_1786206817829_1786206817829",
@@ -1595,9 +1594,7 @@ export const INITIAL_STATE: AppState = {
     "x": 360,
     "y": 15,
     "w": 460,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_nav_home_dash_daman_fan_setpoint_1786206817829_1786206817829",
@@ -1614,9 +1611,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 15,
     "w": 150,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_nav_menu_dash_daman_fan_setpoint_1786206817829_1786206817829",
@@ -1633,9 +1628,7 @@ export const INITIAL_STATE: AppState = {
     "x": 185,
     "y": 15,
     "w": 150,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_hum_dash_daman_fan_setpoint_1786206817829_1786206817829",
@@ -1653,9 +1646,7 @@ export const INITIAL_STATE: AppState = {
     "x": 840,
     "y": 15,
     "w": 160,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_temp_dash_daman_fan_setpoint_1786206817829_1786206817829",
@@ -1664,7 +1655,7 @@ export const INITIAL_STATE: AppState = {
     "panelName": "AVG TEMP",
     "type": "text_output",
     "topic": "daman/room/temp",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "decimalPrecision": 1,
     "bgColor": "#022c22",
     "textColor": "#4ade80",
@@ -1673,18 +1664,16 @@ export const INITIAL_STATE: AppState = {
     "x": 1015,
     "y": 15,
     "w": 165,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sp_fan_1_1786206817829",
     "dashboardId": "dash_daman_fan_setpoint_1786206817829",
     "connectionId": "conn_demo",
-    "panelName": "FAN-1 ON (°C)",
+    "panelName": "FAN-1 ON (\u00b0C)",
     "type": "text_input",
     "topic": "daman/fansp/fan1_on",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "payloadMin": 0,
     "payloadMax": 100,
     "bgColor": "#422006",
@@ -1694,18 +1683,16 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 85,
     "w": 260,
-    "h": 75,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 75
   },
   {
     "panelId": "p_sp_fan_2_1786206817829",
     "dashboardId": "dash_daman_fan_setpoint_1786206817829",
     "connectionId": "conn_demo",
-    "panelName": "FAN-2 ON (°C)",
+    "panelName": "FAN-2 ON (\u00b0C)",
     "type": "text_input",
     "topic": "daman/fansp/fan2_on",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "payloadMin": 0,
     "payloadMax": 100,
     "bgColor": "#422006",
@@ -1715,18 +1702,16 @@ export const INITIAL_STATE: AppState = {
     "x": 300,
     "y": 85,
     "w": 260,
-    "h": 75,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 75
   },
   {
     "panelId": "p_sp_fan_3_1786206817829",
     "dashboardId": "dash_daman_fan_setpoint_1786206817829",
     "connectionId": "conn_demo",
-    "panelName": "FAN-3 ON (°C)",
+    "panelName": "FAN-3 ON (\u00b0C)",
     "type": "text_input",
     "topic": "daman/fansp/fan3_on",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "payloadMin": 0,
     "payloadMax": 100,
     "bgColor": "#422006",
@@ -1736,18 +1721,16 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 170,
     "w": 260,
-    "h": 75,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 75
   },
   {
     "panelId": "p_sp_fan_4_1786206817829",
     "dashboardId": "dash_daman_fan_setpoint_1786206817829",
     "connectionId": "conn_demo",
-    "panelName": "FAN-4 ON (°C)",
+    "panelName": "FAN-4 ON (\u00b0C)",
     "type": "text_input",
     "topic": "daman/fansp/fan4_on",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "payloadMin": 0,
     "payloadMax": 100,
     "bgColor": "#422006",
@@ -1757,18 +1740,16 @@ export const INITIAL_STATE: AppState = {
     "x": 300,
     "y": 170,
     "w": 260,
-    "h": 75,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 75
   },
   {
     "panelId": "p_sp_fan_5_1786206817829",
     "dashboardId": "dash_daman_fan_setpoint_1786206817829",
     "connectionId": "conn_demo",
-    "panelName": "FAN-5 ON (°C)",
+    "panelName": "FAN-5 ON (\u00b0C)",
     "type": "text_input",
     "topic": "daman/fansp/fan5_on",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "payloadMin": 0,
     "payloadMax": 100,
     "bgColor": "#422006",
@@ -1778,18 +1759,16 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 255,
     "w": 260,
-    "h": 75,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 75
   },
   {
     "panelId": "p_sp_fan_6_1786206817829",
     "dashboardId": "dash_daman_fan_setpoint_1786206817829",
     "connectionId": "conn_demo",
-    "panelName": "FAN-6 ON (°C)",
+    "panelName": "FAN-6 ON (\u00b0C)",
     "type": "text_input",
     "topic": "daman/fansp/fan6_on",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "payloadMin": 0,
     "payloadMax": 100,
     "bgColor": "#422006",
@@ -1799,18 +1778,16 @@ export const INITIAL_STATE: AppState = {
     "x": 300,
     "y": 255,
     "w": 260,
-    "h": 75,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 75
   },
   {
     "panelId": "p_sp_fan_7_1786206817829",
     "dashboardId": "dash_daman_fan_setpoint_1786206817829",
     "connectionId": "conn_demo",
-    "panelName": "FAN-7 ON (°C)",
+    "panelName": "FAN-7 ON (\u00b0C)",
     "type": "text_input",
     "topic": "daman/fansp/fan7_on",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "payloadMin": 0,
     "payloadMax": 100,
     "bgColor": "#422006",
@@ -1820,18 +1797,16 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 340,
     "w": 260,
-    "h": 75,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 75
   },
   {
     "panelId": "p_sp_fan_8_1786206817829",
     "dashboardId": "dash_daman_fan_setpoint_1786206817829",
     "connectionId": "conn_demo",
-    "panelName": "FAN-8 ON (°C)",
+    "panelName": "FAN-8 ON (\u00b0C)",
     "type": "text_input",
     "topic": "daman/fansp/fan8_on",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "payloadMin": 0,
     "payloadMax": 100,
     "bgColor": "#422006",
@@ -1841,9 +1816,7 @@ export const INITIAL_STATE: AppState = {
     "x": 300,
     "y": 340,
     "w": 260,
-    "h": 75,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 75
   },
   {
     "panelId": "p_sp_temp_min_1786206817829",
@@ -1852,7 +1825,7 @@ export const INITIAL_STATE: AppState = {
     "panelName": "TEMP MIN",
     "type": "text_input",
     "topic": "daman/fansp/temp_min",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "bgColor": "#422006",
     "textColor": "#fef08a",
     "borderColor": "#eab308",
@@ -1860,9 +1833,7 @@ export const INITIAL_STATE: AppState = {
     "x": 600,
     "y": 85,
     "w": 270,
-    "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 80
   },
   {
     "panelId": "p_sp_temp_max_1786206817829",
@@ -1871,7 +1842,7 @@ export const INITIAL_STATE: AppState = {
     "panelName": "TEMP MAX",
     "type": "text_input",
     "topic": "daman/fansp/temp_max",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "bgColor": "#422006",
     "textColor": "#fef08a",
     "borderColor": "#eab308",
@@ -1879,9 +1850,7 @@ export const INITIAL_STATE: AppState = {
     "x": 600,
     "y": 180,
     "w": 270,
-    "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 80
   },
   {
     "panelId": "p_sp_speed_min_1786206817829",
@@ -1898,9 +1867,7 @@ export const INITIAL_STATE: AppState = {
     "x": 890,
     "y": 85,
     "w": 290,
-    "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 80
   },
   {
     "panelId": "p_sp_speed_max_1786206817829",
@@ -1917,9 +1884,7 @@ export const INITIAL_STATE: AppState = {
     "x": 890,
     "y": 180,
     "w": 290,
-    "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 80
   },
   {
     "panelId": "p_sub_hdr_dash_daman_vfd_1786206817829_1786206817829",
@@ -1939,9 +1904,7 @@ export const INITIAL_STATE: AppState = {
     "x": 360,
     "y": 15,
     "w": 460,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_nav_home_dash_daman_vfd_1786206817829_1786206817829",
@@ -1958,9 +1921,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 15,
     "w": 150,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_nav_menu_dash_daman_vfd_1786206817829_1786206817829",
@@ -1977,9 +1938,7 @@ export const INITIAL_STATE: AppState = {
     "x": 185,
     "y": 15,
     "w": 150,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_hum_dash_daman_vfd_1786206817829_1786206817829",
@@ -1997,9 +1956,7 @@ export const INITIAL_STATE: AppState = {
     "x": 840,
     "y": 15,
     "w": 160,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_temp_dash_daman_vfd_1786206817829_1786206817829",
@@ -2008,7 +1965,7 @@ export const INITIAL_STATE: AppState = {
     "panelName": "AVG TEMP",
     "type": "text_output",
     "topic": "daman/room/temp",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "decimalPrecision": 1,
     "bgColor": "#022c22",
     "textColor": "#4ade80",
@@ -2017,9 +1974,7 @@ export const INITIAL_STATE: AppState = {
     "x": 1015,
     "y": 15,
     "w": 165,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_vfd_start_1786206817829",
@@ -2035,9 +1990,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 90,
     "w": 220,
-    "h": 75,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 75
   },
   {
     "panelId": "p_vfd_stop_1786206817829",
@@ -2053,9 +2006,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 180,
     "w": 220,
-    "h": 75,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 75
   },
   {
     "panelId": "p_vfd_set_hz_1786206817829",
@@ -2074,9 +2025,7 @@ export const INITIAL_STATE: AppState = {
     "x": 260,
     "y": 90,
     "w": 320,
-    "h": 75,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 75
   },
   {
     "panelId": "p_vfd_act_hz_1786206817829",
@@ -2094,9 +2043,7 @@ export const INITIAL_STATE: AppState = {
     "x": 260,
     "y": 180,
     "w": 320,
-    "h": 75,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 75
   },
   {
     "panelId": "p_vfd_auto_sw_1786206817829",
@@ -2111,8 +2058,9 @@ export const INITIAL_STATE: AppState = {
     "y": 90,
     "w": 570,
     "h": 165,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "switchSize": 48,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_sub_hdr_dash_daman_lighting_1786206817829_1786206817829",
@@ -2132,9 +2080,7 @@ export const INITIAL_STATE: AppState = {
     "x": 360,
     "y": 15,
     "w": 460,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_nav_home_dash_daman_lighting_1786206817829_1786206817829",
@@ -2151,9 +2097,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 15,
     "w": 150,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_nav_menu_dash_daman_lighting_1786206817829_1786206817829",
@@ -2170,9 +2114,7 @@ export const INITIAL_STATE: AppState = {
     "x": 185,
     "y": 15,
     "w": 150,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_hum_dash_daman_lighting_1786206817829_1786206817829",
@@ -2190,9 +2132,7 @@ export const INITIAL_STATE: AppState = {
     "x": 840,
     "y": 15,
     "w": 160,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_temp_dash_daman_lighting_1786206817829_1786206817829",
@@ -2201,7 +2141,7 @@ export const INITIAL_STATE: AppState = {
     "panelName": "AVG TEMP",
     "type": "text_output",
     "topic": "daman/room/temp",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "decimalPrecision": 1,
     "bgColor": "#022c22",
     "textColor": "#4ade80",
@@ -2210,9 +2150,7 @@ export const INITIAL_STATE: AppState = {
     "x": 1015,
     "y": 15,
     "w": 165,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_lt_on_at_1786206817829",
@@ -2228,9 +2166,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 90,
     "w": 360,
-    "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 80
   },
   {
     "panelId": "p_lt_off_at_1786206817829",
@@ -2246,9 +2182,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 185,
     "w": 360,
-    "h": 80,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 80
   },
   {
     "panelId": "p_lt_sw_1786206817829",
@@ -2263,8 +2197,9 @@ export const INITIAL_STATE: AppState = {
     "y": 90,
     "w": 360,
     "h": 175,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "switchSize": 48,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_lt_status_1786206817829",
@@ -2280,8 +2215,9 @@ export const INITIAL_STATE: AppState = {
     "y": 90,
     "w": 380,
     "h": 175,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "iconSize": 24,
+    "fontSize": 12,
+    "textAlign": "left"
   },
   {
     "panelId": "p_sub_hdr_dash_daman_sensor_cal_1786206817829_1786206817829",
@@ -2301,9 +2237,7 @@ export const INITIAL_STATE: AppState = {
     "x": 360,
     "y": 15,
     "w": 460,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_nav_home_dash_daman_sensor_cal_1786206817829_1786206817829",
@@ -2320,9 +2254,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 15,
     "w": 150,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_nav_menu_dash_daman_sensor_cal_1786206817829_1786206817829",
@@ -2339,9 +2271,7 @@ export const INITIAL_STATE: AppState = {
     "x": 185,
     "y": 15,
     "w": 150,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_hum_dash_daman_sensor_cal_1786206817829_1786206817829",
@@ -2359,9 +2289,7 @@ export const INITIAL_STATE: AppState = {
     "x": 840,
     "y": 15,
     "w": 160,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_temp_dash_daman_sensor_cal_1786206817829_1786206817829",
@@ -2370,7 +2298,7 @@ export const INITIAL_STATE: AppState = {
     "panelName": "AVG TEMP",
     "type": "text_output",
     "topic": "daman/room/temp",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "decimalPrecision": 1,
     "bgColor": "#022c22",
     "textColor": "#4ade80",
@@ -2379,9 +2307,7 @@ export const INITIAL_STATE: AppState = {
     "x": 1015,
     "y": 15,
     "w": 165,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_cal_tbl_hdr_1786206817829",
@@ -2401,9 +2327,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 85,
     "w": 1160,
-    "h": 42,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 42
   },
   {
     "panelId": "p_cal_lbl_1_1786206817829",
@@ -2419,18 +2343,16 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 140,
     "w": 260,
-    "h": 60,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 60
   },
   {
     "panelId": "p_cal_off_1_1786206817829",
     "dashboardId": "dash_daman_sensor_cal_1786206817829",
     "connectionId": "conn_demo",
-    "panelName": "OFFSET (°C)",
+    "panelName": "OFFSET (\u00b0C)",
     "type": "text_input",
     "topic": "daman/cal/sensor1_offset",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "bgColor": "#422006",
     "textColor": "#fef08a",
     "borderColor": "#eab308",
@@ -2438,18 +2360,16 @@ export const INITIAL_STATE: AppState = {
     "x": 300,
     "y": 140,
     "w": 420,
-    "h": 60,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 60
   },
   {
     "panelId": "p_cal_act_1_1786206817829",
     "dashboardId": "dash_daman_sensor_cal_1786206817829",
     "connectionId": "conn_demo",
-    "panelName": "ACTUAL (°C)",
+    "panelName": "ACTUAL (\u00b0C)",
     "type": "text_output",
     "topic": "daman/sensor1",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "decimalPrecision": 1,
     "bgColor": "#022c22",
     "textColor": "#4ade80",
@@ -2458,9 +2378,7 @@ export const INITIAL_STATE: AppState = {
     "x": 740,
     "y": 140,
     "w": 440,
-    "h": 60,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 60
   },
   {
     "panelId": "p_cal_lbl_2_1786206817829",
@@ -2476,18 +2394,16 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 210,
     "w": 260,
-    "h": 60,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 60
   },
   {
     "panelId": "p_cal_off_2_1786206817829",
     "dashboardId": "dash_daman_sensor_cal_1786206817829",
     "connectionId": "conn_demo",
-    "panelName": "OFFSET (°C)",
+    "panelName": "OFFSET (\u00b0C)",
     "type": "text_input",
     "topic": "daman/cal/sensor2_offset",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "bgColor": "#422006",
     "textColor": "#fef08a",
     "borderColor": "#eab308",
@@ -2495,18 +2411,16 @@ export const INITIAL_STATE: AppState = {
     "x": 300,
     "y": 210,
     "w": 420,
-    "h": 60,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 60
   },
   {
     "panelId": "p_cal_act_2_1786206817829",
     "dashboardId": "dash_daman_sensor_cal_1786206817829",
     "connectionId": "conn_demo",
-    "panelName": "ACTUAL (°C)",
+    "panelName": "ACTUAL (\u00b0C)",
     "type": "text_output",
     "topic": "daman/sensor2",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "decimalPrecision": 1,
     "bgColor": "#022c22",
     "textColor": "#4ade80",
@@ -2515,9 +2429,7 @@ export const INITIAL_STATE: AppState = {
     "x": 740,
     "y": 210,
     "w": 440,
-    "h": 60,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 60
   },
   {
     "panelId": "p_cal_lbl_3_1786206817829",
@@ -2533,18 +2445,16 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 280,
     "w": 260,
-    "h": 60,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 60
   },
   {
     "panelId": "p_cal_off_3_1786206817829",
     "dashboardId": "dash_daman_sensor_cal_1786206817829",
     "connectionId": "conn_demo",
-    "panelName": "OFFSET (°C)",
+    "panelName": "OFFSET (\u00b0C)",
     "type": "text_input",
     "topic": "daman/cal/sensor3_offset",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "bgColor": "#422006",
     "textColor": "#fef08a",
     "borderColor": "#eab308",
@@ -2552,18 +2462,16 @@ export const INITIAL_STATE: AppState = {
     "x": 300,
     "y": 280,
     "w": 420,
-    "h": 60,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 60
   },
   {
     "panelId": "p_cal_act_3_1786206817829",
     "dashboardId": "dash_daman_sensor_cal_1786206817829",
     "connectionId": "conn_demo",
-    "panelName": "ACTUAL (°C)",
+    "panelName": "ACTUAL (\u00b0C)",
     "type": "text_output",
     "topic": "daman/sensor3",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "decimalPrecision": 1,
     "bgColor": "#022c22",
     "textColor": "#4ade80",
@@ -2572,9 +2480,7 @@ export const INITIAL_STATE: AppState = {
     "x": 740,
     "y": 280,
     "w": 440,
-    "h": 60,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 60
   },
   {
     "panelId": "p_cal_lbl_4_1786206817829",
@@ -2590,18 +2496,16 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 350,
     "w": 260,
-    "h": 60,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 60
   },
   {
     "panelId": "p_cal_off_4_1786206817829",
     "dashboardId": "dash_daman_sensor_cal_1786206817829",
     "connectionId": "conn_demo",
-    "panelName": "OFFSET (°C)",
+    "panelName": "OFFSET (\u00b0C)",
     "type": "text_input",
     "topic": "daman/cal/sensor4_offset",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "bgColor": "#422006",
     "textColor": "#fef08a",
     "borderColor": "#eab308",
@@ -2609,18 +2513,16 @@ export const INITIAL_STATE: AppState = {
     "x": 300,
     "y": 350,
     "w": 420,
-    "h": 60,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 60
   },
   {
     "panelId": "p_cal_act_4_1786206817829",
     "dashboardId": "dash_daman_sensor_cal_1786206817829",
     "connectionId": "conn_demo",
-    "panelName": "ACTUAL (°C)",
+    "panelName": "ACTUAL (\u00b0C)",
     "type": "text_output",
     "topic": "daman/sensor4",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "decimalPrecision": 1,
     "bgColor": "#022c22",
     "textColor": "#4ade80",
@@ -2629,9 +2531,7 @@ export const INITIAL_STATE: AppState = {
     "x": 740,
     "y": 350,
     "w": 440,
-    "h": 60,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 60
   },
   {
     "panelId": "p_sub_hdr_dash_daman_alarm_setting_1786206817829_1786206817829",
@@ -2651,9 +2551,7 @@ export const INITIAL_STATE: AppState = {
     "x": 360,
     "y": 15,
     "w": 460,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_nav_home_dash_daman_alarm_setting_1786206817829_1786206817829",
@@ -2670,9 +2568,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 15,
     "w": 150,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_nav_menu_dash_daman_alarm_setting_1786206817829_1786206817829",
@@ -2689,9 +2585,7 @@ export const INITIAL_STATE: AppState = {
     "x": 185,
     "y": 15,
     "w": 150,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_hum_dash_daman_alarm_setting_1786206817829_1786206817829",
@@ -2709,9 +2603,7 @@ export const INITIAL_STATE: AppState = {
     "x": 840,
     "y": 15,
     "w": 160,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_sub_temp_dash_daman_alarm_setting_1786206817829_1786206817829",
@@ -2720,7 +2612,7 @@ export const INITIAL_STATE: AppState = {
     "panelName": "AVG TEMP",
     "type": "text_output",
     "topic": "daman/room/temp",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "decimalPrecision": 1,
     "bgColor": "#022c22",
     "textColor": "#4ade80",
@@ -2729,9 +2621,7 @@ export const INITIAL_STATE: AppState = {
     "x": 1015,
     "y": 15,
     "w": 165,
-    "h": 50,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 50
   },
   {
     "panelId": "p_alm_hi_1786206817829",
@@ -2740,7 +2630,7 @@ export const INITIAL_STATE: AppState = {
     "panelName": "TEMPERATURE HIGH ALARM",
     "type": "text_input",
     "topic": "daman/alarm/temp_hi",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "bgColor": "#422006",
     "textColor": "#fef08a",
     "borderColor": "#eab308",
@@ -2748,9 +2638,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 90,
     "w": 380,
-    "h": 70,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 70
   },
   {
     "panelId": "p_alm_lo_1786206817829",
@@ -2759,7 +2647,7 @@ export const INITIAL_STATE: AppState = {
     "panelName": "TEMPERATURE LOW ALARM",
     "type": "text_input",
     "topic": "daman/alarm/temp_lo",
-    "unit": "°C",
+    "unit": "\u00b0C",
     "bgColor": "#422006",
     "textColor": "#fef08a",
     "borderColor": "#eab308",
@@ -2767,9 +2655,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 170,
     "w": 380,
-    "h": 70,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 70
   },
   {
     "panelId": "p_alm_pwr_1786206817829",
@@ -2786,9 +2672,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 250,
     "w": 380,
-    "h": 70,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 70
   },
   {
     "panelId": "p_alm_reset_1786206817829",
@@ -2804,9 +2688,7 @@ export const INITIAL_STATE: AppState = {
     "x": 20,
     "y": 335,
     "w": 180,
-    "h": 60,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 60
   },
   {
     "panelId": "p_alm_hooter_1786206817829",
@@ -2822,16 +2704,14 @@ export const INITIAL_STATE: AppState = {
     "x": 220,
     "y": 335,
     "w": 180,
-    "h": 60,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 60
   },
   {
     "panelId": "p_alm_log_1786206817829",
     "dashboardId": "dash_daman_alarm_setting_1786206817829",
     "connectionId": "conn_demo",
     "panelName": "LIVE ALARMS LOG",
-    "type": "alarm_log",
+    "type": "log",
     "topic": "daman/alarm/log",
     "bgColor": "#020617",
     "textColor": "#ef4444",
@@ -2840,9 +2720,7 @@ export const INITIAL_STATE: AppState = {
     "x": 420,
     "y": 90,
     "w": 760,
-    "h": 305,
-    "isHmiMode": true,
-    "dataSourceMode": "mqtt"
+    "h": 305
   }
 ],
   driverConnections: [
@@ -3235,19 +3113,24 @@ export function useSessionEngine() {
   }, [resetRuntimeTimeoutTimer]);
 
   const handleSaveAndExitSession = () => {
+    // 1. Always save the full active project state directly to persisted localStorage
+    savePersistedState(appState);
+
+    // 2. Also save to commercial/client slot if multi-screen or not explicitly locked community
+    saveCommercialState(appState);
+    setIsClientSetupSaved(true);
+
+    // 3. If community origin, also mirror to community demo slot
     const isCommunity = 
       appState.packageOrigin === 'community' ||
       userRole === 'community' || 
       productEdition === ProductEdition.COMMUNITY ||
-      appState.clientInfo?.clientName === 'Community Edition Save' ||
-      (!appState.clientInfo?.isSignedPackage && userRole !== 'admin');
+      appState.clientInfo?.clientName === 'Community Edition Save';
 
     if (isCommunity) {
       saveCommunityState(appState);
-    } else {
-      saveCommercialState(appState);
-      setIsClientSetupSaved(true);
     }
+
     setIsExitSessionModalOpen(false);
     setUserRole('gate');
     setProductEdition(ProductEdition.LANDING);

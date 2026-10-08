@@ -209,6 +209,8 @@ function AppContent() {
           setCurrentView(AppView.DASHBOARD);
         })}
         onSelectCommunityMode={() => {
+          const hasExistingProject = appState.dashboards?.length > 0 && appState.panels?.length > 0;
+          const homeDash = appState.dashboards.find(d => d.isHome) || appState.dashboards[0];
           const freshDash: Dashboard = {
             dashboardId: 'dash_main',
             dashboardName: 'Main Dashboard',
@@ -218,16 +220,16 @@ function AppContent() {
           };
           setUserRole('community');
           setProductEdition(ProductEdition.COMMUNITY);
-          setAppState(prev => sanitizeAppState({
+          setAppState(prev => ({
             ...prev,
             userRole: 'community',
             productEdition: ProductEdition.COMMUNITY,
             packageOrigin: 'community',
             isLockedPackage: false,
-            dashboards: prev.dashboards.length > 0 && prev.panels.length === 0 ? prev.dashboards : [freshDash],
-            panels: []
+            dashboards: prev.dashboards?.length > 0 ? prev.dashboards : [freshDash],
+            panels: prev.panels?.length > 0 ? prev.panels : []
           }));
-          setActiveDashboardId('dash_main');
+          setActiveDashboardId(hasExistingProject ? homeDash.dashboardId : 'dash_main');
           setCurrentView(AppView.DASHBOARD);
         }}
         onLoginAdmin={() => {
