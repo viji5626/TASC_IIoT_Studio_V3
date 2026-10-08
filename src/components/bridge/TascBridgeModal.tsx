@@ -38,28 +38,12 @@ export const TascBridgeModal: React.FC<TascBridgeModalProps> = ({ isOpen: propIs
   };
 
   const GITHUB_BRIDGE_REPO_URL = 'https://github.com/viji5626/TASC_IIoT_Studio_V3/tree/main/bridge_dist';
+  const GITHUB_DIRECT_EXE_URL = 'https://github.com/viji5626/TASC_IIoT_Studio_V3/raw/main/bridge_dist/TASC_Edge_Bridge_Setup.exe';
   const DIRECT_INSTALLER_PATH = '/downloads/TASC_Edge_Bridge_Setup.exe';
 
-  // Shared Google Drive link state
-  const [gdriveUrl, setGdriveUrl] = useState<string>(() => {
-    return localStorage.getItem('tasc_bridge_gdrive_url') || '';
-  });
-  const [showGdriveConfig, setShowGdriveConfig] = useState<boolean>(false);
-  const [gdriveInput, setGdriveInput] = useState<string>(gdriveUrl);
-
-  const handleSaveGdriveUrl = () => {
-    localStorage.setItem('tasc_bridge_gdrive_url', gdriveInput.trim());
-    setGdriveUrl(gdriveInput.trim());
-    setShowGdriveConfig(false);
-  };
-
   const handleDownloadExe = () => {
-    if (gdriveUrl) {
-      window.open(gdriveUrl, '_blank');
-      return;
-    }
     const a = document.createElement('a');
-    a.href = DIRECT_INSTALLER_PATH;
+    a.href = isHosted ? GITHUB_DIRECT_EXE_URL : DIRECT_INSTALLER_PATH;
     a.download = 'TASC_Edge_Bridge_Setup.exe';
     document.body.appendChild(a);
     a.click();
@@ -380,18 +364,15 @@ pause
                     <i className="fas fa-download group-hover:scale-110 transition-transform"></i>
                     <span>Download .EXE Setup</span>
                   </button>
-                  {gdriveUrl && (
-                    <a
-                      href={gdriveUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-3 py-2 rounded-lg bg-sky-600/30 hover:bg-sky-600/50 border border-sky-500/40 text-sky-200 text-xs font-bold flex items-center space-x-1.5 transition-colors"
-                      title="Download from Google Drive Mirror"
-                    >
-                      <i className="fab fa-google-drive"></i>
-                      <span>GDrive Mirror</span>
-                    </a>
-                  )}
+                  <a
+                    href={GITHUB_BRIDGE_REPO_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center space-x-1.5 transition-colors group"
+                  >
+                    <i className="fab fa-github text-slate-400 group-hover:text-white"></i>
+                    <span>GitHub Release (<code>bridge_dist/</code>)</span>
+                  </a>
                 </div>
               </div>
 
@@ -411,27 +392,11 @@ pause
                 </div>
               </div>
 
-              {/* Mirror Link & GDrive Settings Bar */}
-              <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400">
-                <div className="flex items-center space-x-3">
-                  <a
-                    href={GITHUB_BRIDGE_REPO_URL}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-slate-400 hover:text-indigo-300 flex items-center space-x-1 transition-colors"
-                  >
-                    <i className="fab fa-github"></i>
-                    <span>GitHub Release Folder (<code>bridge_dist/</code>)</span>
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => setShowGdriveConfig(!showGdriveConfig)}
-                    className="text-slate-400 hover:text-sky-300 flex items-center space-x-1 cursor-pointer transition-colors"
-                  >
-                    <i className="fab fa-google-drive text-amber-400"></i>
-                    <span>{gdriveUrl ? 'Change GDrive Link' : '+ Add Google Drive Shared Link'}</span>
-                  </button>
-                </div>
+              {/* Secondary Options */}
+              <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
+                <span className="text-slate-500">
+                  Direct setup: installs to user profile without requiring admin rights.
+                </span>
 
                 <button
                   type="button"
@@ -442,41 +407,6 @@ pause
                   <span>Download Portable .BAT Script</span>
                 </button>
               </div>
-
-              {/* Optional GDrive Link Input Drawer */}
-              {showGdriveConfig && (
-                <div className="mt-3 p-2.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-semibold text-slate-300">Set Shared Google Drive Download URL:</span>
-                    <button
-                      type="button"
-                      onClick={() => setShowGdriveConfig(false)}
-                      className="text-slate-500 hover:text-slate-300 text-xs"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  <div className="flex space-x-2">
-                    <input
-                      type="url"
-                      value={gdriveInput}
-                      onChange={(e) => setGdriveInput(e.target.value)}
-                      placeholder="https://drive.google.com/file/d/.../view?usp=sharing"
-                      className="flex-1 bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-slate-200 text-xs focus:outline-none focus:border-sky-500 font-mono"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleSaveGdriveUrl}
-                      className="px-3 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-bold transition-colors cursor-pointer"
-                    >
-                      Save Mirror
-                    </button>
-                  </div>
-                  <p className="text-[9px] text-slate-500">
-                    Paste your uploaded Google Drive shared link here. It will automatically be used for all 1-click bridge downloads.
-                  </p>
-                </div>
-              )}
             </div>
 
             {/* Local Developer Option (Terminal Run) */}
