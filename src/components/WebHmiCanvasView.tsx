@@ -4431,24 +4431,45 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       })()
                     ) : panel.type === PanelType.SCREEN_JUMP ? (
                       /* Screen Navigation Button */
-                      <div className="w-full h-full p-1.5 flex items-center justify-center">
-                        <button
-                          type="button"
-                          disabled={effectiveEditMode}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handlePanelInteract(panel);
-                          }}
-                          className="w-full h-full rounded-xl bg-gradient-to-r from-sky-900/80 to-indigo-900/80 hover:from-sky-700 hover:to-indigo-700 border-2 border-sky-400 text-sky-100 font-extrabold text-xs uppercase tracking-wider px-3 py-1 flex items-center justify-between shadow-lg active:scale-95 transition-all cursor-pointer"
-                        >
-                          <div className="flex items-center space-x-2 truncate">
-                            <i className="fas fa-desktop text-sky-400 text-xs"></i>
-                            <span className="truncate" style={{ color: panel.textColor || '#e0f2fe' }}>{panel.panelName || 'JUMP SCREEN'}</span>
+                      (() => {
+                        const jumpFontSize = panel.fontSize ? Number(panel.fontSize) : 13;
+                        const iconFontSize = Math.max(10, Math.round(jumpFontSize * 0.85));
+                        const alignJustify = panel.textAlign === 'center' ? 'justify-center' : panel.textAlign === 'right' ? 'justify-end' : 'justify-between';
+                        return (
+                          <div className="w-full h-full p-1.5 flex items-center justify-center">
+                            <button
+                              type="button"
+                              disabled={effectiveEditMode}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handlePanelInteract(panel);
+                              }}
+                              style={{
+                                backgroundColor: panel.bgColor,
+                                borderColor: panel.borderColor,
+                                color: panel.textColor || '#e0f2fe',
+                                fontSize: `${jumpFontSize}px`
+                              }}
+                              className={`w-full h-full rounded-xl bg-gradient-to-r from-sky-900/80 to-indigo-900/80 hover:from-sky-700 hover:to-indigo-700 border-2 border-sky-400 text-sky-100 font-extrabold uppercase tracking-wider px-3 py-1 flex items-center ${alignJustify} shadow-lg active:scale-95 transition-all cursor-pointer`}
+                            >
+                              <div className="flex items-center space-x-2 truncate">
+                                <i 
+                                  className="fas fa-desktop text-sky-400 shrink-0"
+                                  style={{ fontSize: `${iconFontSize}px`, color: panel.textColor ? `${panel.textColor}dd` : undefined }}
+                                ></i>
+                                <span className="truncate" style={{ color: panel.textColor || '#e0f2fe' }}>
+                                  {panel.panelName || 'JUMP SCREEN'}
+                                </span>
+                              </div>
+                              <i 
+                                className="fas fa-arrow-right text-sky-400 shrink-0 ml-1.5"
+                                style={{ fontSize: `${iconFontSize}px`, color: panel.textColor ? `${panel.textColor}dd` : undefined }}
+                              ></i>
+                            </button>
                           </div>
-                          <i className="fas fa-arrow-right text-sky-400 text-xs shrink-0 ml-1"></i>
-                        </button>
-                      </div>
+                        );
+                      })()
                     ) : panel.type === PanelType.SLIDER ? (
                       /* Interactive Range Slider Element */
                       <div className="w-full h-full p-2 flex flex-col justify-between overflow-hidden">

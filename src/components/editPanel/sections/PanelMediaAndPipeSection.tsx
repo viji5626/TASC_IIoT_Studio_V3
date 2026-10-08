@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Dashboard } from '../../../types';
 
 interface PanelMediaAndPipeSectionProps {
   formData: any;
@@ -9,6 +10,8 @@ interface PanelMediaAndPipeSectionProps {
   isImage: boolean;
   isClock: boolean;
   isPipe: boolean;
+  dashboards?: Dashboard[];
+  connections?: any[];
 }
 
 export const PanelMediaAndPipeSection: React.FC<PanelMediaAndPipeSectionProps> = ({
@@ -19,8 +22,12 @@ export const PanelMediaAndPipeSection: React.FC<PanelMediaAndPipeSectionProps> =
   isScreenJump,
   isImage,
   isClock,
-  isPipe
+  isPipe,
+  dashboards = [],
+  connections = []
 }) => {
+  const [showManualInput, setShowManualInput] = useState(false);
+
   return (
     <>
       {/* Static Text Config */}
@@ -185,24 +192,204 @@ export const PanelMediaAndPipeSection: React.FC<PanelMediaAndPipeSectionProps> =
         </div>
       )}
 
-      {/* Screen Jump Config */}
-      {isScreenJump && (
-        <div className="space-y-4 pt-2 border-t border-[#262626]">
-          <div className="relative border-b border-gray-700 py-2">
-            <label className="text-xs text-amber-500 absolute -top-2 font-bold">Target Screen ID / Dashboard ID</label>
-            <input 
-              name="targetScreenId" 
-              value={formData.targetScreenId ?? ''} 
-              onChange={handleChange} 
-              className="w-full bg-transparent outline-none text-sky-400 py-2 font-mono text-sm" 
-              placeholder="e.g. dash_fan_timer or dash_home" 
-            />
+      {/* Screen Jump Config (Intelligent Screen Dropdown & UX) */}
+      {isScreenJump && (() => {
+        const availableDashboards = dashboards || [];
+        const currentTarget = availableDashboards.find(d => d.dashboardId === formData.targetScreenId);
+        const isCustomTarget = Boolean(formData.targetScreenId && !currentTarget);
+        const hasMultipleConnections = Boolean(connections && connections.length > 1);
+
+        const connMap = new Map<string, string>();
+        if (connections) {
+          connections.forEach(c => connMap.set(c.connectionId, c.connectionName || c.connectionId));
+        }
+
+        const uniqueConnIds = Array.from(new Set(availableDashboards.map(d => d.connectionId || 'default')));
+
+        return (
+          <div className="space-y-4 pt-3 border-t border-sky-500/30">
+            {/* Header with counter badge */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <i className="fas fa-desktop text-amber-400 text-sm"></i>
+                <span className="text-xs font-bold text-amber-400 uppercase tracking-wide">
+                  Target Destination Screen
+                </span>
+              </div>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-sky-500/15 text-sky-300 border border-sky-500/30 font-bold flex items-center space-x-1">
+                <i className="fas fa-layer-group text-[9px] text-sky-400"></i>
+                <span>{availableDashboards.length} Generated {availableDashboards.length === 1 ? 'Screen' : 'Screens'}</span>
+              </span>
+            </div>
+
+            {/* Screen Dropdown Selector */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] text-slate-300 font-semibold block">
+                Select Screen from Dropdown:
+              </label>
+              <div className="relative">
+                <select
+                  value={formData.targetScreenId ?? ''}
+                  onChange={(e) => {
+                    const selId = e.target.value;
+                    setFormData((prev: any) => ({
+                      ...prev,
+                      targetScreenId: selId
+                    }));
+                  }}
+                  className="w-full bg-[#0b1325] text-white border-2 border-sky-500/40 hover:border-sky-400 focus:border-amber-400 rounded-xl p-3 pr-10 text-xs sm:text-sm font-semibold outline-none transition-all cursor-pointer shadow-lg appearance-none"
+                >
+                  <option value="" className="bg-slate-900 text-slate-400">
+                    -- Choose Target Screen ({availableDashboards.length} Available) --
+                  </option>
+
+                  {hasMultipleConnections ? (
+                    uniqueConnIds.map(connId => {
+                      const connName = connMap.get(connId) || (connId === 'default' ? 'Default Project' : connId);
+                      const groupDashes = availableDashboards.filter(d => (d.connectionId || 'default') === connId);
+                      return (
+                        <optgroup 
+                          key={connId} 
+                          label={`📁 Station: ${connName}`} 
+                          className="bg-slate-900 text-sky-400 font-bold"
+                        >
+                          {groupDashes.map(dash => (
+                            <option 
+                              key={dash.dashboardId} 
+                              value={dash.dashboardId} 
+                              className="bg-slate-900 text-slate-100 font-medium py-1"
+                            >
+                              📺 {dash.dashboardName || 'Untitled'} {dash.isHome ? '★ (Home)' : ''} {dash.dashboardId === formData.dashboardId ? '• [Current Screen]' : ''} — [{dash.dashboardId}]
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })
+                  ) : (
+                    availableDashboards.map(dash => (
+                      <option 
+                        key={dash.dashboardId} 
+                        value={dash.dashboardId} 
+                        className="bg-slate-900 text-slate-100 font-medium py-1"
+                      >
+                        📺 {dash.dashboardName || 'Untitled'} {dash.isHome ? '★ (Home)' : ''} {dash.dashboardId === formData.dashboardId ? '• [Current Screen]' : ''} — [{dash.dashboardId}]
+                      </option>
+                    ))
+                  )}
+
+                  {isCustomTarget && (
+                    <option value={formData.targetScreenId} className="bg-slate-900 text-amber-300 font-mono">
+                      ⚙️ Custom ID: {formData.targetScreenId}
+                    </option>
+                  )}
+                </select>
+                <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-sky-400">
+                  <i className="fas fa-chevron-down text-xs"></i>
+                </div>
+              </div>
+            </div>
+
+            {/* Active Destination Preview Card */}
+            {currentTarget && (
+              <div className="p-3 bg-gradient-to-r from-slate-900 via-sky-950/40 to-slate-900 border border-sky-500/30 rounded-xl flex items-center justify-between shadow-md">
+                <div className="flex items-center space-x-3 overflow-hidden">
+                  <div className="w-9 h-9 rounded-lg bg-sky-500/20 border border-sky-400/40 flex items-center justify-center text-sky-300 shrink-0 shadow-inner">
+                    <i className={`fas ${currentTarget.icon ? `fa-${currentTarget.icon.replace(/^fa-/, '')}` : 'fa-desktop'} text-sm`}></i>
+                  </div>
+                  <div className="truncate">
+                    <div className="flex items-center space-x-1.5 flex-wrap gap-y-0.5">
+                      <span className="text-xs font-bold text-sky-100 truncate">
+                        {currentTarget.dashboardName || 'Untitled Screen'}
+                      </span>
+                      {currentTarget.isHome && (
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                          ★ HOME
+                        </span>
+                      )}
+                      {currentTarget.dashboardId === formData.dashboardId && (
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+                          Current Screen
+                        </span>
+                      )}
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center space-x-1">
+                        <i className="fas fa-check-circle text-[8px]"></i>
+                        <span>Linked</span>
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-mono block truncate">
+                      ID: {currentTarget.dashboardId}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2 shrink-0 ml-2">
+                  {currentTarget.dashboardName && formData.panelName !== currentTarget.dashboardName && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData((prev: any) => ({ ...prev, panelName: currentTarget.dashboardName }))}
+                      className="px-2.5 py-1.5 bg-sky-500/20 hover:bg-sky-500/35 text-sky-300 border border-sky-500/40 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center space-x-1"
+                      title="Sync button label to target screen name"
+                    >
+                      <i className="fas fa-magic text-[9px]"></i>
+                      <span className="hidden sm:inline">Use As Name</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setFormData((prev: any) => ({ ...prev, targetScreenId: '' }))}
+                    className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                    title="Clear Screen Target"
+                  >
+                    <i className="fas fa-times text-xs"></i>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Advanced Manual Target ID Toggle */}
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setShowManualInput(!showManualInput)}
+                  className="text-[11px] text-slate-400 hover:text-amber-400 flex items-center space-x-1.5 transition-colors cursor-pointer select-none"
+                >
+                  <i className={`fas fa-chevron-${showManualInput ? 'down' : 'right'} text-[9px]`}></i>
+                  <span>Advanced: Manual Custom Screen ID</span>
+                </button>
+                {formData.targetScreenId && (
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    Target: <span className="text-sky-400 font-bold">{formData.targetScreenId}</span>
+                  </span>
+                )}
+              </div>
+
+              {showManualInput && (
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] text-amber-500 font-bold uppercase tracking-wider">
+                      Target Screen ID / Dashboard ID
+                    </label>
+                    <span className="text-[9px] text-slate-500 font-mono">Direct ID binding</span>
+                  </div>
+                  <input
+                    name="targetScreenId"
+                    value={formData.targetScreenId ?? ''}
+                    onChange={handleChange}
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-lg px-3 py-2 text-sky-400 font-mono text-xs outline-none transition-colors"
+                    placeholder="e.g. dash_fan_timer or dash_home"
+                  />
+                </div>
+              )}
+            </div>
+
+            <p className="text-[11px] text-slate-400 flex items-center space-x-1.5">
+              <i className="fas fa-arrow-turn-down text-sky-400 text-xs"></i>
+              <span>Clicking this button on the HMI canvas will immediately switch the view to the selected screen in runtime.</span>
+            </p>
           </div>
-          <p className="text-[11px] text-slate-400">
-            Clicking this button on the HMI screen will automatically jump to the target screen ID.
-          </p>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Media Image Asset Config */}
       {isImage && (

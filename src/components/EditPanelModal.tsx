@@ -335,6 +335,8 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({
                 isImage={isImage}
                 isClock={isClock}
                 isPipe={isPipe}
+                dashboards={appState?.dashboards || store?.appState?.dashboards || []}
+                connections={appState?.connections || store?.appState?.connections || []}
               />
 
               {/* 3. Controls (Buttons, Switches, LEDs) */}

@@ -331,6 +331,64 @@ export const PanelAppearanceSection: React.FC<PanelAppearanceSectionProps> = ({
         </div>
       )}
 
+      {/* ─── SCREEN JUMP BUTTON LABEL FONT SIZE ─── */}
+      {isScreenJump && (
+        <div className="bg-[#0c1829] rounded-xl border border-sky-500/40 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <i className="fas fa-font text-sky-400 text-xs"></i>
+              <span className="text-xs text-sky-400 font-bold uppercase tracking-wider">
+                Button Label & Text Font Size
+              </span>
+            </div>
+            <span className="text-xs font-mono text-sky-300 font-bold bg-sky-950/80 px-2 py-0.5 rounded border border-sky-800">
+              {formData.fontSize ?? 14} px
+            </span>
+          </div>
+
+          <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+              <button
+                type="button"
+                onClick={() => setFormData((prev: any) => ({ ...prev, fontSize: Math.max(10, (parseInt(String(prev.fontSize ?? 14)) || 14) - 2) }))}
+                className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-white text-xs cursor-pointer transition-colors"
+                title="Decrease Font Size (-2px)"
+              >
+                <i className="fas fa-minus text-xs"></i>
+              </button>
+              <span className="w-10 text-center font-mono text-xs font-bold text-white">
+                {formData.fontSize ?? 14}
+              </span>
+              <button
+                type="button"
+                onClick={() => setFormData((prev: any) => ({ ...prev, fontSize: Math.min(36, (parseInt(String(prev.fontSize ?? 14)) || 14) + 2) }))}
+                className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-white text-xs cursor-pointer transition-colors"
+                title="Increase Font Size (+2px)"
+              >
+                <i className="fas fa-plus text-xs"></i>
+              </button>
+            </div>
+
+            <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+              {[11, 12, 14, 16, 18, 20, 24].map(size => (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => setFormData((prev: any) => ({ ...prev, fontSize: size }))}
+                  className={`px-2 py-1 rounded text-xs font-mono transition-all cursor-pointer ${
+                    (parseInt(String(formData.fontSize ?? 14)) || 14) === size
+                      ? 'bg-sky-500/30 text-sky-200 border border-sky-500/80 font-bold shadow'
+                      : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-slate-200 hover:border-slate-700'
+                  }`}
+                >
+                  {size}px
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── PROCESS VALUE FONT SIZE & TYPOGRAPHY (RETRACTABLE, FOR GAUGES & OTHER ELEMENTS) ─── */}
       {!isStaticText && !isClock && !isPipe && !isShape && !isScreenJump && !isActuallyLED && !isActuallySwitch && (
         <div className="bg-[#0d1520] rounded-xl border border-sky-500/40 shadow-inner overflow-hidden transition-all">
@@ -405,8 +463,8 @@ export const PanelAppearanceSection: React.FC<PanelAppearanceSectionProps> = ({
         </div>
       )}
 
-      {/* ─── CARD SIZE / LAYOUT DIMENSIONS (RETRACTABLE, HIDDEN FOR LED & SWITCH) ─── */}
-      {!isActuallyLED && !isActuallySwitch && (
+      {/* ─── CARD SIZE / LAYOUT DIMENSIONS (RETRACTABLE, HIDDEN FOR LED, SWITCH & SCREEN JUMP) ─── */}
+      {!isActuallyLED && !isActuallySwitch && !isScreenJump && (
         <div className="bg-[#141414] rounded-xl border border-gray-800 overflow-hidden transition-all">
           <div
             onClick={() => setIsDimensionsExpanded(!isDimensionsExpanded)}
