@@ -125,6 +125,8 @@ export interface Panel {
   rotateOff?: boolean;
   animSpeedOff?: 'slow' | 'medium' | 'fast';
   fontSize?: number | string;
+  iconSize?: number;
+  switchSize?: number | 'sm' | 'md' | 'lg' | 'xl';
   digitalDisplay?: boolean;
   showReceivedTimeStamp?: boolean;
   showSentTimeStamp?: boolean;

@@ -4346,27 +4346,89 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       })()
                     ) : panel.type === PanelType.SWITCH ? (
                       /* Industrial Toggle Switch / Rocker Button */
-                      <div className="w-full h-full p-1.5 flex items-center justify-between px-3">
-                        <div className="flex flex-col truncate">
-                          <span className="text-[10px] font-extrabold truncate uppercase tracking-wider" style={{ color: panel.textColor || '#cbd5e1' }}>
-                            {panel.panelName}
-                          </span>
-                          <span className={`text-[9px] font-mono font-bold ${String(liveValue) === String(panel.payloadOn ?? '1') ? 'text-emerald-400' : 'text-slate-400'
-                            }`}>
-                            {String(liveValue) === String(panel.payloadOn ?? '1') ? (panel.payloadOnText || 'STATE: ON') : (panel.payloadOffText || 'STATE: OFF')}
-                          </span>
-                        </div>
+                      (() => {
+                        const labelFontSize = panel.fontSize ? Number(panel.fontSize) : 12;
+                        const statusFontSize = Math.max(9, Math.round(labelFontSize * 0.8));
+                        const swWidth = typeof panel.switchSize === 'number'
+                          ? panel.switchSize
+                          : panel.switchSize === 'sm'
+                          ? 36
+                          : panel.switchSize === 'lg'
+                          ? 64
+                          : panel.switchSize === 'xl'
+                          ? 80
+                          : 48;
+                        const swHeight = Math.max(18, Math.round(swWidth * 0.52));
+                        const knobSize = Math.max(12, swHeight - 6);
+                        const align = panel.textAlign || 'left';
+                        const isOn = String(liveValue) === String(panel.payloadOn ?? '1');
 
-                        <div className={`w-12 h-6 rounded-full p-0.5 border-2 transition-colors cursor-pointer flex items-center ${String(liveValue) === String(panel.payloadOn ?? '1')
-                          ? 'bg-emerald-500/20 border-emerald-500 justify-end'
-                          : 'bg-slate-900 border-slate-700 justify-start'
-                          }`}>
-                          <div className={`w-4 h-4 rounded-full shadow-md transition-all ${String(liveValue) === String(panel.payloadOn ?? '1')
-                            ? 'bg-emerald-400 shadow-[0_0_10px_#10b981]'
-                            : 'bg-slate-500'
-                            }`}></div>
-                        </div>
-                      </div>
+                        return (
+                          <div
+                            className={`w-full h-full p-2 flex items-center px-3 ${
+                              align === 'center'
+                                ? 'justify-center space-x-3 text-center'
+                                : align === 'right'
+                                ? 'justify-between flex-row-reverse space-x-reverse space-x-2 text-right'
+                                : 'justify-between space-x-2 text-left'
+                            }`}
+                          >
+                            <div className="flex flex-col min-w-0 truncate" style={{ textAlign: align }}>
+                              <span
+                                className="font-extrabold truncate uppercase tracking-wider leading-tight"
+                                style={{
+                                  fontSize: `${labelFontSize}px`,
+                                  color: panel.textColor || '#cbd5e1'
+                                }}
+                              >
+                                {panel.panelName}
+                              </span>
+                              <span
+                                className={`font-mono font-bold leading-tight mt-0.5 truncate ${
+                                  isOn ? 'text-emerald-400' : 'text-slate-400'
+                                }`}
+                                style={{ fontSize: `${statusFontSize}px` }}
+                              >
+                                {isOn ? (panel.payloadOnText || 'STATE: ON') : (panel.payloadOffText || 'STATE: OFF')}
+                              </span>
+                            </div>
+
+                            <div
+                              onClick={(e) => {
+                                if (effectiveEditMode) return;
+                                e.stopPropagation();
+                                const targetVal = isOn ? (panel.payloadOff ?? '0') : (panel.payloadOn ?? '1');
+                                if (onPublish) {
+                                  onPublish(panel.publishTopic || panel.topic, formatPublishPayload(targetVal, panel));
+                                }
+                              }}
+                              className={`border-2 transition-all cursor-pointer flex items-center shrink-0 ${
+                                isOn
+                                  ? 'bg-emerald-500/20 border-emerald-500 justify-end'
+                                  : 'bg-slate-900 border-slate-700 justify-start'
+                              }`}
+                              style={{
+                                width: `${swWidth}px`,
+                                height: `${swHeight}px`,
+                                borderRadius: `${swHeight}px`,
+                                padding: '2px'
+                              }}
+                            >
+                              <div
+                                className={`rounded-full shadow-md transition-all ${
+                                  isOn
+                                    ? 'bg-emerald-400 shadow-[0_0_10px_#10b981]'
+                                    : 'bg-slate-500'
+                                }`}
+                                style={{
+                                  width: `${knobSize}px`,
+                                  height: `${knobSize}px`
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })()
                     ) : panel.type === PanelType.SCREEN_JUMP ? (
                       /* Screen Navigation Button */
                       <div className="w-full h-full p-1.5 flex items-center justify-center">
@@ -4679,17 +4741,45 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         const isFlash = isOn ? !!panel.flashOn : !!panel.flashOff;
                         const animSpeed = isOn ? (panel.animSpeedOn || 'medium') : (panel.animSpeedOff || 'medium');
 
+                        const labelFontSize = panel.fontSize ? Number(panel.fontSize) : 12;
+                        const statusFontSize = Math.max(9, Math.round(labelFontSize * 0.8));
+                        const iconPx = panel.iconSize ? Number(panel.iconSize) : 24;
+                        const boxSize = Math.max(iconPx + 10, 32);
+                        const align = panel.textAlign || 'left';
+
                         return (
-                          <div className="w-full h-full p-2 flex items-center justify-between space-x-2">
-                            <div className="flex flex-col truncate">
-                              <span className="text-[10px] font-bold truncate" style={{ color: panel.textColor || '#cbd5e1' }}>{panel.panelName}</span>
-                              <span className="text-[9px] font-mono text-slate-400">
+                          <div
+                            className={`w-full h-full p-2 flex items-center ${
+                              align === 'center'
+                                ? 'justify-center space-x-3 text-center'
+                                : align === 'right'
+                                ? 'justify-between flex-row-reverse space-x-reverse space-x-2 text-right'
+                                : 'justify-between space-x-2 text-left'
+                            }`}
+                          >
+                            <div className="flex flex-col min-w-0 truncate" style={{ textAlign: align }}>
+                              <span
+                                className="font-bold truncate leading-tight"
+                                style={{
+                                  fontSize: `${labelFontSize}px`,
+                                  color: panel.textColor || '#cbd5e1'
+                                }}
+                              >
+                                {panel.panelName}
+                              </span>
+                              <span
+                                className="font-mono text-slate-400 leading-tight mt-0.5 truncate"
+                                style={{ fontSize: `${statusFontSize}px` }}
+                              >
                                 {isOn ? (panel.payloadOnText || 'RUNNING') : (panel.payloadOffText || 'STOPPED')}
                               </span>
                             </div>
                             <div
-                              className="w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0 border"
+                              className="rounded-xl flex items-center justify-center shrink-0 border transition-all"
                               style={{
+                                width: `${boxSize}px`,
+                                height: `${boxSize}px`,
+                                fontSize: `${iconPx}px`,
                                 backgroundColor: isOn
                                   ? `${activeColor}25`
                                   : '#1e293b',

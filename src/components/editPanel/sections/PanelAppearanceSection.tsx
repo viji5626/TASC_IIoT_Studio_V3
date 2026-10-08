@@ -14,6 +14,8 @@ interface PanelAppearanceSectionProps {
   isPipe: boolean;
   isShape: boolean;
   isScreenJump: boolean;
+  isLED?: boolean;
+  isSwitch?: boolean;
   dataSourceMode: 'mqtt' | 'driver';
 }
 
@@ -29,8 +31,13 @@ export const PanelAppearanceSection: React.FC<PanelAppearanceSectionProps> = ({
   isPipe,
   isShape,
   isScreenJump,
+  isLED,
+  isSwitch,
   dataSourceMode
 }) => {
+  const isActuallyLED = isLED ?? (formData.type === PanelType.LED);
+  const isActuallySwitch = isSwitch ?? (formData.type === PanelType.SWITCH);
+
   // Retractable sections (all retracted by default)
   const [isTypographyExpanded, setIsTypographyExpanded] = useState<boolean>(false);
   const [isDimensionsExpanded, setIsDimensionsExpanded] = useState<boolean>(false);
@@ -63,8 +70,269 @@ export const PanelAppearanceSection: React.FC<PanelAppearanceSectionProps> = ({
         </div>
       </div>
 
-      {/* ─── PROCESS VALUE FONT SIZE & TYPOGRAPHY (RETRACTABLE) ─── */}
-      {!isStaticText && !isClock && !isPipe && !isShape && !isScreenJump && (
+      {/* ─── LED INDICATOR: DEDICATED INDICATION ICON SIZE ─── */}
+      {isActuallyLED && (
+        <div className="bg-[#0f172a] p-3.5 rounded-xl border border-emerald-500/30 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-emerald-400 font-bold uppercase tracking-wider flex items-center space-x-2">
+              <i className="fas fa-icons text-emerald-400"></i>
+              <span>Indication Icon Size</span>
+            </span>
+            <span className="text-xs font-mono font-bold text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+              {formData.iconSize ?? 24} px
+            </span>
+          </div>
+
+          <div className="flex items-center space-x-3 pt-1">
+            <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800 shrink-0">
+              <button
+                type="button"
+                onClick={() => setFormData((prev: any) => ({ ...prev, iconSize: Math.max(12, (parseInt(String(prev.iconSize ?? 24)) || 24) - 2) }))}
+                className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-emerald-400 font-black text-base flex items-center justify-center transition-colors cursor-pointer"
+                title="Decrease Icon Size (-2px)"
+              >
+                <i className="fas fa-minus text-xs"></i>
+              </button>
+
+              <input
+                type="number"
+                min="12"
+                max="128"
+                name="iconSize"
+                value={formData.iconSize ?? 24}
+                onChange={(e) => setFormData((prev: any) => ({ ...prev, iconSize: Math.max(12, Math.min(128, parseInt(e.target.value) || 24)) }))}
+                className="w-14 bg-transparent text-center text-white font-mono font-bold text-xs outline-none"
+              />
+
+              <button
+                type="button"
+                onClick={() => setFormData((prev: any) => ({ ...prev, iconSize: Math.min(128, (parseInt(String(prev.iconSize ?? 24)) || 24) + 2) }))}
+                className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-emerald-400 font-black text-base flex items-center justify-center transition-colors cursor-pointer"
+                title="Increase Icon Size (+2px)"
+              >
+                <i className="fas fa-plus text-xs"></i>
+              </button>
+            </div>
+
+            <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+              {[16, 20, 24, 28, 32, 40, 48, 64].map(size => (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => setFormData((prev: any) => ({ ...prev, iconSize: size }))}
+                  className={`px-2 py-1 rounded text-xs font-mono transition-all cursor-pointer ${
+                    (parseInt(String(formData.iconSize ?? 24)) || 24) === size
+                      ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-500/80 font-bold shadow'
+                      : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-slate-200 hover:border-slate-700'
+                  }`}
+                >
+                  {size}px
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── LED INDICATOR: DEDICATED TEXT & LABEL FONT SIZE ─── */}
+      {isActuallyLED && (
+        <div className="bg-[#0b1329] p-3.5 rounded-xl border border-sky-500/30 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-sky-400 font-bold uppercase tracking-wider flex items-center space-x-2">
+              <i className="fas fa-font text-sky-400"></i>
+              <span>Indicator Label & Text Font Size</span>
+            </span>
+            <span className="text-xs font-mono font-bold text-sky-300 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/30">
+              {formData.fontSize ?? 12} px
+            </span>
+          </div>
+
+          <div className="flex items-center space-x-3 pt-1">
+            <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800 shrink-0">
+              <button
+                type="button"
+                onClick={() => setFormData((prev: any) => ({ ...prev, fontSize: Math.max(8, (parseInt(String(prev.fontSize ?? 12)) || 12) - 2) }))}
+                className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-sky-400 font-black text-base flex items-center justify-center transition-colors cursor-pointer"
+                title="Decrease Font Size (-2px)"
+              >
+                <i className="fas fa-minus text-xs"></i>
+              </button>
+
+              <input
+                type="number"
+                min="8"
+                max="72"
+                name="fontSize"
+                value={formData.fontSize ?? 12}
+                onChange={(e) => setFormData((prev: any) => ({ ...prev, fontSize: Math.max(8, Math.min(72, parseInt(e.target.value) || 12)) }))}
+                className="w-14 bg-transparent text-center text-white font-mono font-bold text-xs outline-none"
+              />
+
+              <button
+                type="button"
+                onClick={() => setFormData((prev: any) => ({ ...prev, fontSize: Math.min(72, (parseInt(String(prev.fontSize ?? 12)) || 12) + 2) }))}
+                className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-sky-400 font-black text-base flex items-center justify-center transition-colors cursor-pointer"
+                title="Increase Font Size (+2px)"
+              >
+                <i className="fas fa-plus text-xs"></i>
+              </button>
+            </div>
+
+            <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+              {[10, 12, 14, 16, 18, 20, 24, 28].map(size => (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => setFormData((prev: any) => ({ ...prev, fontSize: size }))}
+                  className={`px-2 py-1 rounded text-xs font-mono transition-all cursor-pointer ${
+                    (parseInt(String(formData.fontSize ?? 12)) || 12) === size
+                      ? 'bg-sky-500/30 text-sky-200 border border-sky-500/80 font-bold shadow'
+                      : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-slate-200 hover:border-slate-700'
+                  }`}
+                >
+                  {size}px
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── TOGGLE SWITCH: DEDICATED TOGGLE SWITCH SIZE ─── */}
+      {isActuallySwitch && (
+        <div className="bg-[#0f172a] p-3.5 rounded-xl border border-emerald-500/30 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-emerald-400 font-bold uppercase tracking-wider flex items-center space-x-2">
+              <i className="fas fa-toggle-on text-emerald-400"></i>
+              <span>Toggle Switch Size</span>
+            </span>
+            <span className="text-xs font-mono font-bold text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+              {formData.switchSize ?? 48} px
+            </span>
+          </div>
+
+          <div className="flex items-center space-x-3 pt-1">
+            <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800 shrink-0">
+              <button
+                type="button"
+                onClick={() => setFormData((prev: any) => ({ ...prev, switchSize: Math.max(28, (parseInt(String(prev.switchSize ?? 48)) || 48) - 4) }))}
+                className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-emerald-400 font-black text-base flex items-center justify-center transition-colors cursor-pointer"
+                title="Decrease Switch Size (-4px)"
+              >
+                <i className="fas fa-minus text-xs"></i>
+              </button>
+
+              <input
+                type="number"
+                min="28"
+                max="120"
+                name="switchSize"
+                value={formData.switchSize ?? 48}
+                onChange={(e) => setFormData((prev: any) => ({ ...prev, switchSize: Math.max(28, Math.min(120, parseInt(e.target.value) || 48)) }))}
+                className="w-14 bg-transparent text-center text-white font-mono font-bold text-xs outline-none"
+              />
+
+              <button
+                type="button"
+                onClick={() => setFormData((prev: any) => ({ ...prev, switchSize: Math.min(120, (parseInt(String(prev.switchSize ?? 48)) || 48) + 4) }))}
+                className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-emerald-400 font-black text-base flex items-center justify-center transition-colors cursor-pointer"
+                title="Increase Switch Size (+4px)"
+              >
+                <i className="fas fa-plus text-xs"></i>
+              </button>
+            </div>
+
+            <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+              {[
+                { label: 'Small (36px)', val: 36 },
+                { label: 'Medium (48px)', val: 48 },
+                { label: 'Large (64px)', val: 64 },
+                { label: 'X-Large (80px)', val: 80 }
+              ].map(preset => (
+                <button
+                  key={preset.val}
+                  type="button"
+                  onClick={() => setFormData((prev: any) => ({ ...prev, switchSize: preset.val }))}
+                  className={`px-2 py-1 rounded text-xs font-mono transition-all cursor-pointer ${
+                    (parseInt(String(formData.switchSize ?? 48)) || 48) === preset.val
+                      ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-500/80 font-bold shadow'
+                      : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-slate-200 hover:border-slate-700'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── TOGGLE SWITCH: DEDICATED TEXT & LABEL FONT SIZE ─── */}
+      {isActuallySwitch && (
+        <div className="bg-[#0b1329] p-3.5 rounded-xl border border-sky-500/30 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-sky-400 font-bold uppercase tracking-wider flex items-center space-x-2">
+              <i className="fas fa-font text-sky-400"></i>
+              <span>Switch Label & Text Font Size</span>
+            </span>
+            <span className="text-xs font-mono font-bold text-sky-300 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/30">
+              {formData.fontSize ?? 12} px
+            </span>
+          </div>
+
+          <div className="flex items-center space-x-3 pt-1">
+            <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800 shrink-0">
+              <button
+                type="button"
+                onClick={() => setFormData((prev: any) => ({ ...prev, fontSize: Math.max(8, (parseInt(String(prev.fontSize ?? 12)) || 12) - 2) }))}
+                className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-sky-400 font-black text-base flex items-center justify-center transition-colors cursor-pointer"
+                title="Decrease Font Size (-2px)"
+              >
+                <i className="fas fa-minus text-xs"></i>
+              </button>
+
+              <input
+                type="number"
+                min="8"
+                max="72"
+                name="fontSize"
+                value={formData.fontSize ?? 12}
+                onChange={(e) => setFormData((prev: any) => ({ ...prev, fontSize: Math.max(8, Math.min(72, parseInt(e.target.value) || 12)) }))}
+                className="w-14 bg-transparent text-center text-white font-mono font-bold text-xs outline-none"
+              />
+
+              <button
+                type="button"
+                onClick={() => setFormData((prev: any) => ({ ...prev, fontSize: Math.min(72, (parseInt(String(prev.fontSize ?? 12)) || 12) + 2) }))}
+                className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-sky-400 font-black text-base flex items-center justify-center transition-colors cursor-pointer"
+                title="Increase Font Size (+2px)"
+              >
+                <i className="fas fa-plus text-xs"></i>
+              </button>
+            </div>
+
+            <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+              {[10, 12, 14, 16, 18, 20, 24, 28].map(size => (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => setFormData((prev: any) => ({ ...prev, fontSize: size }))}
+                  className={`px-2 py-1 rounded text-xs font-mono transition-all cursor-pointer ${
+                    (parseInt(String(formData.fontSize ?? 12)) || 12) === size
+                      ? 'bg-sky-500/30 text-sky-200 border border-sky-500/80 font-bold shadow'
+                      : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-slate-200 hover:border-slate-700'
+                  }`}
+                >
+                  {size}px
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── PROCESS VALUE FONT SIZE & TYPOGRAPHY (RETRACTABLE, FOR GAUGES & OTHER ELEMENTS) ─── */}
+      {!isStaticText && !isClock && !isPipe && !isShape && !isScreenJump && !isActuallyLED && !isActuallySwitch && (
         <div className="bg-[#0d1520] rounded-xl border border-sky-500/40 shadow-inner overflow-hidden transition-all">
           <div
             onClick={() => setIsTypographyExpanded(!isTypographyExpanded)}
@@ -137,57 +405,59 @@ export const PanelAppearanceSection: React.FC<PanelAppearanceSectionProps> = ({
         </div>
       )}
 
-      {/* ─── CARD SIZE / LAYOUT DIMENSIONS (RETRACTABLE) ─── */}
-      <div className="bg-[#141414] rounded-xl border border-gray-800 overflow-hidden transition-all">
-        <div
-          onClick={() => setIsDimensionsExpanded(!isDimensionsExpanded)}
-          className="p-3.5 flex items-center justify-between cursor-pointer select-none hover:bg-white/5 transition-colors"
-        >
-          <div className="flex items-center space-x-2">
-            <i className={`fas fa-chevron-${isDimensionsExpanded ? 'down' : 'right'} text-amber-400 text-xs transition-transform duration-200`}></i>
-            <i className="fas fa-expand text-xs text-amber-500"></i>
-            <span className="text-xs text-amber-500 font-semibold">Element Dimensions & Size</span>
+      {/* ─── CARD SIZE / LAYOUT DIMENSIONS (RETRACTABLE, HIDDEN FOR LED & SWITCH) ─── */}
+      {!isActuallyLED && !isActuallySwitch && (
+        <div className="bg-[#141414] rounded-xl border border-gray-800 overflow-hidden transition-all">
+          <div
+            onClick={() => setIsDimensionsExpanded(!isDimensionsExpanded)}
+            className="p-3.5 flex items-center justify-between cursor-pointer select-none hover:bg-white/5 transition-colors"
+          >
+            <div className="flex items-center space-x-2">
+              <i className={`fas fa-chevron-${isDimensionsExpanded ? 'down' : 'right'} text-amber-400 text-xs transition-transform duration-200`}></i>
+              <i className="fas fa-expand text-xs text-amber-500"></i>
+              <span className="text-xs text-amber-500 font-semibold">Element Dimensions & Size</span>
+            </div>
+            <span className="text-[10px] text-gray-400 font-mono">
+              {formData.colSpan ?? 1} Col × {formData.rowSpan ?? 1} Row
+            </span>
           </div>
-          <span className="text-[10px] text-gray-400 font-mono">
-            {formData.colSpan ?? 1} Col × {formData.rowSpan ?? 1} Row
-          </span>
-        </div>
 
-        {isDimensionsExpanded && (
-          <div className="p-4 pt-2 space-y-3 border-t border-gray-800/80">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <span className="text-[11px] text-gray-400 block mb-1">Width Span</span>
-                <select 
-                  name="colSpan" 
-                  value={formData.colSpan ?? 1} 
-                  onChange={(e) => setFormData((prev: any) => ({ ...prev, colSpan: Number(e.target.value) }))}
-                  className="w-full bg-[#1a1a1a] text-white border border-gray-700 outline-none rounded-lg p-2 text-xs"
-                >
-                  <option value="1">1 Column (Standard)</option>
-                  <option value="2">2 Columns (Wide)</option>
-                  <option value="3">3 Columns (Extra Wide)</option>
-                  <option value="4">4 Columns (Full Row)</option>
-                </select>
-              </div>
-              <div>
-                <span className="text-[11px] text-gray-400 block mb-1">Height Span</span>
-                <select 
-                  name="rowSpan" 
-                  value={formData.rowSpan ?? 1} 
-                  onChange={(e) => setFormData((prev: any) => ({ ...prev, rowSpan: Number(e.target.value) }))}
-                  className="w-full bg-[#1a1a1a] text-white border border-gray-700 outline-none rounded-lg p-2 text-xs"
-                >
-                  <option value="0">Slim / Sleek (Height 112px)</option>
-                  <option value="1">Standard (Height 176px)</option>
-                  <option value="2">Tall (Height 288px)</option>
-                  <option value="3">Large (Height 384px)</option>
-                </select>
+          {isDimensionsExpanded && (
+            <div className="p-4 pt-2 space-y-3 border-t border-gray-800/80">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="text-[11px] text-gray-400 block mb-1">Width Span</span>
+                  <select 
+                    name="colSpan" 
+                    value={formData.colSpan ?? 1} 
+                    onChange={(e) => setFormData((prev: any) => ({ ...prev, colSpan: Number(e.target.value) }))}
+                    className="w-full bg-[#1a1a1a] text-white border border-gray-700 outline-none rounded-lg p-2 text-xs"
+                  >
+                    <option value="1">1 Column (Standard)</option>
+                    <option value="2">2 Columns (Wide)</option>
+                    <option value="3">3 Columns (Extra Wide)</option>
+                    <option value="4">4 Columns (Full Row)</option>
+                  </select>
+                </div>
+                <div>
+                  <span className="text-[11px] text-gray-400 block mb-1">Height Span</span>
+                  <select 
+                    name="rowSpan" 
+                    value={formData.rowSpan ?? 1} 
+                    onChange={(e) => setFormData((prev: any) => ({ ...prev, rowSpan: Number(e.target.value) }))}
+                    className="w-full bg-[#1a1a1a] text-white border border-gray-700 outline-none rounded-lg p-2 text-xs"
+                  >
+                    <option value="0">Slim / Sleek (Height 112px)</option>
+                    <option value="1">Standard (Height 176px)</option>
+                    <option value="2">Tall (Height 288px)</option>
+                    <option value="3">Large (Height 384px)</option>
+                  </select>
+                </div>
               </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* ─── JSONPATH PAYLOAD PARSER & PUBLISH (RETRACTABLE) ─── */}
       {!isStaticText && !isImage && !isClock && !isPipe && !isShape && !isScreenJump && formData.type !== PanelType.LINE_GRAPH && dataSourceMode !== 'driver' && (

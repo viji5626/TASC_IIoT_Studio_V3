@@ -106,7 +106,9 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({
         iconOff: panel.iconOff ?? 'fa-fan',
         iconColorOn: panel.iconColorOn ?? '#10b981',
         iconColorOff: panel.iconColorOff ?? '#4b5563',
-        fontSize: panel.fontSize ?? 18,
+        fontSize: panel.fontSize ?? (panel.type === PanelType.LED || panel.type === PanelType.SWITCH ? 12 : 18),
+        iconSize: panel.iconSize ?? 24,
+        switchSize: panel.switchSize ?? 48,
         textAlign: panel.textAlign ?? (panel.type === PanelType.GAUGE ? 'center' : 'left'),
         textWrap: panel.textWrap ?? true,
         payloadOn: panel.payloadOn ?? '1',
@@ -430,6 +432,8 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({
                 isPipe={isPipe}
                 isShape={isShape}
                 isScreenJump={isScreenJump}
+                isLED={isLED}
+                isSwitch={isSwitch}
                 dataSourceMode={dataSourceMode}
               />
             </>
