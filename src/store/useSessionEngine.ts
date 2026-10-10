@@ -24,7 +24,7 @@ export const INITIAL_STATE: AppState = {
   {
     "connectionName": "broker1",
     "brokerAddress": "test.mosquitto.org",
-    "port": "1883",
+    "port": 1883,
     "protocol": "Websocket",
     "clientId": "",
     "username": "",

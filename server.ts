@@ -9,7 +9,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { fileURLToPath } from 'url';
-import { exec, spawn } from 'child_process';
+import { exec, spawn, execSync } from 'child_process';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createViteServer } from 'vite';
 
@@ -371,18 +371,45 @@ async function startServer() {
   // Python Daemon Auto-Spawn & Management
   let pythonDaemonProcess: any = null;
 
+  function getLogFd(logFilename: string): number | 'ignore' {
+    const candidateDirs = [
+      rootDir,
+      path.join(process.env.LOCALAPPDATA || os.tmpdir(), 'TASC_IIoT_Studio'),
+      os.tmpdir()
+    ];
+    for (const dir of candidateDirs) {
+      try {
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        const filePath = path.join(dir, logFilename);
+        return fs.openSync(filePath, 'a');
+      } catch {
+        // try next fallback directory
+      }
+    }
+    return 'ignore';
+  }
+
   function getPythonExe(): string {
     const candidates = [
-      path.join(rootDir, 'venv', 'Scripts', 'python.exe'),
       path.join(rootDir, 'python', 'python.exe'),
+      path.join(rootDir, 'venv', 'Scripts', 'python.exe'),
       path.join(rootDir, 'python_engine', 'venv', 'Scripts', 'python.exe'),
+      path.join(process.cwd(), 'python', 'python.exe'),
       path.join(process.cwd(), 'venv', 'Scripts', 'python.exe'),
+      path.join(appDir, '..', 'python', 'python.exe'),
       path.join(appDir, '..', 'venv', 'Scripts', 'python.exe'),
       'python'
     ];
     for (const c of candidates) {
       if (c === 'python') return 'python';
-      if (fs.existsSync(c)) return c;
+      if (fs.existsSync(c)) {
+        try {
+          execSync(`"${c}" -c "import sys"`, { timeout: 2000, stdio: 'ignore' });
+          return c;
+        } catch {
+          console.warn(`[Python Discovery] '${c}' exists but failed execution check. Skipping...`);
+        }
+      }
     }
     return 'python';
   }
@@ -406,65 +433,75 @@ async function startServer() {
     });
   }
 
-  function ensurePythonDaemon(forceRestart = false) {
-    if (pythonDaemonProcess) {
-      if (forceRestart) {
-        try {
-          if (process.platform === 'win32') {
-            exec(`taskkill /F /T /PID ${pythonDaemonProcess.pid}`, () => {});
-          } else {
-            process.kill(pythonDaemonProcess.pid);
-          }
-        } catch { /* ignore */ }
-        pythonDaemonProcess = null;
-      } else {
-        try {
-          // Check if process is alive
-          process.kill(pythonDaemonProcess.pid, 0);
-          return;
-        } catch {
-          pythonDaemonProcess = null;
-        }
-      }
+  async function ensurePythonDaemon(forceRestart = false): Promise<boolean> {
+    const isSocketAlive = await checkDaemonSocketAlive(600);
+    if (isSocketAlive && !forceRestart) {
+      return true;
     }
+
+    if (pythonDaemonProcess) {
+      try {
+        if (process.platform === 'win32') {
+          exec(`taskkill /F /T /PID ${pythonDaemonProcess.pid}`, () => {});
+        } else {
+          process.kill(pythonDaemonProcess.pid);
+        }
+      } catch { /* ignore */ }
+      pythonDaemonProcess = null;
+    }
+
+    // Clean up any stale process holding port 8765 if socket is unresponsive
+    if (!isSocketAlive && process.platform === 'win32') {
+      try {
+        exec('for /f "tokens=5" %a in (\'netstat -aon ^| findstr :8765 ^| findstr LISTENING\') do taskkill /f /pid %a', () => {});
+      } catch {}
+    }
+
     try {
       const daemonScript = path.join(rootDir, 'python_engine', 'tasc_ai_daemon.py');
       if (fs.existsSync(daemonScript)) {
         const pythonExe = getPythonExe();
-        const logFile = path.join(rootDir, 'tasc_ai_daemon_startup.log');
-        const logFd = fs.openSync(logFile, 'a');
+        const logFd = getLogFd('tasc_ai_daemon_startup.log');
+        const stdioCfg: any = typeof logFd === 'number' ? ['ignore', logFd, logFd] : 'ignore';
+
         pythonDaemonProcess = spawn(pythonExe, [daemonScript, '8765'], {
           cwd: rootDir,
           detached: false,
-          stdio: ['ignore', logFd, logFd],
+          stdio: stdioCfg,
           windowsHide: true
         });
+
+        pythonDaemonProcess.on('error', (err: any) => {
+          console.warn('[Python Daemon Process Error]:', err.message);
+          pythonDaemonProcess = null;
+        });
+
         pythonDaemonProcess.on('exit', () => {
           pythonDaemonProcess = null;
         });
-        // Expose PID globally so gracefulShutdown() can kill the process on server exit
+
         (global as any).__tasc_daemon_pid = pythonDaemonProcess.pid;
         console.log(`[Python Daemon] Auto-spawned on port 8765 (PID: ${pythonDaemonProcess.pid}, exe: ${pythonExe})`);
       }
     } catch (err: any) {
       console.warn('[Python Daemon Auto-spawn Failed]:', err.message);
     }
+
+    // Await port 8765 socket readiness
+    for (let i = 0; i < 8; i++) {
+      await new Promise(r => setTimeout(r, 400));
+      if (await checkDaemonSocketAlive(400)) {
+        return true;
+      }
+    }
+    return false;
   }
 
-  // Auto-spawn daemon
-  ensurePythonDaemon();
+  // Auto-spawn daemon on server boot
+  ensurePythonDaemon().catch(() => {});
 
   app.post('/api/ai/daemon/start', async (req, res) => {
-    ensurePythonDaemon(false);
-
-    // Poll port 8765 for up to 6 seconds so callers get a confirmed online response
-    let isReady = false;
-    for (let i = 0; i < 12; i++) {
-      isReady = await checkDaemonSocketAlive(500);
-      if (isReady) break;
-      await new Promise(r => setTimeout(r, 400));
-    }
-
+    const isReady = await ensurePythonDaemon(true);
     const inbuilt = findInbuiltGgufModel();
 
     if (isReady) {
@@ -514,6 +551,8 @@ async function startServer() {
       isReturned = true;
       res.status(503).json({ status: 'OFFLINE', message: 'Python daemon not responding (timeout)' });
       client.destroy();
+      // Auto-recovery
+      ensurePythonDaemon(false).catch(() => {});
     });
 
     client.on('error', (err) => {
@@ -521,10 +560,18 @@ async function startServer() {
       isReturned = true;
       res.status(503).json({ status: 'OFFLINE', message: `Python daemon socket unavailable: ${err.message}` });
       client.destroy();
+      // Auto-recovery
+      ensurePythonDaemon(false).catch(() => {});
     });
   });
 
-  app.post('/api/ai/daemon/evaluate', (req, res) => {
+  app.post('/api/ai/daemon/evaluate', async (req, res) => {
+    // Before evaluating, auto-ensure daemon is responsive
+    const isAlive = await checkDaemonSocketAlive(300);
+    if (!isAlive) {
+      await ensurePythonDaemon(false);
+    }
+
     const client = new net.Socket();
     let isReturned = false;
     let responseBuffer = '';

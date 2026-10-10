@@ -21,7 +21,19 @@ _root_dir = os.path.dirname(_script_dir)
 if _root_dir not in sys.path:
     sys.path.insert(0, _root_dir)
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', filename='tasc_ai_daemon_audit.log')
+# Configure audit logging with fallback if root dir is write-protected (e.g. Program Files)
+_log_file = os.path.join(_root_dir, 'tasc_ai_daemon_audit.log')
+try:
+    with open(_log_file, 'a') as _f:
+        pass
+except Exception:
+    import tempfile
+    _log_file = os.path.join(tempfile.gettempdir(), 'tasc_ai_daemon_audit.log')
+
+try:
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', filename=_log_file)
+except Exception:
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 audit_logger = logging.getLogger('Audit')
 
 # Import Local Modules

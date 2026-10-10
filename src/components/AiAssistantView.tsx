@@ -719,13 +719,26 @@ export const AiAssistantView: React.FC<Props> = ({
           label: `Local GGUF (${ggufModelPath.split('\\').pop() || 'llama-cpp'})`,
           // sendStream is the required method — yield chunks as an AsyncGenerator
           async * sendStream(msgs, _tools, _signal) {
-            // Ensure daemon is running before attempting inference
-            const health = await pythonBridge.checkHealth().catch(() => ({ isAvailable: false, latencyMs: 0, daemon: null as any }));
+            // Ensure daemon is running before attempting inference (with on-demand auto-start)
+            let health = await pythonBridge.checkHealth().catch(() => ({ isAvailable: false, latencyMs: 0, daemon: null as any }));
+            if (!health.isAvailable) {
+              try {
+                // Trigger auto-start of daemon on-demand
+                await fetch('/api/ai/daemon/start', { method: 'POST' }).catch(() => {});
+                // Wait up to ~4.8s for socket readiness
+                for (let i = 0; i < 8; i++) {
+                  await new Promise(r => setTimeout(r, 600));
+                  health = await pythonBridge.checkHealth().catch(() => ({ isAvailable: false, latencyMs: 0, daemon: null as any }));
+                  if (health.isAvailable) break;
+                }
+              } catch { /* ignore */ }
+            }
+
             if (!health.isAvailable) {
               throw new Error('Python AI Daemon is offline. Please start the local runtime from the GGUF settings panel.');
             }
 
-            // Resolve model path: use active state, then fall back to localStorage
+            // Resolve model path: use active state, then fall back to localStorage, then inbuilt bundled model
             const savedPath = localStorage.getItem('tasc_ai_config_embedded_gguf');
             let resolvedPath = ggufModelPath;
             if (!resolvedPath && savedPath) {
@@ -733,6 +746,14 @@ export const AiAssistantView: React.FC<Props> = ({
             }
             if (!resolvedPath) {
               try { resolvedPath = localStorage.getItem('tasc_gguf_model_path') || ''; } catch { /* ignore */ }
+            }
+            if (!resolvedPath) {
+              try {
+                const inbuiltRes = await fetch('/api/local-ai/inbuilt-model').then(r => r.json());
+                if (inbuiltRes && inbuiltRes.status === 'SUCCESS' && inbuiltRes.modelPath) {
+                  resolvedPath = inbuiltRes.modelPath;
+                }
+              } catch { /* ignore */ }
             }
 
             if (!resolvedPath) {
