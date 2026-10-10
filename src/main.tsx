@@ -10,6 +10,7 @@ import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/500.css';
 import '@fontsource/jetbrains-mono/700.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
+import './styles/fontawesome-fallback.css';
 import App from './App.tsx';
 import './index.css';
 

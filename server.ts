@@ -149,13 +149,15 @@ async function startServer() {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://challenges.cloudflare.com"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "blob:"],
+        imgSrc: ["'self'", "data:", "blob:", "*"],
         connectSrc: ["'self'", "ws:", "wss:", "http:", "https:"],
         frameSrc: ["'self'", "https://challenges.cloudflare.com"],
         workerSrc: ["'self'", "blob:"],
-        fontSrc: ["'self'"]
+        fontSrc: ["'self'", "data:", "blob:", "http:", "https:", "*"],
+        upgradeInsecureRequests: null
       }
-    }
+    },
+    crossOriginResourcePolicy: { policy: "cross-origin" }
   }));
 
   // Cross-Origin Resource Sharing (CORS) & W3C Private Network Access (PNA)
@@ -3857,6 +3859,7 @@ async function startServer() {
         middlewareMode: true,
         watch: {
           ignored: [
+            '**/webfonts/**',
             '**/data/**',
             '**/python_engine/**',
             '**/*.log',
