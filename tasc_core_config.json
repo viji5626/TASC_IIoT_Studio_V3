@@ -5,14 +5,14 @@
       "connectionName": "broker1",
       "brokerAddress": "broker.emqx.io",
       "port": 1883,
-      "protocol": "TCP",
+      "protocol": "Websocket",
       "clientId": "",
       "username": "",
       "password": "",
       "autoConnect": true,
       "cleanSession": true,
       "keepAlive": 60,
-      "enableWillMessage": true,
+      "enableWillMessage": false,
       "connectionId": "conn_demo"
     }
   ],
