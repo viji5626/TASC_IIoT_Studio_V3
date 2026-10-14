@@ -3,6 +3,7 @@ import { AppState, AppView, DriverConnection, DriverProtocol } from '../types';
 import { CoachMarkOverlay } from './CoachMarkOverlay';
 import { isTourSuppressed } from '../utils/tourRegistry';
 import { useAppStore } from '../store/useAppStore';
+import { EditionManager } from '../utils/EditionManager';
 
 import { createEmptyDriverConnection } from './driverConnections/constants';
 import { DriverConnectionList } from './driverConnections/DriverConnectionList';
@@ -44,6 +45,9 @@ const DriverConnectionsView: React.FC<DriverConnectionsViewProps> = ({
   const onUpdate = onUpdateProp ?? store.handleUpdateDriverConnection;
   const onDelete = onDeleteProp ?? store.handleDeleteDriverConnection;
   const connections = appState.driverConnections || [];
+  const editionMgr = EditionManager.fromState(appState);
+  const isCommunity = editionMgr.IsCommunity();
+  const atLimit = isCommunity && connections.length >= 2;
 
   const [isDriverTourOpen, setIsDriverTourOpen] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -81,6 +85,11 @@ const DriverConnectionsView: React.FC<DriverConnectionsViewProps> = ({
   };
 
   const handleOpenAdd = () => {
+    const check = editionMgr.CanAddDriverConnection(appState);
+    if (!check.allowed) {
+      store.setCommunityLimitNotice?.(check.reason || 'Community Edition Limit: Maximum 2 Industrial Driver connections allowed.');
+      return;
+    }
     setEditingConn(createEmptyDriverConnection());
     setIsEditing(false);
     setIsFormOpen(true);
@@ -104,6 +113,11 @@ const DriverConnectionsView: React.FC<DriverConnectionsViewProps> = ({
     if (isEditing) {
       onUpdate(conn);
     } else {
+      const check = editionMgr.CanAddDriverConnection(appState);
+      if (!check.allowed) {
+        store.setCommunityLimitNotice?.(check.reason || 'Community Edition Limit: Maximum 2 Industrial Driver connections allowed.');
+        return;
+      }
       onAdd(conn);
     }
     setIsFormOpen(false);
@@ -175,13 +189,33 @@ const DriverConnectionsView: React.FC<DriverConnectionsViewProps> = ({
           <button
             type="button"
             onClick={handleOpenAdd}
-            className="flex items-center space-x-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold rounded-xl transition-all cursor-pointer"
+            disabled={atLimit}
+            className={`flex items-center space-x-2 px-4 py-2 text-white text-sm font-semibold rounded-xl transition-all cursor-pointer ${
+              atLimit ? 'bg-slate-700 opacity-50 cursor-not-allowed' : 'bg-violet-600 hover:bg-violet-500'
+            }`}
           >
-            <i className="fas fa-plus text-xs"></i>
+            <i className={`fas ${atLimit ? 'fa-lock' : 'fa-plus'} text-xs`}></i>
             <span>Add Connection</span>
           </button>
         </div>
       </div>
+
+      {/* Community Edition Limit Banner */}
+      {isCommunity && (
+        <div className={`p-4 rounded-2xl border flex items-center justify-between ${atLimit ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' : 'bg-slate-800/50 border-slate-700 text-slate-300'}`}>
+          <div className="flex items-center space-x-3 text-xs">
+            <i className={`fas ${atLimit ? 'fa-lock text-amber-400' : 'fa-cube text-emerald-400'} text-base`}></i>
+            <div>
+              <span className="font-bold">Community Edition: </span>
+              <span>{connections.length} / 2 Driver Connections used.</span>
+              {atLimit && <span className="ml-1 text-amber-400 font-semibold">Maximum limit reached (2 drivers). Upgrade to Engineering Studio for unlimited driver connections.</span>}
+            </div>
+          </div>
+          <span className="text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30">
+            Community Limit
+          </span>
+        </div>
+      )}
 
       {/* Connection List */}
       <div data-tour="drv-list">

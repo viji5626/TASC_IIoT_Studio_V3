@@ -287,6 +287,20 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     }
   }, [userRole, productEdition, appState.isLockedPackage]);
 
+  const editionMgr = useMemo(() => {
+    return EditionManager.fromState(appState);
+  }, [appState]);
+
+  // Community Edition: Revoke moving to other screens; fallback to home screen
+  useEffect(() => {
+    if (editionMgr.IsCommunity()) {
+      const homeDash = appState.dashboards?.find(d => d.isHome) || appState.dashboards?.[0];
+      if (homeDash && activeDashboardId && activeDashboardId !== homeDash.dashboardId) {
+        setActiveDashboardId(homeDash.dashboardId);
+      }
+    }
+  }, [editionMgr, appState.dashboards, activeDashboardId]);
+
   useEffect(() => {
     const handleSetEditMode = (e: any) => {
       if (typeof e?.detail === 'boolean') {
@@ -338,10 +352,6 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
   const activePanels = useMemo(() => {
     return appState.panels.filter(p => p.dashboardId === activeDashboard?.dashboardId);
   }, [appState.panels, activeDashboard]);
-
-  const editionMgr = useMemo(() => {
-    return EditionManager.fromState(appState);
-  }, [appState]);
 
   const activeThemeObj: AppThemePreset = useMemo(() => {
     return getAppTheme(appState.appTheme);
@@ -910,11 +920,17 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
   }, [editionMgr, appState, setAppState, setShowClientReadOnlyNotice]);
 
   const handleAddDriverConnection = useCallback((conn: DriverConnection) => {
+    const check = editionMgr.CanAddDriverConnection(appState);
+    if (!check.allowed) {
+      setCommunityLimitNotice(check.reason || 'Community Edition: Max 2 driver connections allowed.');
+      setTimeout(() => setCommunityLimitNotice(null), 5000);
+      return;
+    }
     setAppState(prev => ({
       ...prev,
       driverConnections: [...(prev.driverConnections || []), conn]
     }));
-  }, [setAppState]);
+  }, [editionMgr, appState, setAppState, setCommunityLimitNotice]);
 
   const handleUpdateDriverConnection = useCallback((conn: DriverConnection) => {
     setAppState(prev => ({
@@ -933,11 +949,17 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
   }, [setAppState]);
 
   const handleAddDriverTag = useCallback((tag: DriverTag) => {
+    const check = editionMgr.CanAddDriverTag(appState, 1);
+    if (!check.allowed) {
+      setCommunityLimitNotice(check.reason || 'Community Edition: Max 10 driver tags allowed.');
+      setTimeout(() => setCommunityLimitNotice(null), 5000);
+      return;
+    }
     setAppState(prev => ({
       ...prev,
       driverTags: [...(prev.driverTags || []), { ...tag, createdAt: new Date().toISOString() }]
     }));
-  }, [setAppState]);
+  }, [editionMgr, appState, setAppState, setCommunityLimitNotice]);
 
   const handleUpdateDriverTag = useCallback((tag: DriverTag) => {
     setAppState(prev => ({
@@ -956,6 +978,29 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
   }, [setAppState]);
 
   const handleImportDriverTags = useCallback((tags: DriverTag[]) => {
+    const currentTags = appState.driverTags || [];
+    const newTags = tags.filter(t => !currentTags.some(imported => imported.tagId === t.tagId));
+    if (editionMgr.IsCommunity()) {
+      const spaceLeft = Math.max(0, 10 - currentTags.length);
+      if (spaceLeft === 0) {
+        setCommunityLimitNotice('Community Edition Limit: Maximum 10 Driver Tags allowed. Upgrade to Engineering Studio for unlimited driver tags.');
+        setTimeout(() => setCommunityLimitNotice(null), 5000);
+        return;
+      }
+      const allowedNewTags = newTags.slice(0, spaceLeft);
+      setAppState(prev => ({
+        ...prev,
+        driverTags: [
+          ...(prev.driverTags || []).filter(t => !tags.some(imported => imported.tagId === t.tagId)),
+          ...allowedNewTags
+        ]
+      }));
+      if (allowedNewTags.length < newTags.length) {
+        setCommunityLimitNotice(`Community Edition Limit: Imported ${allowedNewTags.length} tags (capped at 10 total tags). Upgrade to Engineering Studio for unlimited tags.`);
+        setTimeout(() => setCommunityLimitNotice(null), 5000);
+      }
+      return;
+    }
     setAppState(prev => ({
       ...prev,
       driverTags: [
@@ -963,9 +1008,15 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
         ...tags
       ]
     }));
-  }, [setAppState]);
+  }, [editionMgr, appState.driverTags, setAppState, setCommunityLimitNotice]);
 
   const handleImportOpcUaTag = useCallback((tag: DriverTag) => {
+    const check = editionMgr.CanAddDriverTag(appState, 1);
+    if (!check.allowed) {
+      setCommunityLimitNotice(check.reason || 'Community Edition: Max 10 driver tags allowed.');
+      setTimeout(() => setCommunityLimitNotice(null), 5000);
+      return;
+    }
     setAppState(prev => {
       const alreadyExists = (prev.driverTags || []).some(
         t => t.nodeId === tag.nodeId && t.connectionId === tag.connectionId
@@ -976,7 +1027,7 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
         driverTags: [...(prev.driverTags || []), { ...tag, createdAt: new Date().toISOString() }]
       };
     });
-  }, [setAppState]);
+  }, [editionMgr, appState, setAppState, setCommunityLimitNotice]);
 
   const handleDeleteDashboard = useCallback((dashId: string) => {
     const check = editionMgr.CanDeleteScreen();
@@ -1106,6 +1157,12 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
   }, [appState.connections, setSharingConnection]);
 
   const handleSelectDashboard = useCallback((dashId: string) => {
+    const check = editionMgr.CanNavigateToScreen(dashId, appState);
+    if (!check.allowed) {
+      setCommunityLimitNotice(check.reason || 'Community Edition Limit: Multi-screen navigation is revoked. Upgrade to Engineering Studio for unlimited screens.');
+      setTimeout(() => setCommunityLimitNotice(null), 5000);
+      return;
+    }
     const targetDash = appState.dashboards.find(d => d.dashboardId === dashId);
     if (targetDash && targetDash.connectionId) {
       setActiveConnectionId(targetDash.connectionId);
@@ -1113,7 +1170,7 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     } else {
       setActiveDashboardId(dashId);
     }
-  }, [appState.dashboards, setActiveConnectionId, setActiveDashboardId]);
+  }, [editionMgr, appState, setActiveConnectionId, setActiveDashboardId, setCommunityLimitNotice]);
 
   const handleToggleLock = useCallback(() => {
     if (isLocked) {

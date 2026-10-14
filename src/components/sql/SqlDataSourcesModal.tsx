@@ -19,7 +19,10 @@ import {
   Table,
   Code2,
   X,
+  Lock,
 } from 'lucide-react';
+import { useAppStore } from '../../store/useAppStore';
+import { EditionManager } from '../../utils/EditionManager';
 
 interface SqlDataSourcesModalProps {
   isOpen: boolean;
@@ -29,11 +32,18 @@ interface SqlDataSourcesModalProps {
 export const SqlDataSourcesModal: React.FC<SqlDataSourcesModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
+  const store = useAppStore();
+  const editionMgr = EditionManager.fromState(store.appState);
+  const isCommunity = editionMgr.IsCommunity();
+
   const [activeTab, setActiveTab] = useState<'sources' | 'manipulators'>('sources');
 
   // List State
   const [dataSources, setDataSources] = useState<SqlDataSource[]>([]);
   const [dataManipulators, setDataManipulators] = useState<SqlDataManipulator[]>([]);
+
+  const atSourceLimit = isCommunity && dataSources.length >= 1;
+  const atManipulatorLimit = isCommunity && dataManipulators.length >= 1;
   const [databases, setDatabases] = useState<string[]>([]);
   const [tables, setTables] = useState<SqlTableMetadata[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -111,6 +121,10 @@ export const SqlDataSourcesModal: React.FC<SqlDataSourcesModalProps> = ({ isOpen
   // Save Data Source
   const handleSaveSource = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!sourceForm.id && atSourceLimit) {
+      alert('Community Edition Limit: Fair usage allows maximum 1 SQL Data Source. Upgrade to Engineering Studio for unlimited Data Sources.');
+      return;
+    }
     try {
       const res = await fetch('/api/scada-sql/data-sources', {
         method: 'POST',
@@ -141,6 +155,10 @@ export const SqlDataSourcesModal: React.FC<SqlDataSourcesModalProps> = ({ isOpen
   // Save Data Manipulator
   const handleSaveManipulator = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!manipulatorForm.id && atManipulatorLimit) {
+      alert('Community Edition Limit: Fair usage allows maximum 1 SQL Data Manipulator. Upgrade to Engineering Studio for unlimited Data Manipulators.');
+      return;
+    }
     try {
       const res = await fetch('/api/scada-sql/data-manipulators', {
         method: 'POST',
@@ -260,51 +278,90 @@ export const SqlDataSourcesModal: React.FC<SqlDataSourcesModalProps> = ({ isOpen
 
           <div>
             {activeTab === 'sources' && !isEditingSource && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSourceForm({
-                    name: `Data Source ${dataSources.length + 1}`,
-                    database: 'DAIKIN_EMS',
-                    mode: 'table',
-                    table: tables[0]?.name || 'MeterName',
-                    schema: 'dbo',
-                    pollIntervalMs: 3000,
-                    thresholdRules: [],
-                  });
-                  setIsEditingSource(true);
-                }}
-                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 cursor-pointer shadow-lg shadow-indigo-600/30"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Data Source</span>
-              </button>
+              atSourceLimit ? (
+                <button
+                  type="button"
+                  disabled
+                  className="px-3.5 py-1.5 bg-slate-800 text-slate-500 rounded-xl text-xs font-bold flex items-center space-x-1.5 cursor-not-allowed border border-slate-700/60"
+                  title="Community Edition Limit: Fair usage allows maximum 1 SQL Data Source. Upgrade to Engineering Studio for unlimited sources."
+                >
+                  <Lock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Add Data Source (1/1 Limit)</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSourceForm({
+                      name: `Data Source ${dataSources.length + 1}`,
+                      database: 'DAIKIN_EMS',
+                      mode: 'table',
+                      table: tables[0]?.name || 'MeterName',
+                      schema: 'dbo',
+                      pollIntervalMs: 3000,
+                      thresholdRules: [],
+                    });
+                    setIsEditingSource(true);
+                  }}
+                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 cursor-pointer shadow-lg shadow-indigo-600/30"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Data Source</span>
+                </button>
+              )
             )}
 
             {activeTab === 'manipulators' && !isEditingManipulator && (
-              <button
-                type="button"
-                onClick={() => {
-                  setManipulatorForm({
-                    name: `Data Manipulator ${dataManipulators.length + 1}`,
-                    database: 'DAIKIN_EMS',
-                    type: 'procedure',
-                    procedureName: 'sp_UpdateSetpoint',
-                    parameters: [{ name: '@id', type: 'int', value: 1 }],
-                  });
-                  setIsEditingManipulator(true);
-                }}
-                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 cursor-pointer shadow-lg shadow-indigo-600/30"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Data Manipulator</span>
-              </button>
+              atManipulatorLimit ? (
+                <button
+                  type="button"
+                  disabled
+                  className="px-3.5 py-1.5 bg-slate-800 text-slate-500 rounded-xl text-xs font-bold flex items-center space-x-1.5 cursor-not-allowed border border-slate-700/60"
+                  title="Community Edition Limit: Fair usage allows maximum 1 SQL Data Manipulator. Upgrade to Engineering Studio for unlimited manipulators."
+                >
+                  <Lock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Add Manipulator (1/1 Limit)</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManipulatorForm({
+                      name: `Data Manipulator ${dataManipulators.length + 1}`,
+                      database: 'DAIKIN_EMS',
+                      type: 'procedure',
+                      procedureName: 'sp_UpdateSetpoint',
+                      parameters: [{ name: '@id', type: 'int', value: 1 }],
+                    });
+                    setIsEditingManipulator(true);
+                  }}
+                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 cursor-pointer shadow-lg shadow-indigo-600/30"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Data Manipulator</span>
+                </button>
+              )
             )}
           </div>
         </div>
 
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto p-6">
+          {/* Community Limit Banner */}
+          {isCommunity && (
+            <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between text-xs text-amber-300">
+              <div className="flex items-center space-x-2">
+                <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>
+                  <strong>Community Edition Limit:</strong> Maximum 1 SQL Data Source and 1 Data Manipulator allowed.
+                  ({activeTab === 'sources' ? `${dataSources.length}/1 Data Sources` : `${dataManipulators.length}/1 Data Manipulators`})
+                </span>
+              </div>
+              <span className="text-[10px] font-mono font-bold bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30 shrink-0 ml-2">
+                Fair Limit
+              </span>
+            </div>
+          )}
           {activeTab === 'sources' ? (
             /* ================= DATA SOURCES ================= */
             isEditingSource ? (

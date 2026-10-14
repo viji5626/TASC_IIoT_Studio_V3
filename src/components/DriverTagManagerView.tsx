@@ -138,7 +138,7 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
 
   // Community limit check
   const isCommunity = appState.productEdition === 'community' || appState.userRole === 'community';
-  const maxTags = isCommunity ? 5 : Infinity;
+  const maxTags = isCommunity ? 10 : Infinity;
   const atLimit = isCommunity && tags.length >= maxTags;
 
   const getConnectionName = (connId: string) => {
@@ -197,7 +197,7 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
 
   const handleOpenAdd = () => {
     if (atLimit) {
-      alert(`Community Edition Limit: Maximum 5 Driver Tags allowed for Community Edition. Upgrade to Engineering Studio for unlimited tags.`);
+      alert(`Community Edition Limit: Maximum 10 Driver Tags allowed for Community Edition. Upgrade to Engineering Studio for unlimited tags.`);
       return;
     }
     setEditingTag(emptyTag(connections[0]?.connectionId || ''));
@@ -228,7 +228,7 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
       onUpdate(tag);
     } else {
       if (atLimit) {
-        alert(`Community Edition Limit: Maximum 5 Driver Tags allowed for Community Edition.`);
+        alert(`Community Edition Limit: Maximum 10 Driver Tags allowed for Community Edition.`);
         return;
       }
       onAdd(tag);
@@ -268,7 +268,7 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
       }
       if (result.imported.length > 0) {
         if (isCommunity && tags.length + result.imported.length > maxTags) {
-          alert(`Community Edition Limit: Importing these tags would exceed the 5-tag Community limit. Truncating to 5 tags max.`);
+          alert(`Community Edition Limit: Importing these tags would exceed the 10-tag Community limit. Truncating to 10 tags max.`);
           const remainingSlots = Math.max(0, maxTags - tags.length);
           onImport(result.imported.slice(0, remainingSlots));
         } else {
@@ -379,13 +379,13 @@ const DriverTagManagerView: React.FC<DriverTagManagerViewProps> = ({
           <div className="flex items-center space-x-3 text-xs">
             <i className={`fas ${atLimit ? 'fa-lock text-amber-400' : 'fa-cube text-emerald-400'} text-base`}></i>
             <div>
-              <span className="font-bold">Community Edition (Free Demo): </span>
-              <span>{tags.length} / 5 Driver Tags used.</span>
-              {atLimit && <span className="ml-1 text-amber-400 font-semibold">Maximum limit reached. Upgrade to Engineering Studio for unlimited tags.</span>}
+              <span className="font-bold">Community Edition: </span>
+              <span>{tags.length} / {maxTags} Driver Tags used.</span>
+              {atLimit && <span className="ml-1 text-amber-400 font-semibold">Maximum limit reached (10 tags). Upgrade to Engineering Studio for unlimited tags.</span>}
             </div>
           </div>
           <span className="text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30">
-            Free Demo
+            Community Limit
           </span>
         </div>
       )}

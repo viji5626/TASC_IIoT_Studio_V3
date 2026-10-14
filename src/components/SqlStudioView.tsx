@@ -29,9 +29,12 @@ import {
   Play,
   Sliders,
   Settings,
+  Lock,
 } from 'lucide-react';
 import { AppState, AppView, SqlAuthType, ScadaSqlConfig, SqlPoolStatus, SqlTableMetadata } from '../types';
 import { TASCGrid, SqlDataSourcesModal } from './sql';
+import { useAppStore } from '../store/useAppStore';
+import { EditionManager } from '../utils/EditionManager';
 
 interface SqlStudioViewProps {
   onBack?: () => void;
@@ -39,7 +42,12 @@ interface SqlStudioViewProps {
   onNavigate?: (view: AppView) => void;
 }
 
-export const SqlStudioView: React.FC<SqlStudioViewProps> = ({ onBack, onNavigate }) => {
+export const SqlStudioView: React.FC<SqlStudioViewProps> = ({ onBack, onNavigate, appState: appStateProp }) => {
+  const store = useAppStore();
+  const appState = appStateProp ?? store.appState;
+  const editionMgr = EditionManager.fromState(appState || ({} as AppState));
+  const isCommunity = editionMgr.IsCommunity();
+
   const [activeTab, setActiveTab] = useState<'grid' | 'connection' | 'tables' | 'snippets'>('grid');
 
   // Connection config state
@@ -452,6 +460,21 @@ export const SqlStudioView: React.FC<SqlStudioViewProps> = ({ onBack, onNavigate
               </div>
             </div>
 
+            {/* Community Limit Banner for Grid */}
+            {isCommunity && (
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between text-xs text-amber-300">
+                <div className="flex items-center space-x-2">
+                  <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>
+                    <strong>Community Edition:</strong> Interactive TASCGrid querying and write-back are restricted. Upgrade to Engineering Studio for unlimited live database queries and procedures.
+                  </span>
+                </div>
+                <span className="text-[10px] font-mono font-bold bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30 shrink-0 ml-2">
+                  Demo Grid
+                </span>
+              </div>
+            )}
+
             {/* Embedded TASCGrid Component */}
             <div className="flex-1 min-h-[450px]">
               <TASCGrid
@@ -677,6 +700,21 @@ export const SqlStudioView: React.FC<SqlStudioViewProps> = ({ onBack, onNavigate
               </button>
             </div>
 
+            {/* Community Edition Banner - All Tables Visible But Not Usable */}
+            {isCommunity && (
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between text-xs text-amber-300">
+                <div className="flex items-center space-x-2">
+                  <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>
+                    <strong>Community Edition:</strong> All schema tables are visible for exploration. Live table queries and TASCGrid execution are locked in Free Edition. Upgrade to Engineering Studio to interact with tables.
+                  </span>
+                </div>
+                <span className="text-[10px] font-mono font-bold bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30 shrink-0 ml-2">
+                  Read Only Preview
+                </span>
+              </div>
+            )}
+
             {tables.length === 0 ? (
               <div className="p-12 text-center text-slate-500 font-mono text-xs">
                 No tables discovered. Connect to SQL Server first.
@@ -705,18 +743,32 @@ export const SqlStudioView: React.FC<SqlStudioViewProps> = ({ onBack, onNavigate
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedTable(t.name);
-                        setSelectedSchema(t.schema);
-                        setActiveTab('grid');
-                      }}
-                      className="px-2.5 py-1 bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs font-semibold rounded-lg flex items-center space-x-1 cursor-pointer transition-colors"
-                    >
-                      <Play className="w-3 h-3" />
-                      <span>Open Grid</span>
-                    </button>
+                    {isCommunity ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          alert('Community Edition Limit: Database tables are visible for schema browsing, but interactive grid querying and live DML execution are locked. Upgrade to Engineering Studio.');
+                        }}
+                        className="px-2.5 py-1 bg-slate-900 border border-amber-500/40 text-amber-300 text-xs font-semibold rounded-lg flex items-center space-x-1.5 cursor-not-allowed select-none shadow-sm hover:bg-amber-500/10 transition-colors"
+                        title="Community Edition Limit: Table interaction is locked."
+                      >
+                        <Lock className="w-3 h-3 text-amber-400" />
+                        <span>Locked (Community)</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedTable(t.name);
+                          setSelectedSchema(t.schema);
+                          setActiveTab('grid');
+                        }}
+                        className="px-2.5 py-1 bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs font-semibold rounded-lg flex items-center space-x-1 cursor-pointer transition-colors"
+                      >
+                        <Play className="w-3 h-3" />
+                        <span>Open Grid</span>
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>

@@ -129,8 +129,102 @@ export class EditionManager {
     return this.IsCommunity() ? 50 : 100000;
   }
 
+  public CanNavigateToScreen(targetDashId: string, appState: AppState): AuthorizationCheck {
+    if (this.IsCommunity()) {
+      const homeDash = appState.dashboards?.find(d => d.isHome) || appState.dashboards?.[0];
+      if (homeDash && targetDashId !== homeDash.dashboardId) {
+        return {
+          allowed: false,
+          reason: 'Community Edition Limit: Multi-screen navigation is revoked. Upgrade to Engineering Studio for unlimited screens and page switching.'
+        };
+      }
+    }
+    return { allowed: true };
+  }
+
+  public CanAddDriverConnection(appState: AppState): AuthorizationCheck {
+    if (this.IsClient()) {
+      return { allowed: false, reason: 'Client Runtime is read-only. Adding driver connections is disabled.' };
+    }
+    if (this.IsCommunity()) {
+      const count = (appState.driverConnections || []).length;
+      if (count >= 2) {
+        return {
+          allowed: false,
+          reason: 'Community Edition Limit: Maximum 2 Industrial Driver connections allowed. Upgrade to Engineering Studio for unlimited driver connections.'
+        };
+      }
+    }
+    return { allowed: true };
+  }
+
   public GetMaxDriverTags(): number {
-    return this.IsCommunity() ? 5 : Infinity;
+    return this.IsCommunity() ? 10 : Infinity;
+  }
+
+  public CanAddDriverTag(appState: AppState, addingCount: number = 1): AuthorizationCheck {
+    if (this.IsClient()) {
+      return { allowed: false, reason: 'Client Runtime is read-only. Adding driver tags is disabled.' };
+    }
+    if (this.IsCommunity()) {
+      const count = (appState.driverTags || []).length;
+      if (count + addingCount > 10) {
+        return {
+          allowed: false,
+          reason: `Community Edition Limit: Maximum 10 Driver Tags allowed (currently ${count}). Upgrade to Engineering Studio for unlimited driver tags.`
+        };
+      }
+    }
+    return { allowed: true };
+  }
+
+  public CanAddReportTemplate(currentCount: number): AuthorizationCheck {
+    if (this.IsClient()) {
+      return { allowed: false, reason: 'Client Runtime is read-only.' };
+    }
+    if (this.IsCommunity() && currentCount >= 1) {
+      return {
+        allowed: false,
+        reason: 'Community Edition Limit: Fair usage allows maximum 1 Report Template. Upgrade to Engineering Studio for unlimited report templates and automated schedules.'
+      };
+    }
+    return { allowed: true };
+  }
+
+  public CanAddSqlDataSource(currentCount: number): AuthorizationCheck {
+    if (this.IsClient()) {
+      return { allowed: false, reason: 'Client Runtime is read-only.' };
+    }
+    if (this.IsCommunity() && currentCount >= 1) {
+      return {
+        allowed: false,
+        reason: 'Community Edition Limit: Fair usage allows maximum 1 SQL Data Source. Upgrade to Engineering Studio for unlimited SQL connections and tables.'
+      };
+    }
+    return { allowed: true };
+  }
+
+  public CanAddSqlManipulator(currentCount: number): AuthorizationCheck {
+    if (this.IsClient()) {
+      return { allowed: false, reason: 'Client Runtime is read-only.' };
+    }
+    if (this.IsCommunity() && currentCount >= 1) {
+      return {
+        allowed: false,
+        reason: 'Community Edition Limit: Fair usage allows maximum 1 SQL Data Manipulator. Upgrade to Engineering Studio for unlimited procedures and DML queries.'
+      };
+    }
+    return { allowed: true };
+  }
+
+  public CanUseSqlTableGrid(): AuthorizationCheck {
+    if (this.IsCommunity()) {
+      return {
+        allowed: false,
+        reason: 'Community Edition Limit: Database table query and TASCGrid execution is locked. Upgrade to Engineering Studio to interact with and edit table data.'
+      };
+    }
+    return { allowed: true };
   }
 
   public GetMaxTrendLoggingSpanMs(): number {
@@ -184,6 +278,7 @@ export class EditionManager {
 
   // Camelcase aliases
   public canCreateScreen(appState: AppState) { return this.CanCreateScreen(appState); }
+  public canNavigateToScreen(targetDashId: string, appState: AppState) { return this.CanNavigateToScreen(targetDashId, appState); }
   public canCreateWidget(appState: AppState, addingCount = 1) { return this.CanCreateWidget(appState, addingCount); }
   public canEditWidget() { return this.CanEditWidget(); }
   public canDeleteWidget() { return this.CanDeleteWidget(); }
@@ -195,7 +290,9 @@ export class EditionManager {
 }
 
 /**
- * Sanitizes and prunes appState according to community edition limits or legacy removals.
+ * Sanitizes and cleans appState according to legacy removals.
+ * Preserves existing project screens and widgets in storage when opening Community Edition,
+ * allowing runtime enforcement to revoke navigation and gray out 10+ widgets.
  */
 export function sanitizeAppState(state: AppState): AppState {
   let dashboards = state.dashboards || [];
@@ -209,18 +306,7 @@ export function sanitizeAppState(state: AppState): AppState {
     p.dashboardId !== 'dash_telemetry'
   );
 
-  // If in community mode, prune to max 1 screen and 10 widgets
   const isCommunity = state.userRole === 'community' || state.productEdition === ProductEdition.COMMUNITY;
-  if (isCommunity) {
-    if (dashboards.length > 1) {
-      dashboards = dashboards.slice(0, 1);
-      const allowedIds = new Set(dashboards.map(d => d.dashboardId));
-      panels = panels.filter(p => allowedIds.has(p.dashboardId));
-    }
-    if (panels.length > 10) {
-      panels = panels.slice(0, 10);
-    }
-  }
 
   return {
     ...state,

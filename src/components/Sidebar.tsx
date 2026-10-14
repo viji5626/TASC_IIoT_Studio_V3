@@ -364,23 +364,36 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
               {/* Active Dashboards List */}
               {dashboards && dashboards.length > 0 && (
                 <div className="space-y-0.5 mb-1 pl-1 border-l-2 border-slate-800">
-                  {dashboards.map(dash => (
-                    <div key={dash.dashboardId} className="relative flex items-center">
-                      <button
-                        onClick={() => {
-                          onSelectDashboard(dash.dashboardId);
-                          onNavigate(AppView.DASHBOARD);
-                          onClose();
-                        }}
-                        className="flex-grow flex items-center space-x-2 px-2.5 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-slate-800/60 rounded-lg transition-colors text-left truncate cursor-pointer"
-                      >
-                        <i
-                          className={`fas ${dash.icon || 'fa-table-cells-large'} text-xs`}
-                          style={{ color: activeThemeObj.primary }}
-                        ></i>
-                        <span className="truncate font-medium">{dash.dashboardName}</span>
-                        {dash.isHome && <span className="text-[9px] text-amber-400 font-bold">★</span>}
-                      </button>
+                  {dashboards.map(dash => {
+                    const homeDash = dashboards.find(d => d.isHome) || dashboards[0];
+                    const isLockedScreen = isCommunity && homeDash && dash.dashboardId !== homeDash.dashboardId;
+                    return (
+                      <div key={dash.dashboardId} className="relative flex items-center">
+                        <button
+                          onClick={() => {
+                            onSelectDashboard(dash.dashboardId);
+                            onNavigate(AppView.DASHBOARD);
+                            onClose();
+                          }}
+                          className={`flex-grow flex items-center space-x-2 px-2.5 py-1.5 text-xs rounded-lg transition-colors text-left truncate cursor-pointer ${
+                            isLockedScreen
+                              ? 'text-slate-500 hover:text-amber-300 hover:bg-slate-800/40 opacity-75'
+                              : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                          }`}
+                          title={isLockedScreen ? 'Community Edition: Screen switching revoked. Upgrade to Engineering Studio.' : undefined}
+                        >
+                          <i
+                            className={`fas ${dash.icon || 'fa-table-cells-large'} text-xs`}
+                            style={{ color: isLockedScreen ? '#64748b' : activeThemeObj.primary }}
+                          ></i>
+                          <span className="truncate font-medium">{dash.dashboardName}</span>
+                          {dash.isHome && <span className="text-[9px] text-amber-400 font-bold">★</span>}
+                          {isLockedScreen && (
+                            <span className="text-[8px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1 py-0.2 rounded font-mono font-bold ml-auto shrink-0">
+                              🔒 LOCKED
+                            </span>
+                          )}
+                        </button>
 
                       {!isClient && (
                         <button
@@ -449,7 +462,8 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
                         </div>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
               {renderNavList(workstationItems)}

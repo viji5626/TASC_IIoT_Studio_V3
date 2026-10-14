@@ -18,6 +18,8 @@ import {
 } from '../utils/templateReportEngine';
 import { calculateNextRunTime } from '../utils/reportScheduler';
 import { TRANSFORM_LABELS } from '../utils/reportTransformEngine';
+import { useAppStore } from '../store/useAppStore';
+import { EditionManager } from '../utils/EditionManager';
 
 function genId(): string {
   return `tmpl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -26,9 +28,15 @@ function genId(): string {
 type Step = 'library' | 'upload' | 'mapping' | 'generate';
 
 export const TemplateReportManager: React.FC = () => {
+  const store = useAppStore();
+  const editionMgr = EditionManager.fromState(store.appState);
+  const isCommunity = editionMgr.IsCommunity();
+
   const [step, setStep] = useState<Step>('library');
   const [templates, setTemplates] = useState<ReportTemplate[]>([]);
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<Set<string>>(new Set());
+
+  const atReportLimit = isCommunity && templates.length >= 1;
 
   // Upload step state
   const [isDragging, setIsDragging] = useState(false);
@@ -84,6 +92,10 @@ export const TemplateReportManager: React.FC = () => {
   // ─── Upload Handlers ────────────────────────────────────────────────────────
 
   const handleFileSelected = useCallback(async (file: File) => {
+    if (atReportLimit) {
+      alert('Community Edition Limit: Fair usage allows maximum 1 Report Template. Upgrade to Engineering Studio for unlimited report templates and automated schedules.');
+      return;
+    }
     if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
       setParseError('Please upload an Excel file (.xlsx or .xls).');
       return;
@@ -322,21 +334,54 @@ export const TemplateReportManager: React.FC = () => {
       {/* ── 1. Library View ─────────────────────────────────────────────────── */}
       {step === 'library' && (
         <div className="space-y-5 pb-20">
+          {/* Community Edition Limit Banner */}
+          {isCommunity && (
+            <div className={`p-4 rounded-2xl border flex items-center justify-between ${atReportLimit ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' : 'bg-slate-800/50 border-slate-700 text-slate-300'}`}>
+              <div className="flex items-center space-x-3 text-xs">
+                <i className={`fas ${atReportLimit ? 'fa-lock text-amber-400' : 'fa-cube text-emerald-400'} text-base`}></i>
+                <div>
+                  <span className="font-bold">Community Edition: </span>
+                  <span>{templates.length} / 1 Report Template used.</span>
+                  {atReportLimit && <span className="ml-1 text-amber-400 font-semibold">Maximum limit reached (1 template). Upgrade to Engineering Studio for unlimited templates.</span>}
+                </div>
+              </div>
+              <span className="text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30">
+                Community Limit
+              </span>
+            </div>
+          )}
+
           {/* Upload Drop Zone */}
           <div
-            className={`border-2 border-dashed rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center cursor-pointer transition-all ${
-              isDragging ? 'border-sky-400 bg-sky-500/10' : 'border-slate-700 hover:border-sky-500/60 hover:bg-slate-800/40 bg-slate-900/40'
+            className={`border-2 border-dashed rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center transition-all ${
+              atReportLimit
+                ? 'border-slate-800 bg-slate-900/30 opacity-60 cursor-not-allowed'
+                : isDragging ? 'border-sky-400 bg-sky-500/10 cursor-pointer' : 'border-slate-700 hover:border-sky-500/60 hover:bg-slate-800/40 bg-slate-900/40 cursor-pointer'
             }`}
-            onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+            onDragOver={e => {
+              if (atReportLimit) return;
+              e.preventDefault();
+              setIsDragging(true);
+            }}
             onDragLeave={() => setIsDragging(false)}
             onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => {
+              if (atReportLimit) {
+                alert('Community Edition Limit: Fair usage allows maximum 1 Report Template. Upgrade to Engineering Studio for unlimited report templates.');
+                return;
+              }
+              fileInputRef.current?.click();
+            }}
           >
-            <div className="w-12 h-12 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mb-3">
-              <i className="fas fa-file-excel text-emerald-400 text-xl" />
+            <div className={`w-12 h-12 rounded-xl border flex items-center justify-center mb-3 ${atReportLimit ? 'bg-slate-800 text-slate-500 border-slate-700' : 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'}`}>
+              <i className={`fas ${atReportLimit ? 'fa-lock' : 'fa-file-excel'} text-xl`} />
             </div>
-            <p className="text-sm font-semibold text-slate-200">Upload Client Excel Template (.xlsx)</p>
-            <p className="text-xs text-slate-500 mt-1">Preserves all client MIS formulas, charts, and pivot tables</p>
+            <p className="text-sm font-semibold text-slate-200">
+              {atReportLimit ? 'Report Template Slot Occupied (1/1 Limit)' : 'Upload Client Excel Template (.xlsx)'}
+            </p>
+            <p className="text-xs text-slate-500 mt-1">
+              {atReportLimit ? 'Upgrade to Engineering Studio for unlimited Excel templates & scheduled reports' : 'Preserves all client MIS formulas, charts, and pivot tables'}
+            </p>
             {isParsing && (
               <p className="text-xs text-sky-400 mt-3 animate-pulse flex items-center space-x-1.5">
                 <i className="fas fa-circle-notch fa-spin" />

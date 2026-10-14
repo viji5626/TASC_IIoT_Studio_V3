@@ -445,7 +445,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
             type="button"
             onClick={handleRequestExitSession}
             className="flex items-center space-x-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 h-10 rounded-xl text-xs font-bold hover:bg-emerald-500/30 transition-all cursor-pointer shrink-0"
-            title={`Community Edition (Free) • ${appState.dashboards.length} Screens / 10 Widgets Max — Click to exit / change mode`}
+            title={`Community Edition (Free) • 1 Screen / 10 Widgets Max / 2 Drivers — Click to exit / change mode`}
           >
             <i className="fas fa-cube text-xs text-emerald-400"></i>
             <span className="hidden 2xl:inline">COMMUNITY</span>
@@ -475,11 +475,20 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
               className="bg-slate-950 text-sky-400 font-bold text-xs sm:text-sm px-3 h-10 rounded-xl border border-slate-700/80 outline-none focus:border-sky-500 cursor-pointer max-w-[140px] sm:max-w-[200px] shadow-inner shrink-0 truncate hover:border-slate-600 transition-colors"
               title="Switch Active HMI Screen Page"
             >
-              {appState.dashboards.map(d => (
-                <option key={d.dashboardId} value={d.dashboardId} className="bg-slate-900 text-white font-normal">
-                  {d.dashboardName} {d.isHome ? '★ (Home)' : ''}
-                </option>
-              ))}
+              {appState.dashboards.map(d => {
+                const homeDash = appState.dashboards.find(x => x.isHome) || appState.dashboards[0];
+                const isLockedScreen = isCommunity && homeDash && d.dashboardId !== homeDash.dashboardId;
+                return (
+                  <option
+                    key={d.dashboardId}
+                    value={d.dashboardId}
+                    disabled={isLockedScreen}
+                    className={isLockedScreen ? "bg-slate-950 text-slate-500 italic" : "bg-slate-900 text-white font-normal"}
+                  >
+                    {d.dashboardName} {d.isHome ? '★ (Home)' : ''} {isLockedScreen ? '🔒 (Engineering Studio)' : ''}
+                  </option>
+                );
+              })}
             </select>
 
             {/* Add Screen (+) Button */}

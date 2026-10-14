@@ -163,6 +163,12 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     !!appState?.isLockedPackage ||
     editionMgrInstance.IsClient();
 
+  const isCommunityMode =
+    userRole === 'community' ||
+    productEdition === ProductEdition.COMMUNITY ||
+    (productEdition as any) === 'community' ||
+    editionMgrInstance.IsCommunity();
+
   const [localEditMode, setLocalEditMode] = useState(!isClientMode);
   const isEditMode = isClientMode ? false : (store?.isHmiEditMode !== undefined ? store.isHmiEditMode : localEditMode);
   const setIsEditMode = useCallback((val: boolean | ((prev: boolean) => boolean)) => {
@@ -3304,6 +3310,12 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
   // Handle Publish / Setpoint click
   const handlePanelInteract = (panel: Panel) => {
+    // Block interaction on 10+ widgets in Community Mode
+    if (isCommunityMode && panels.findIndex(p => p.panelId === panel.panelId) >= 10) {
+      store.setCommunityLimitNotice?.("Community Edition Limit: Active HMI is limited to 10 active widgets. Widgets beyond the 10th are disabled. Upgrade to Engineering Studio for unlimited widgets.");
+      return;
+    }
+
     if (panel.type === PanelType.SCREEN_JUMP && panel.targetScreenId) {
       if (onSelectDashboard) {
         onSelectDashboard(panel.targetScreenId);
@@ -4750,6 +4762,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 if (panel.isHidden || dynEval.visibility?.isHidden) return null;
 
                 const pos = getPanelPos(panel, idx);
+                const isOverCommunityLimit = isCommunityMode && idx >= 10;
                 const isSelected = selectedPanelIds.includes(panel.panelId);
                 const isMaster = masterPanelId === panel.panelId;
                 // Find any active dynamic rule tag/topic binding on this panel
@@ -4835,6 +4848,12 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     key={panel.panelId}
                     id={`hmi-panel-${panel.panelId}`}
                     onMouseDown={(e) => {
+                      if (isOverCommunityLimit) {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        store.setCommunityLimitNotice?.("Community Edition Limit: Active HMI is limited to 10 widgets. Upgrade to Engineering Studio for unlimited widgets.");
+                        return;
+                      }
                       if (!effectiveEditMode || isClientMode) {
                         return;
                       }
@@ -4847,11 +4866,15 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     onContextMenu={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      if (isClientMode || !effectiveEditMode) return;
+                      if (isClientMode || !effectiveEditMode || isOverCommunityLimit) return;
                       handleContextMenu(e, panel.panelId);
                     }}
                     onDoubleClick={(e) => {
                       e.stopPropagation();
+                      if (isOverCommunityLimit) {
+                        store.setCommunityLimitNotice?.("Community Edition Limit: Active HMI is limited to 10 widgets. Upgrade to Engineering Studio for unlimited widgets.");
+                        return;
+                      }
                       if (effectiveEditMode && !isClientMode) {
                         onEditPanel(panel);
                       }
@@ -4859,9 +4882,13 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
+                      if (isOverCommunityLimit) {
+                        store.setCommunityLimitNotice?.("Community Edition Limit: Active HMI is limited to 10 widgets. Upgrade to Engineering Studio for unlimited widgets.");
+                        return;
+                      }
                       handlePanelInteract(panel);
                     }}
-                    className={`absolute transition-all group select-none ${effectiveEditMode ? (panel.isLocked ? 'cursor-not-allowed' : 'cursor-move') : 'cursor-pointer'
+                    className={`absolute transition-all group select-none ${effectiveEditMode ? (panel.isLocked || isOverCommunityLimit ? 'cursor-not-allowed' : 'cursor-move') : (isOverCommunityLimit ? 'cursor-not-allowed' : 'cursor-pointer')
                       } ${isSelected && effectiveEditMode
                         ? isMaster
                           ? 'ring-2 ring-amber-400 shadow-2xl z-30'
@@ -4869,7 +4896,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         : effectiveEditMode
                           ? 'hover:ring-1 hover:ring-sky-400/80 z-10'
                           : 'z-10'
-                      } ${tripAnimClass}`}
+                      } ${tripAnimClass} ${isOverCommunityLimit ? 'grayscale opacity-40 filter contrast-75 brightness-75' : ''}`}
                     style={{
                       left: `${pos.x}px`,
                       top: `${pos.y}px`,
@@ -4880,14 +4907,32 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       borderWidth: (isPureShapeWithoutBox || isTascGrid) ? '0px' : `${panel.borderWidth ?? 1}px`,
                       borderRadius: (isPureShapeWithoutBox || isTascGrid) ? '0px' : `${panel.borderRadius ?? 8}px`,
                       color: panel.textColor || '#f8fafc',
-                      opacity: effectiveOpacity,
+                      opacity: isOverCommunityLimit ? Math.min(effectiveOpacity, 0.4) : effectiveOpacity,
                       transform: combinedTransform,
                       animation: combinedAnimation,
-                      boxShadow: !isPureShapeWithoutBox && !isTascGrid && panel.shadowEnabled
+                      boxShadow: !isPureShapeWithoutBox && !isTascGrid && panel.shadowEnabled && !isOverCommunityLimit
                         ? `0 0 ${panel.shadowIntensity ?? 15}px ${panel.shadowColor || '#38bdf8'}, 0 4px 12px rgba(0, 0, 0, 0.5)`
                         : undefined
                     }}
                   >
+                    {/* Community Edition 10+ Widget Gray-out Lock Overlay */}
+                    {isOverCommunityLimit && (
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          store.setCommunityLimitNotice?.("Community Edition Limit: Active HMI is limited to 10 active widgets. Upgrade to Engineering Studio for unlimited widgets.");
+                        }}
+                        className="absolute inset-0 bg-slate-950/75 backdrop-blur-[1px] border border-amber-500/40 rounded-[inherit] flex flex-col items-center justify-center p-2 z-50 cursor-not-allowed select-none shadow-2xl pointer-events-auto"
+                        title="Community Edition: Limited to 10 active widgets"
+                      >
+                        <div className="flex items-center space-x-1.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2.5 py-1 rounded-full text-[10px] font-bold shadow-md">
+                          <i className="fas fa-lock text-[9px] text-amber-400"></i>
+                          <span className="tracking-wide uppercase">Community Limit (10+)</span>
+                        </div>
+                        <span className="text-[9px] text-slate-400 mt-1 font-medium text-center">Upgrade to Engineering Studio</span>
+                      </div>
+                    )}
                     {/* Telemetry Disconnection / Timeout Badge Overlay (Shown on Process Value area, NOT header/name) */}
                     {isOffline && panel.enableStaleTimeout !== false && panel.showOfflineBadge !== false && (() => {
                       const isMicro = pos.w < 65 || pos.h < 30;
