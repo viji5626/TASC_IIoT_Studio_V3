@@ -3,7 +3,7 @@
   "connections": [
     {
       "connectionName": "broker1",
-      "brokerAddress": "test.mosquitto.org",
+      "brokerAddress": "broker.emqx.io",
       "port": 1883,
       "protocol": "TCP",
       "clientId": "",

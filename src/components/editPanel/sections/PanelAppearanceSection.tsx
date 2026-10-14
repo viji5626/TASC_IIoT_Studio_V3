@@ -38,7 +38,9 @@ export const PanelAppearanceSection: React.FC<PanelAppearanceSectionProps> = ({
   const isActuallyLED = isLED ?? (formData.type === PanelType.LED);
   const isActuallySwitch = isSwitch ?? (formData.type === PanelType.SWITCH);
 
-  // Retractable sections (all retracted by default)
+  // Retractable sections
+  const [isDecimalExpanded, setIsDecimalExpanded] = useState<boolean>(true);
+  const [isTextInputSizeExpanded, setIsTextInputSizeExpanded] = useState<boolean>(true);
   const [isTypographyExpanded, setIsTypographyExpanded] = useState<boolean>(false);
   const [isDimensionsExpanded, setIsDimensionsExpanded] = useState<boolean>(false);
   const [isJsonExpanded, setIsJsonExpanded] = useState<boolean>(false);
@@ -68,6 +70,29 @@ export const PanelAppearanceSection: React.FC<PanelAppearanceSectionProps> = ({
             </button>
           ))}
         </div>
+      </div>
+
+      {/* ─── WRAP PANEL NAME / TITLE ─── */}
+      <div className="bg-[#121824] p-3 rounded-xl border border-sky-500/30 flex items-center justify-between">
+        <div className="flex flex-col">
+          <span className="text-xs text-sky-400 font-bold uppercase tracking-wider flex items-center space-x-2">
+            <i className="fas fa-text-width text-sky-400"></i>
+            <span>Wrap Panel Name</span>
+          </span>
+          <span className="text-[10px] text-slate-400 mt-0.5">
+            Auto-wrap title into multiple lines when element width is narrow instead of truncating with ellipsis (...)
+          </span>
+        </div>
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            name="textWrap"
+            checked={!!formData.textWrap}
+            onChange={(e) => setFormData((prev: any) => ({ ...prev, textWrap: e.target.checked }))}
+            className="sr-only peer"
+          />
+          <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+        </label>
       </div>
 
       {/* ─── LED INDICATOR: DEDICATED INDICATION ICON SIZE ─── */}
@@ -389,6 +414,331 @@ export const PanelAppearanceSection: React.FC<PanelAppearanceSectionProps> = ({
         </div>
       )}
 
+      {/* ─── DECIMAL FRACTION DIGITS (PRECISION: NONE TO 12, DEFAULT 2) ─── */}
+      {!isStaticText && !isClock && !isPipe && !isShape && !isScreenJump && !isActuallyLED && !isActuallySwitch && (
+        <div className="bg-[#0b1622] rounded-xl border border-sky-500/40 shadow-inner overflow-hidden transition-all">
+          <div
+            onClick={() => setIsDecimalExpanded(!isDecimalExpanded)}
+            className="p-3.5 flex items-center justify-between cursor-pointer select-none hover:bg-sky-500/10 transition-colors"
+          >
+            <div className="flex items-center space-x-2">
+              <i className={`fas fa-chevron-${isDecimalExpanded ? 'down' : 'right'} text-sky-400 text-xs transition-transform duration-200`}></i>
+              <i className="fas fa-calculator text-sky-400"></i>
+              <span className="text-xs text-sky-400 font-bold uppercase tracking-wider">
+                Decimal Fraction Digits (Precision)
+              </span>
+            </div>
+            <span className="text-xs font-mono font-bold text-sky-300 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/30">
+              {formData.decimalPrecision === 'none' || formData.decimalPrecision === 'None'
+                ? 'None (Raw Float)'
+                : `${formData.decimalPrecision !== undefined ? formData.decimalPrecision : 2} Digits`}
+            </span>
+          </div>
+
+          {isDecimalExpanded && (
+            <div className="p-4 pt-2 space-y-3 border-t border-sky-500/20">
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Configure how many decimal places to display for process values (range: <strong className="text-sky-300">None</strong> to <strong className="text-sky-300">12</strong>, default <strong className="text-amber-400">2</strong>). Select <strong className="text-sky-300">None</strong> to show full raw floats.
+              </p>
+
+              <div className="flex items-center space-x-3 pt-1">
+                <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cur = formData.decimalPrecision === 'none' || formData.decimalPrecision === 'None' ? 2 : (Number(formData.decimalPrecision ?? 2) || 0);
+                      const next = Math.max(0, cur - 1);
+                      setFormData((prev: any) => ({ ...prev, decimalPrecision: next, decimals: next }));
+                    }}
+                    className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-sky-400 font-black text-base flex items-center justify-center transition-colors cursor-pointer"
+                    title="Decrease Decimal Digits (-1)"
+                  >
+                    <i className="fas fa-minus text-xs"></i>
+                  </button>
+
+                  <input
+                    type="text"
+                    name="decimalPrecision"
+                    value={formData.decimalPrecision !== undefined ? formData.decimalPrecision : 2}
+                    onChange={(e) => {
+                      const v = e.target.value.trim().toLowerCase();
+                      if (v === 'none' || v === '') {
+                        setFormData((prev: any) => ({ ...prev, decimalPrecision: 'none', decimals: 0 }));
+                      } else {
+                        const parsed = parseInt(v);
+                        if (!isNaN(parsed)) {
+                          const clamped = Math.max(0, Math.min(12, parsed));
+                          setFormData((prev: any) => ({ ...prev, decimalPrecision: clamped, decimals: clamped }));
+                        }
+                      }
+                    }}
+                    className="w-16 bg-transparent text-center text-white font-mono font-bold text-xs outline-none"
+                    title="Enter digits 0-12 or 'none'"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cur = formData.decimalPrecision === 'none' || formData.decimalPrecision === 'None' ? 2 : (Number(formData.decimalPrecision ?? 2) || 0);
+                      const next = Math.min(12, cur + 1);
+                      setFormData((prev: any) => ({ ...prev, decimalPrecision: next, decimals: next }));
+                    }}
+                    className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-sky-400 font-black text-base flex items-center justify-center transition-colors cursor-pointer"
+                    title="Increase Decimal Digits (+1)"
+                  >
+                    <i className="fas fa-plus text-xs"></i>
+                  </button>
+                </div>
+
+                <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                  {[
+                    { label: 'None', val: 'none' },
+                    { label: '0', val: 0 },
+                    { label: '1', val: 1 },
+                    { label: '2 (Def)', val: 2 },
+                    { label: '3', val: 3 },
+                    { label: '4', val: 4 },
+                    { label: '6', val: 6 },
+                    { label: '8', val: 8 },
+                    { label: '12', val: 12 },
+                  ].map(preset => {
+                    const isSelected = String(formData.decimalPrecision !== undefined ? formData.decimalPrecision : 2).toLowerCase() === String(preset.val).toLowerCase();
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => setFormData((prev: any) => ({
+                          ...prev,
+                          decimalPrecision: preset.val,
+                          decimals: preset.val === 'none' ? 0 : preset.val
+                        }))}
+                        className={`px-2 py-1 rounded text-xs font-mono transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-sky-500/30 text-sky-200 border border-sky-500/80 font-bold shadow'
+                            : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-slate-200 hover:border-slate-700'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── TEXT INPUT BOX & TYPOGRAPHY SIZING (DEDICATED FOR TEXT_INPUT) ─── */}
+      {formData.type === PanelType.TEXT_INPUT && (
+        <div className="bg-[#13100a] rounded-xl border border-amber-500/40 shadow-inner overflow-hidden transition-all">
+          <div
+            onClick={() => setIsTextInputSizeExpanded(!isTextInputSizeExpanded)}
+            className="p-3.5 flex items-center justify-between cursor-pointer select-none hover:bg-amber-500/10 transition-colors"
+          >
+            <div className="flex items-center space-x-2">
+              <i className={`fas fa-chevron-${isTextInputSizeExpanded ? 'down' : 'right'} text-amber-400 text-xs transition-transform duration-200`}></i>
+              <i className="fas fa-i-cursor text-amber-400"></i>
+              <span className="text-xs text-amber-400 font-bold uppercase tracking-wider">
+                Text Input Area Size & Font Typography
+              </span>
+            </div>
+            <span className="text-xs font-mono font-bold text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+              Box: {formData.inputAreaHeight ?? 42}px | Font: {formData.inputFontSize ?? (formData.fontSize ?? 18)}px
+            </span>
+          </div>
+
+          {isTextInputSizeExpanded && (
+            <div className="p-4 pt-2 space-y-4 border-t border-amber-500/20">
+              {/* Input Area Height / Section Size */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-amber-300 font-semibold flex items-center space-x-1.5">
+                    <i className="fas fa-arrows-up-down text-[10px]"></i>
+                    <span>Input Box Height / Section Size</span>
+                  </span>
+                  <span className="text-xs font-mono font-bold text-amber-400">
+                    {formData.inputAreaHeight ?? 42} px
+                  </span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setFormData((prev: any) => ({ ...prev, inputAreaHeight: Math.max(28, (parseInt(String(prev.inputAreaHeight ?? 42)) || 42) - 4) }))}
+                      className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-amber-400 font-black text-base flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <i className="fas fa-minus text-xs"></i>
+                    </button>
+                    <input
+                      type="number"
+                      min="28"
+                      max="120"
+                      name="inputAreaHeight"
+                      value={formData.inputAreaHeight ?? 42}
+                      onChange={(e) => setFormData((prev: any) => ({ ...prev, inputAreaHeight: Math.max(28, Math.min(120, parseInt(e.target.value) || 42)) }))}
+                      className="w-14 bg-transparent text-center text-white font-mono font-bold text-xs outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setFormData((prev: any) => ({ ...prev, inputAreaHeight: Math.min(120, (parseInt(String(prev.inputAreaHeight ?? 42)) || 42) + 4) }))}
+                      className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-amber-400 font-black text-base flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <i className="fas fa-plus text-xs"></i>
+                    </button>
+                  </div>
+                  <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                    {[
+                      { label: 'Compact (32px)', val: 32 },
+                      { label: 'Standard (42px)', val: 42 },
+                      { label: 'Medium (52px)', val: 52 },
+                      { label: 'Large (64px)', val: 64 },
+                      { label: 'X-Large (80px)', val: 80 }
+                    ].map(preset => (
+                      <button
+                        key={preset.val}
+                        type="button"
+                        onClick={() => setFormData((prev: any) => ({ ...prev, inputAreaHeight: preset.val }))}
+                        className={`px-2 py-1 rounded text-xs font-mono transition-all cursor-pointer ${
+                          (parseInt(String(formData.inputAreaHeight ?? 42)) || 42) === preset.val
+                            ? 'bg-amber-500/30 text-amber-200 border border-amber-500/80 font-bold shadow'
+                            : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-slate-200'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Input Text Font Size */}
+              <div className="space-y-2 border-t border-gray-800 pt-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-amber-300 font-semibold flex items-center space-x-1.5">
+                    <i className="fas fa-font text-[10px]"></i>
+                    <span>Input Text Font Size</span>
+                  </span>
+                  <span className="text-xs font-mono font-bold text-amber-400">
+                    {formData.inputFontSize ?? (formData.fontSize ?? 18)} px
+                  </span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setFormData((prev: any) => {
+                        const cur = parseInt(String(prev.inputFontSize ?? prev.fontSize ?? 18)) || 18;
+                        const next = Math.max(10, cur - 2);
+                        return { ...prev, inputFontSize: next, fontSize: next };
+                      })}
+                      className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-amber-400 font-black text-base flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <i className="fas fa-minus text-xs"></i>
+                    </button>
+                    <input
+                      type="number"
+                      min="10"
+                      max="72"
+                      name="inputFontSize"
+                      value={formData.inputFontSize ?? (formData.fontSize ?? 18)}
+                      onChange={(e) => {
+                        const val = Math.max(10, Math.min(72, parseInt(e.target.value) || 18));
+                        setFormData((prev: any) => ({ ...prev, inputFontSize: val, fontSize: val }));
+                      }}
+                      className="w-14 bg-transparent text-center text-white font-mono font-bold text-xs outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setFormData((prev: any) => {
+                        const cur = parseInt(String(prev.inputFontSize ?? prev.fontSize ?? 18)) || 18;
+                        const next = Math.min(72, cur + 2);
+                        return { ...prev, inputFontSize: next, fontSize: next };
+                      })}
+                      className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-amber-400 font-black text-base flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <i className="fas fa-plus text-xs"></i>
+                    </button>
+                  </div>
+                  <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                    {[14, 16, 18, 20, 24, 28, 36, 48].map(size => (
+                      <button
+                        key={size}
+                        type="button"
+                        onClick={() => setFormData((prev: any) => ({ ...prev, inputFontSize: size, fontSize: size }))}
+                        className={`px-2 py-1 rounded text-xs font-mono transition-all cursor-pointer ${
+                          (parseInt(String(formData.inputFontSize ?? formData.fontSize ?? 18)) || 18) === size
+                            ? 'bg-amber-500/30 text-amber-200 border border-amber-500/80 font-bold shadow'
+                            : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-slate-200'
+                        }`}
+                      >
+                        {size}px
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Title / Label Font Size */}
+              <div className="space-y-2 border-t border-gray-800 pt-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-300 font-semibold flex items-center space-x-1.5">
+                    <i className="fas fa-tag text-[10px]"></i>
+                    <span>Title / Label Font Size</span>
+                  </span>
+                  <span className="text-xs font-mono font-bold text-slate-300">
+                    {formData.labelFontSize ?? 11} px
+                  </span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setFormData((prev: any) => ({ ...prev, labelFontSize: Math.max(8, (parseInt(String(prev.labelFontSize ?? 11)) || 11) - 1) }))}
+                      className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-black text-base flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <i className="fas fa-minus text-xs"></i>
+                    </button>
+                    <input
+                      type="number"
+                      min="8"
+                      max="32"
+                      name="labelFontSize"
+                      value={formData.labelFontSize ?? 11}
+                      onChange={(e) => setFormData((prev: any) => ({ ...prev, labelFontSize: Math.max(8, Math.min(32, parseInt(e.target.value) || 11)) }))}
+                      className="w-14 bg-transparent text-center text-white font-mono font-bold text-xs outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setFormData((prev: any) => ({ ...prev, labelFontSize: Math.min(32, (parseInt(String(prev.labelFontSize ?? 11)) || 11) + 1) }))}
+                      className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-black text-base flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <i className="fas fa-plus text-xs"></i>
+                    </button>
+                  </div>
+                  <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                    {[9, 10, 11, 12, 14, 16].map(size => (
+                      <button
+                        key={size}
+                        type="button"
+                        onClick={() => setFormData((prev: any) => ({ ...prev, labelFontSize: size }))}
+                        className={`px-2 py-1 rounded text-xs font-mono transition-all cursor-pointer ${
+                          (parseInt(String(formData.labelFontSize ?? 11)) || 11) === size
+                            ? 'bg-slate-700 text-white border border-slate-500 font-bold shadow'
+                            : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-slate-200'
+                        }`}
+                      >
+                        {size}px
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ─── PROCESS VALUE FONT SIZE & TYPOGRAPHY (RETRACTABLE, FOR GAUGES & OTHER ELEMENTS) ─── */}
       {!isStaticText && !isClock && !isPipe && !isShape && !isScreenJump && !isActuallyLED && !isActuallySwitch && (
         <div className="bg-[#0d1520] rounded-xl border border-sky-500/40 shadow-inner overflow-hidden transition-all">
@@ -414,7 +764,14 @@ export const PanelAppearanceSection: React.FC<PanelAppearanceSectionProps> = ({
                 <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800 shrink-0">
                   <button
                     type="button"
-                    onClick={() => setFormData((prev: any) => ({ ...prev, fontSize: Math.max(8, (parseInt(String(prev.fontSize ?? 18)) || 18) - 2) }))}
+                    onClick={() => setFormData((prev: any) => {
+                      const next = Math.max(8, (parseInt(String(prev.fontSize ?? 18)) || 18) - 2);
+                      return {
+                        ...prev,
+                        fontSize: next,
+                        inputFontSize: prev.type === PanelType.TEXT_INPUT ? next : prev.inputFontSize
+                      };
+                    })}
                     className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-sky-400 font-black text-base flex items-center justify-center transition-colors cursor-pointer"
                     title="Decrease Font Size (-2px)"
                   >
@@ -427,13 +784,27 @@ export const PanelAppearanceSection: React.FC<PanelAppearanceSectionProps> = ({
                     max="120"
                     name="fontSize"
                     value={formData.fontSize ?? 18}
-                    onChange={(e) => setFormData((prev: any) => ({ ...prev, fontSize: parseInt(e.target.value) || 18 }))}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 18;
+                      setFormData((prev: any) => ({
+                        ...prev,
+                        fontSize: val,
+                        inputFontSize: prev.type === PanelType.TEXT_INPUT ? val : prev.inputFontSize
+                      }));
+                    }}
                     className="w-14 bg-transparent text-center text-white font-mono font-bold text-xs outline-none"
                   />
 
                   <button
                     type="button"
-                    onClick={() => setFormData((prev: any) => ({ ...prev, fontSize: Math.min(120, (parseInt(String(prev.fontSize ?? 18)) || 18) + 2) }))}
+                    onClick={() => setFormData((prev: any) => {
+                      const next = Math.min(120, (parseInt(String(prev.fontSize ?? 18)) || 18) + 2);
+                      return {
+                        ...prev,
+                        fontSize: next,
+                        inputFontSize: prev.type === PanelType.TEXT_INPUT ? next : prev.inputFontSize
+                      };
+                    })}
                     className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-sky-400 font-black text-base flex items-center justify-center transition-colors cursor-pointer"
                     title="Increase Font Size (+2px)"
                   >
@@ -446,7 +817,11 @@ export const PanelAppearanceSection: React.FC<PanelAppearanceSectionProps> = ({
                     <button
                       key={size}
                       type="button"
-                      onClick={() => setFormData((prev: any) => ({ ...prev, fontSize: size }))}
+                      onClick={() => setFormData((prev: any) => ({
+                        ...prev,
+                        fontSize: size,
+                        inputFontSize: prev.type === PanelType.TEXT_INPUT ? size : prev.inputFontSize
+                      }))}
                       className={`px-2 py-1 rounded text-xs font-mono transition-all cursor-pointer ${
                         (parseInt(String(formData.fontSize ?? 18)) || 18) === size
                           ? 'bg-sky-500/30 text-sky-200 border border-sky-500/80 font-bold'

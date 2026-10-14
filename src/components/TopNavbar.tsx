@@ -510,6 +510,15 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
             </button>
             <button
               type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent('hmi-toggle-fill-mode'))}
+              className="flex items-center space-x-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 px-3 h-10 rounded-xl text-xs font-extrabold transition-all cursor-pointer shrink-0"
+              title="Toggle Fill 100% / Stretch Mode (Fills 100% of screen with zero dead borders)"
+            >
+              <i className="fas fa-up-right-and-down-left-from-center text-xs text-emerald-400"></i>
+              <span className="hidden md:inline">Fill 100%</span>
+            </button>
+            <button
+              type="button"
               onClick={handleExitFullscreen}
               className="flex items-center space-x-1.5 bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 px-3 h-10 rounded-xl text-xs font-extrabold transition-all cursor-pointer shrink-0"
               title="Exit Full Screen Mode"

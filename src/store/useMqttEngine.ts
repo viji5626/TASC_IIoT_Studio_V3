@@ -302,7 +302,12 @@ export function useMqttEngine({
     const topicsToSubscribe = new Set<string>();
 
     appState.panels.forEach(panel => {
-      const rawTopics = [panel.topic?.trim(), panel.publishTopic?.trim(), panel.tripTopic?.trim()].filter(Boolean) as string[];
+      // Only subscribe to read telemetry topics (and multi-pen / trip topics).
+      // Do NOT subscribe to publishTopic if panel.topic is already specified,
+      // as publishTopic is for write commands; subscribing causes unnecessary loopback echoes.
+      const readTopic = panel.topic?.trim() || (!panel.topic?.trim() ? panel.publishTopic?.trim() : undefined);
+      const penTopics = (panel.pens || []).map(p => p.topic?.trim()).filter(Boolean) as string[];
+      const rawTopics = [readTopic, ...penTopics, panel.tripTopic?.trim()].filter(Boolean) as string[];
       rawTopics.forEach(rawTopic => {
         topicsToSubscribe.add(rawTopic);
         if (activeDashboard?.prefixTopic) {
@@ -479,19 +484,31 @@ export function useMqttEngine({
       });
 
       if (isMatch) {
+        // If the panel has a dedicated read topic or driver read tag, its live value
+        // MUST update "as per tag" (i.e. strictly when the device confirms via read topic/tag).
+        // Optimistic update of `val` should ONLY happen if there is no separate read topic/tag.
+        const hasDedicatedReadTag = Boolean(
+          (p.topic && p.topic.trim() && p.topic.trim() !== (p.publishTopic || '').trim()) ||
+          (p.dataSourceMode === 'driver' && p.driverTagId && p.driverTagId !== p.driverWriteTagId)
+        );
+
         let extractedVal: any = payload;
-        if (p.isJSONPayload || p.jsonPath || (typeof payload === 'string' && (payload.startsWith('{') || payload.startsWith('[')))) {
-          const parsed = getJsonValue(payload, p.jsonPath || '');
-          if (parsed !== undefined) {
-            extractedVal = parsed;
+        if (!hasDedicatedReadTag) {
+          if (p.isJSONPayload || p.jsonPath || (typeof payload === 'string' && (payload.startsWith('{') || payload.startsWith('[')))) {
+            const parsed = getJsonValue(payload, p.jsonPath || '');
+            if (parsed !== undefined) {
+              extractedVal = parsed;
+            }
           }
         }
+
         setLatestValues(prev => {
           const existing = prev[p.panelId];
           return {
             ...prev,
             [p.panelId]: {
-              val: extractedVal,
+              ...(existing || {}),
+              val: hasDedicatedReadTag ? (existing?.val ?? extractedVal) : extractedVal,
               time: existing?.time || '',
               sentTime: timeStr
             }

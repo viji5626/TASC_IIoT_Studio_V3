@@ -16,6 +16,8 @@ export interface CoachMarkStep {
 }
 
 const STORAGE_PREFIX = 'tasc_tour_suppressed_';
+export const ALL_TOURS_SUPPRESSED_KEY = 'tasc_all_tours_suppressed';
+export const GLOBAL_TOUR_COMPLETED_KEY = 'tasc_product_tour_completed';
 
 /**
  * Fast O(1) check (< 0.1ms) to determine if a tour was permanently suppressed by the user.
@@ -23,6 +25,20 @@ const STORAGE_PREFIX = 'tasc_tour_suppressed_';
 export function isTourSuppressed(tourId: string): boolean {
   if (typeof localStorage === 'undefined') return false;
   try {
+    // If master suppression is active, all tours are suppressed across entire software
+    if (localStorage.getItem(ALL_TOURS_SUPPRESSED_KEY) === '1') {
+      return true;
+    }
+    // For global main tour, check both suppression key and completed flag
+    if (tourId === 'global') {
+      if (
+        localStorage.getItem(STORAGE_PREFIX + 'global') === '1' ||
+        localStorage.getItem(GLOBAL_TOUR_COMPLETED_KEY) === 'true' ||
+        localStorage.getItem(GLOBAL_TOUR_COMPLETED_KEY) === '1'
+      ) {
+        return true;
+      }
+    }
     return localStorage.getItem(STORAGE_PREFIX + tourId) === '1';
   } catch {
     return false;
@@ -37,11 +53,51 @@ export function setTourSuppressed(tourId: string, suppressed: boolean): void {
   try {
     if (suppressed) {
       localStorage.setItem(STORAGE_PREFIX + tourId, '1');
+      if (tourId === 'global') {
+        localStorage.setItem(GLOBAL_TOUR_COMPLETED_KEY, 'true');
+      }
     } else {
       localStorage.removeItem(STORAGE_PREFIX + tourId);
+      if (tourId === 'global') {
+        localStorage.removeItem(GLOBAL_TOUR_COMPLETED_KEY);
+      }
     }
   } catch (e) {
     console.warn('[TourRegistry] Failed to save tour state:', e);
+  }
+}
+
+/**
+ * Checks whether all tours across the entire software are suppressed.
+ */
+export function isAllToursSuppressed(): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  try {
+    return localStorage.getItem(ALL_TOURS_SUPPRESSED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Sets or clears the master suppression flag for all tours across the entire software.
+ */
+export function setAllToursSuppressed(suppressed: boolean): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    if (suppressed) {
+      localStorage.setItem(ALL_TOURS_SUPPRESSED_KEY, '1');
+      localStorage.setItem(GLOBAL_TOUR_COMPLETED_KEY, 'true');
+      localStorage.setItem(STORAGE_PREFIX + 'global', '1');
+      Object.keys(ALL_SUBMODULE_TOURS).forEach(id => {
+        localStorage.setItem(STORAGE_PREFIX + id, '1');
+      });
+    } else {
+      localStorage.removeItem(ALL_TOURS_SUPPRESSED_KEY);
+      resetAllTourSuppressions();
+    }
+  } catch (e) {
+    console.warn('[TourRegistry] Failed to save all tours suppression state:', e);
   }
 }
 
@@ -51,6 +107,8 @@ export function setTourSuppressed(tourId: string, suppressed: boolean): void {
 export function resetAllTourSuppressions(): void {
   if (typeof localStorage === 'undefined') return;
   try {
+    localStorage.removeItem(ALL_TOURS_SUPPRESSED_KEY);
+    localStorage.removeItem(GLOBAL_TOUR_COMPLETED_KEY);
     const keysToRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);

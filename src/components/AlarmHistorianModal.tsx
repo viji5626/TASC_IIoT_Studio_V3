@@ -61,12 +61,15 @@ export const AlarmHistorianModal: React.FC<AlarmHistorianModalProps> = ({
   };
 
   useEffect(() => {
+    if (isOpen && !isTourSuppressed('alarm_historian')) {
+      setIsAhTourOpen(true);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
     if (isOpen) {
       setCurrentConfig(getHistorianConfig());
       refreshData();
-      if (!isTourSuppressed('alarm_historian')) {
-        setIsAhTourOpen(true);
-      }
       const interval = setInterval(refreshData, 1000);
       return () => clearInterval(interval);
     }

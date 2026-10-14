@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { AppView } from '../types';
-import { CoachMarkStep, ALL_SUBMODULE_TOURS, isTourSuppressed, setTourSuppressed } from '../utils/tourRegistry';
+import {
+  CoachMarkStep,
+  ALL_SUBMODULE_TOURS,
+  isTourSuppressed,
+  setTourSuppressed,
+  isAllToursSuppressed,
+  setAllToursSuppressed
+} from '../utils/tourRegistry';
 
 interface CoachMarkOverlayProps {
   tourId?: string;
@@ -33,7 +40,8 @@ export const CoachMarkOverlay: React.FC<CoachMarkOverlayProps> = ({
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [cutoutRect, setCutoutRect] = useState<RectState | null>(null);
   const [cardPos, setCardPos] = useState<{ top: number; left: number }>({ top: 120, left: 100 });
-  const [dontShowAgain, setDontShowAgain] = useState<boolean>(false);
+  const [dontShowAgain, setDontShowAgain] = useState<boolean>(true);
+  const [dontShowAnyTours, setDontShowAnyTours] = useState<boolean>(() => isAllToursSuppressed());
   const cardRef = useRef<HTMLDivElement>(null);
 
   // Determine active steps from registry or props
@@ -62,7 +70,8 @@ export const CoachMarkOverlay: React.FC<CoachMarkOverlayProps> = ({
   useEffect(() => {
     if (isOpen) {
       setCurrentStepIndex(0);
-      setDontShowAgain(isTourSuppressed(tourId));
+      setDontShowAgain(true);
+      setDontShowAnyTours(isAllToursSuppressed());
     }
   }, [isOpen, tourId]);
 
@@ -165,13 +174,15 @@ export const CoachMarkOverlay: React.FC<CoachMarkOverlayProps> = ({
     }
   };
 
-  const handleComplete = () => {
-    // Only permanently suppress if the user checked "Don't show me next time"
-    if (dontShowAgain) {
+  const handleComplete = (isSkipping: boolean = false) => {
+    // Suppress if the user checked "Don't show this tour next time" or if they explicitly skipped
+    if (dontShowAgain || isSkipping) {
       setTourSuppressed(tourId, true);
     } else {
-      // If unchecked, leave unsuppressed so browser reminds them next time
       setTourSuppressed(tourId, false);
+    }
+    if (dontShowAnyTours) {
+      setAllToursSuppressed(true);
     }
     onClose();
   };
@@ -266,7 +277,7 @@ export const CoachMarkOverlay: React.FC<CoachMarkOverlayProps> = ({
 
           <button
             type="button"
-            onClick={handleComplete}
+            onClick={() => handleComplete(true)}
             className="text-xs font-semibold text-slate-400 hover:text-white px-2 py-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
           >
             Skip <i className="fas fa-xmark ml-0.5 text-[11px]"></i>
@@ -300,16 +311,38 @@ export const CoachMarkOverlay: React.FC<CoachMarkOverlayProps> = ({
           </div>
         )}
 
-        {/* "Don't show me next time" checkbox */}
-        <div className="pt-1 flex items-center justify-between">
-          <label className="flex items-center space-x-2 text-xs text-slate-400 hover:text-slate-300 cursor-pointer select-none">
+        {/* "Don't show me next time" & Entire Software suppression */}
+        <div className="pt-2 flex flex-col space-y-1.5 border-t border-slate-800/70">
+          <label className="flex items-center space-x-2 text-xs text-slate-300 hover:text-white cursor-pointer select-none">
             <input
               type="checkbox"
               checked={dontShowAgain}
-              onChange={(e) => setDontShowAgain(e.target.checked)}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setDontShowAgain(checked);
+                setTourSuppressed(tourId, checked);
+              }}
               className="rounded border-slate-700 bg-slate-800 text-sky-500 focus:ring-0 cursor-pointer"
             />
             <span>Don't show this tour next time</span>
+          </label>
+
+          <label className="flex items-center space-x-2 text-[11px] text-slate-400 hover:text-slate-200 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={dontShowAnyTours}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setDontShowAnyTours(checked);
+                setAllToursSuppressed(checked);
+                if (checked) {
+                  setDontShowAgain(true);
+                  setTourSuppressed(tourId, true);
+                }
+              }}
+              className="rounded border-slate-700 bg-slate-800 text-amber-500 focus:ring-0 cursor-pointer"
+            />
+            <span>Disable all tours across entire software</span>
           </label>
         </div>
 

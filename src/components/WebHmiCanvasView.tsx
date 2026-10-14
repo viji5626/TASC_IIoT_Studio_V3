@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Panel, PanelType, AppState, SvgSubPartConfig, DynamicBehaviorRule, DynamicPropertyType, ProductEdition } from '../types';
+import { Panel, PanelType, AppState, SvgSubPartConfig, DynamicBehaviorRule, DynamicPropertyType, ProductEdition, Dashboard, CanvasFitMode, CanvasAlignMode } from '../types';
 import KeypadModal from './KeypadModal';
 import { SymbolLibraryModal, IndustrialSymbolItem, convertSvgToPngDataUrl } from './SymbolLibraryModal';
 import { DynamicIndustrialSymbol } from './DynamicIndustrialSymbol';
@@ -22,6 +22,7 @@ import { ProjectLibraryBrowser } from '../3d/library/ProjectLibraryBrowser';
 import { ProjectLibrary } from '../3d/library/ProjectLibrary';
 
 import { useAppStore } from '../store/useAppStore';
+import { generateUniqueId, deepClone } from '../utils/idGenerator';
 
 interface WebHmiCanvasViewProps {
   appState?: AppState;
@@ -76,10 +77,49 @@ const format24HourTime = (timeStr?: string): string => {
 
 const formatConciseTime = format24HourTime;
 
+export const formatProcessValue = (val: any, precision: number | string | undefined = 2): string => {
+  if (val === undefined || val === null || val === '') return '';
+  if (precision === 'none' || precision === 'None') {
+    return String(val);
+  }
+  const num = Number(val);
+  if (isNaN(num)) {
+    return String(val);
+  }
+  const p = precision === undefined || precision === '' ? 2 : Number(precision);
+  if (isNaN(p)) {
+    return String(val);
+  }
+  const clamped = Math.max(0, Math.min(12, Math.round(p)));
+  return num.toFixed(clamped);
+};
+
 const DEMO_PRESETS = [
   { id: 'water_air_sample', title: 'Water & Air Sample System', icon: 'fa-droplet', bgClass: 'bg-sky-500/20', textClass: 'text-sky-400', elementCount: 9, desc: 'Pumps, water tank levels, flow rate indicators, ambient temperature, humidity, and exhaust fans' },
   { id: 'smarthome', title: 'Smart Home & HVAC', icon: 'fa-house-signal', bgClass: 'bg-amber-500/20', textClass: 'text-amber-400', elementCount: 7, desc: 'AC temperature setpoint, ceiling fans, ambient lighting, scene selectors, and HVAC mode buttons' },
   { id: 'hvac', title: 'Commercial AHU Unit', icon: 'fa-wind', bgClass: 'bg-cyan-500/20', textClass: 'text-cyan-400', elementCount: 6, desc: 'Supply blower fan, duct static pressure gauge, air damper position, and operational multi-state mode' }
+];
+
+export interface ResolutionPreset {
+  id: string;
+  name: string;
+  shortName: string;
+  width: number;
+  height: number;
+  aspect: string;
+  badge?: string;
+}
+
+export const CANVAS_RESOLUTION_PRESETS: ResolutionPreset[] = [
+  { id: 'dynamic', name: 'Auto (Content Bounds)', shortName: 'Auto', width: 0, height: 0, aspect: 'Auto' },
+  { id: '1920x1080', name: '1920 × 1080 (16:9 FHD)', shortName: '1920×1080', width: 1920, height: 1080, aspect: '16:9', badge: 'FHD' },
+  { id: '1366x768', name: '1366 × 768 (16:9 HMI)', shortName: '1366×768', width: 1366, height: 768, aspect: '16:9', badge: 'HMI' },
+  { id: '1280x800', name: '1280 × 800 (16:10 Panel)', shortName: '1280×800', width: 1280, height: 800, aspect: '16:10', badge: '16:10' },
+  { id: '1024x768', name: '1024 × 768 (4:3 Classic)', shortName: '1024×768', width: 1024, height: 768, aspect: '4:3', badge: '4:3' },
+  { id: '800x480', name: '800 × 480 (5:3 7" HMI)', shortName: '800×480', width: 800, height: 480, aspect: '5:3', badge: '7" HMI' },
+  { id: '2560x1440', name: '2560 × 1440 (16:9 2K QHD)', shortName: '2560×1440', width: 2560, height: 1440, aspect: '16:9', badge: '2K' },
+  { id: '3840x2160', name: '3840 × 2160 (16:9 4K UHD)', shortName: '3840×2160', width: 3840, height: 2160, aspect: '16:9', badge: '4K' },
+  { id: 'custom', name: 'Custom Resolution...', shortName: 'Custom', width: 1920, height: 1080, aspect: 'Custom' }
 ];
 
 export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
@@ -222,6 +262,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   // Canvas DOM container ref
   const canvasRef = useRef<HTMLDivElement>(null);
 
+  // Cooldown tracker for toggle button and switch clicks to avoid switch bounce and double-clicks
+  const lastToggleClickTimeRef = useRef<Record<string, number>>({});
+
   // Canvas zoom & pan state
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
   const [panPosition, setPanPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -235,15 +278,57 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     height: typeof window !== 'undefined' ? window.innerHeight : 750
   });
 
+  // Current active dashboard resolution & display fit settings
+  const activeDashboard = useMemo(() => {
+    return appState.dashboards.find(d => d.dashboardId === activeDashboardId) || appState.dashboards[0];
+  }, [appState.dashboards, activeDashboardId]);
+
+  const updateDashboardCanvasSettings = useCallback((updates: Partial<Dashboard>) => {
+    if (!onUpdateAppState) return;
+    const updatedDashboards = appState.dashboards.map(d => {
+      if (d.dashboardId === activeDashboardId) {
+        return { ...d, ...updates };
+      }
+      return d;
+    });
+    onUpdateAppState({ ...appState, dashboards: updatedDashboards });
+  }, [appState, activeDashboardId, onUpdateAppState]);
+
+  const targetResolution = activeDashboard?.targetResolution || 'dynamic';
+  const customCanvasWidth = activeDashboard?.canvasWidth;
+  const customCanvasHeight = activeDashboard?.canvasHeight;
+  const canvasFitMode: CanvasFitMode = activeDashboard?.canvasFitMode || 'uniform';
+  const canvasAlign: CanvasAlignMode = activeDashboard?.canvasAlign || 'top'; // Default top-flush for Industrial SCADA
+
+  const activeResolutionPreset = useMemo(() => {
+    return CANVAS_RESOLUTION_PRESETS.find(p => p.id === targetResolution) || CANVAS_RESOLUTION_PRESETS[0];
+  }, [targetResolution]);
+
+  const isFixedResolution = targetResolution !== 'dynamic';
+  const fixedWidth = targetResolution === 'custom'
+    ? (customCanvasWidth || 1920)
+    : activeResolutionPreset.width;
+  const fixedHeight = targetResolution === 'custom'
+    ? (customCanvasHeight || 1080)
+    : activeResolutionPreset.height;
+
   useEffect(() => {
     const handleRestoreEvent = () => {
       setIsAutoFit(true);
       setZoomLevel(1.0);
       setPanPosition({ x: 0, y: 0 });
     };
+    const handleToggleFillEvent = () => {
+      const nextMode: CanvasFitMode = canvasFitMode === 'stretch' ? 'uniform' : 'stretch';
+      updateDashboardCanvasSettings({ canvasFitMode: nextMode });
+    };
     window.addEventListener('hmi-restore-autofit', handleRestoreEvent);
-    return () => window.removeEventListener('hmi-restore-autofit', handleRestoreEvent);
-  }, []);
+    window.addEventListener('hmi-toggle-fill-mode', handleToggleFillEvent);
+    return () => {
+      window.removeEventListener('hmi-restore-autofit', handleRestoreEvent);
+      window.removeEventListener('hmi-toggle-fill-mode', handleToggleFillEvent);
+    };
+  }, [canvasFitMode, updateDashboardCanvasSettings]);
 
   useEffect(() => {
     const updateDimensions = () => {
@@ -271,10 +356,23 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     return appState.panels.filter(p => p.dashboardId === activeDashboardId);
   }, [appState.panels, activeDashboardId]);
 
-  // Dynamic Content Bounding Box Calculation (Scans Top-Left to Bottom-Right of all elements on screen)
+  // Dynamic Content Bounding Box Calculation (Target Resolution if specified, otherwise auto-scan)
   const contentBounds = useMemo(() => {
+    if (isFixedResolution && fixedWidth > 0 && fixedHeight > 0) {
+      return {
+        minX: 0,
+        minY: 0,
+        maxX: fixedWidth,
+        maxY: fixedHeight,
+        width: fixedWidth,
+        height: fixedHeight,
+        totalW: fixedWidth,
+        totalH: fixedHeight
+      };
+    }
+
     if (activeScreenPanels.length === 0) {
-      return { width: 1000, height: 580, totalW: 1000, totalH: 580 };
+      return { width: 1000, height: 580, totalW: 1000, totalH: 580, minX: 0, minY: 0, maxX: 1000, maxY: 580 };
     }
 
     let minX = Infinity;
@@ -313,42 +411,96 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       totalW,
       totalH
     };
-  }, [activeScreenPanels]);
+  }, [activeScreenPanels, isFixedResolution, fixedWidth, fixedHeight]);
 
-  // Auto-Fit Scale: Dynamically calculates exact scale factor to fit HMI canvas inside screen without bottom/side overflow
-  const autoFitScale = useMemo(() => {
-    if (containerDimensions.width <= 0 || containerDimensions.height <= 0) return 1.0;
+  // Auto-Fit Scales: Dynamically calculates exact scale factor to fit HMI canvas inside screen without overflow
+  const autoFitScales = useMemo(() => {
+    if (containerDimensions.width <= 0 || containerDimensions.height <= 0) {
+      return { scaleX: 1.0, scaleY: 1.0, uniformScale: 1.0 };
+    }
 
-    // Apply 12px cushion to guarantee 100% visibility of all bottom tables, legends, and side elements
-    const availW = Math.max(100, containerDimensions.width - 12);
-    const availH = Math.max(100, containerDimensions.height - 12);
+    // In stretch / fill mode, use 100% of available viewport with 0px cushion for zero wasted space!
+    const isStretch = canvasFitMode === 'stretch';
+    const cushion = isStretch ? 0 : 2;
 
-    const scaleX = availW / contentBounds.totalW;
-    const scaleY = availH / contentBounds.totalH;
+    const availW = Math.max(100, containerDimensions.width - cushion);
+    const availH = Math.max(100, containerDimensions.height - cushion);
 
-    // Strictly enforce Math.min(scaleX, scaleY) so scaled height/width NEVER exceeds available viewport
-    const fit = Math.min(scaleX, scaleY);
+    const scaleX = availW / (contentBounds.totalW || 1);
+    const scaleY = availH / (contentBounds.totalH || 1);
 
-    return Math.max(0.1, Math.min(3.0, fit));
-  }, [containerDimensions, contentBounds]);
+    const uniformScale = Math.max(0.1, Math.min(3.0, Math.min(scaleX, scaleY)));
 
-  // Effective Scale applied to canvas container
-  const effectiveScale = isAutoFit ? autoFitScale * zoomLevel : zoomLevel;
+    return {
+      scaleX: Math.max(0.1, Math.min(3.0, scaleX)),
+      scaleY: Math.max(0.1, Math.min(3.0, scaleY)),
+      uniformScale
+    };
+  }, [containerDimensions, contentBounds, canvasFitMode]);
 
-  // Auto-Fit Offset Position with 0px minimum margin (flush to edges)
+  // Effective Scale applied to canvas container in X and Y
+  const { effectiveScaleX, effectiveScaleY } = useMemo(() => {
+    if (!isAutoFit) {
+      return { effectiveScaleX: zoomLevel, effectiveScaleY: zoomLevel };
+    }
+
+    switch (canvasFitMode) {
+      case 'stretch':
+        return {
+          effectiveScaleX: autoFitScales.scaleX * zoomLevel,
+          effectiveScaleY: autoFitScales.scaleY * zoomLevel
+        };
+      case 'fit_width':
+        return {
+          effectiveScaleX: autoFitScales.scaleX * zoomLevel,
+          effectiveScaleY: autoFitScales.scaleX * zoomLevel
+        };
+      case 'fit_height':
+        return {
+          effectiveScaleX: autoFitScales.scaleY * zoomLevel,
+          effectiveScaleY: autoFitScales.scaleY * zoomLevel
+        };
+      case 'none':
+        return {
+          effectiveScaleX: zoomLevel,
+          effectiveScaleY: zoomLevel
+        };
+      case 'uniform':
+      default:
+        return {
+          effectiveScaleX: autoFitScales.uniformScale * zoomLevel,
+          effectiveScaleY: autoFitScales.uniformScale * zoomLevel
+        };
+    }
+  }, [isAutoFit, canvasFitMode, autoFitScales, zoomLevel]);
+
+  // Backward compatibility shorthand
+  const effectiveScale = effectiveScaleX;
+
+  // Auto-Fit Offset Position
   const autoFitOffset = useMemo(() => {
     if (!isAutoFit || containerDimensions.width <= 0 || containerDimensions.height <= 0) {
       return { left: 0, top: 0 };
     }
-    const scaledW = contentBounds.totalW * effectiveScale;
-    const scaledH = contentBounds.totalH * effectiveScale;
 
-    // Flush placement centered within available viewport with 0px minimum margin
+    // Stretch / Fill mode fills 100% of viewport: flush 0, 0
+    if (canvasFitMode === 'stretch') {
+      return { left: 0, top: 0 };
+    }
+
+    const scaledW = contentBounds.totalW * effectiveScaleX;
+    const scaledH = contentBounds.totalH * effectiveScaleY;
+
+    // Horizontal centering
     const left = Math.max(0, (containerDimensions.width - scaledW) / 2);
-    const top = Math.max(0, (containerDimensions.height - scaledH) / 2);
+
+    // Vertical alignment: In SCADA, canvasAlign === 'top' (default) places content flush to top (top: 0)!
+    const top = canvasAlign === 'top'
+      ? 0
+      : Math.max(0, (containerDimensions.height - scaledH) / 2);
 
     return { left: Math.round(left), top: Math.round(top) };
-  }, [isAutoFit, containerDimensions, contentBounds, effectiveScale]);
+  }, [isAutoFit, containerDimensions, contentBounds, effectiveScaleX, effectiveScaleY, canvasFitMode, canvasAlign]);
 
   // Helper to convert screen mouse/pointer coordinates (clientX, clientY) into exact canvas local coordinates (x, y)
   const getCanvasCoords = useCallback((clientX: number, clientY: number) => {
@@ -360,11 +512,11 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     const offsetX = isAutoFit ? autoFitOffset.left : 0;
     const offsetY = isAutoFit ? autoFitOffset.top : 0;
 
-    const canvasX = (clientX - rect.left + scrollLeft - offsetX) / (effectiveScale || 1);
-    const canvasY = (clientY - rect.top + scrollTop - offsetY) / (effectiveScale || 1);
+    const canvasX = (clientX - rect.left + scrollLeft - offsetX) / (effectiveScaleX || 1);
+    const canvasY = (clientY - rect.top + scrollTop - offsetY) / (effectiveScaleY || 1);
 
     return { x: canvasX, y: canvasY };
-  }, [isAutoFit, autoFitOffset, effectiveScale]);
+  }, [isAutoFit, autoFitOffset, effectiveScaleX, effectiveScaleY]);
 
 
 
@@ -571,7 +723,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     if (!effectiveEditMode || isClientMode) return;
     if (selectedPanelIds.length === 0) return;
     const selected = appState.panels.filter(p => selectedPanelIds.includes(p.panelId));
-    const cloned = JSON.parse(JSON.stringify(selected));
+    const cloned = deepClone(selected);
     setClipboardPanels(cloned);
 
     try {
@@ -615,12 +767,12 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       const newIds: string[] = [];
 
       clipboardPanels.forEach(p => {
-        const newId = `p_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const newId = generateUniqueId('p');
         const deltaX = (p.x ?? 100) - minX;
         const deltaY = (p.y ?? 100) - minY;
 
         const pasted: Panel = {
-          ...JSON.parse(JSON.stringify(p)),
+          ...deepClone(p),
           panelId: newId,
           dashboardId: activeDashboardId,
           connectionId: activeConnId,
@@ -655,7 +807,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
             reader.onload = (ev) => {
               const dataUrl = ev.target?.result as string;
               if (dataUrl) {
-                const newId = `p_img_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+                const newId = generateUniqueId('p_img');
                 const newImgPanel: Panel = {
                   panelId: newId,
                   dashboardId: activeDashboardId,
@@ -703,12 +855,12 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   const newIds: string[] = [];
 
                   parsed.panels.forEach((p: any) => {
-                    const newId = `p_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+                    const newId = generateUniqueId('p');
                     const deltaX = (p.x ?? 100) - minX;
                     const deltaY = (p.y ?? 100) - minY;
 
                     const pasted: Panel = {
-                      ...JSON.parse(JSON.stringify(p)),
+                      ...deepClone(p),
                       panelId: newId,
                       dashboardId: activeDashboardId,
                       connectionId: activeConnId,
@@ -731,7 +883,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 }
               } catch { }
 
-              const newId = `p_txt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+              const newId = generateUniqueId('p_txt');
               const newTextPanel: Panel = {
                 panelId: newId,
                 dashboardId: activeDashboardId,
@@ -778,12 +930,12 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
               const newIds: string[] = [];
 
               parsed.panels.forEach((p: any) => {
-                const newId = `p_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+                const newId = generateUniqueId('p');
                 const deltaX = (p.x ?? 100) - minX;
                 const deltaY = (p.y ?? 100) - minY;
 
                 const pasted: Panel = {
-                  ...JSON.parse(JSON.stringify(p)),
+                  ...deepClone(p),
                   panelId: newId,
                   dashboardId: activeDashboardId,
                   connectionId: activeConnId,
@@ -806,7 +958,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
             }
           } catch { }
 
-          const newId = `p_txt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+          const newId = generateUniqueId('p_txt');
           const newTextPanel: Panel = {
             panelId: newId,
             dashboardId: activeDashboardId,
@@ -857,7 +1009,19 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     setTimeout(() => setPropertyCopiedToast(null), 2000);
   }, [deleteModalConfig, appState, updateAppStateWithHistory, onDeletePanel]);
 
-  // Global Keyboard Shortcut Listener for Undo, Redo, Cut, Copy, Paste, Duplicate, Delete
+  // Select All Elements
+  const handleSelectAll = useCallback(() => {
+    if (!effectiveEditMode || isClientMode) return;
+    const allIds = appState.panels.filter(p => p.dashboardId === activeDashboardId).map(p => p.panelId);
+    setSelectedPanelIds(allIds);
+    if (allIds.length > 0) setMasterPanelId(allIds[0]);
+  }, [effectiveEditMode, isClientMode, appState.panels, activeDashboardId]);
+
+  // Forward refs for Copy & Paste Visual Properties shortcuts
+  const handleCopyPropertiesRef = useRef<() => void>(() => {});
+  const handlePastePropertiesRef = useRef<() => void>(() => {});
+
+  // Global Keyboard Shortcut Listener for Undo, Redo, Cut, Copy, Paste, Duplicate, Delete, Format Painter
   useEffect(() => {
     const handleShortcut = (e: KeyboardEvent) => {
       if (!effectiveEditMode) return;
@@ -876,6 +1040,14 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
         } else if (e.key === 'y' || e.key === 'Y') {
           e.preventDefault();
           handleRedo();
+        } else if ((e.key === 'c' || e.key === 'C') && e.shiftKey) {
+          // Format Painter: Copy Visual Properties
+          e.preventDefault();
+          handleCopyPropertiesRef.current();
+        } else if ((e.key === 'v' || e.key === 'V') && e.shiftKey) {
+          // Format Painter: Paste Visual Properties
+          e.preventDefault();
+          handlePastePropertiesRef.current();
         } else if (e.key === 'c' || e.key === 'C') {
           e.preventDefault();
           handleCopySelected();
@@ -885,6 +1057,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
         } else if (e.key === 'v' || e.key === 'V') {
           e.preventDefault();
           handlePasteFromClipboard();
+        } else if (e.key === 'a' || e.key === 'A') {
+          e.preventDefault();
+          handleSelectAll();
         }
       } else if (e.key === 'Delete' || e.key === 'Backspace' || e.code === 'Delete' || e.code === 'Backspace') {
         if (selectedPanelIds.length > 0) {
@@ -902,7 +1077,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     };
     window.addEventListener('keydown', handleShortcut);
     return () => window.removeEventListener('keydown', handleShortcut);
-  }, [effectiveEditMode, handleUndo, handleRedo, handleCopySelected, handleCutSelected, handlePasteFromClipboard, selectedPanelIds, appState.panels]);
+  }, [effectiveEditMode, handleUndo, handleRedo, handleCopySelected, handleCutSelected, handlePasteFromClipboard, handleSelectAll, selectedPanelIds, appState.panels]);
 
   // Global Window Paste Event Listener for External Images & Text
   useEffect(() => {
@@ -922,7 +1097,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
           reader.onload = (ev) => {
             const dataUrl = ev.target?.result as string;
             if (dataUrl) {
-              const newId = `p_img_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+              const newId = generateUniqueId('p_img');
               const newImgPanel: Panel = {
                 panelId: newId,
                 dashboardId: activeDashboardId,
@@ -1040,7 +1215,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   // Add Geometrical / Vector Shape to Canvas
   const handleAddVectorShape = (shapeTypeVal: string) => {
     if (!shapeTypeVal) return;
-    const newId = `p_shape_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const newId = generateUniqueId('p_shape');
     const activeConnId = appState.connections?.[0]?.connectionId || '';
 
     let defaultPoints: Array<{ x: number; y: number }> | undefined;
@@ -1130,6 +1305,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   const [draggingMotionHandle, setDraggingMotionHandle] = useState<{ panelId: string; nodeIndex: number } | null>(null);
   const hasDraggedMarqueeRef = useRef(false);
   const justFinishedMarqueeRef = useRef(false);
+  const marqueeStartPosRef = useRef<{ startX: number; startY: number } | null>(null);
+  // Aspect ratio lock state for multi-selection / group scaling (Default ON = No distortion / No stretching)
+  const [lockGroupRatio, setLockGroupRatio] = useState<boolean>(true);
 
   const dragStartPos = useRef<{
     mouseX: number;
@@ -1141,35 +1319,45 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     initialPositions: {}
   });
 
-  // Canvas Mouse Down: Supports Panning (Pan Tool, Middle Click, Spacebar, Zoom > 1x) and Marquee Selection
+  // Canvas Mouse Down: Supports Panning (Pan Tool, Middle Click, Spacebar, Zoom > 1x in Client Mode) and Marquee Selection
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
-    const isCanvasSelf = target === canvasRef.current || target.id === 'hmi-canvas-background' || target.dataset.canvasBg === 'true';
+    const isPanelOrInteractive = Boolean(
+      target.closest('[id^="hmi-panel-"]') ||
+      target.closest('[data-panel-id]') ||
+      target.closest('.gizmo-handle') ||
+      target.closest('button') ||
+      target.closest('input') ||
+      target.closest('select') ||
+      target.closest('textarea')
+    );
+    const isCanvasTarget = !isPanelOrInteractive && (canvasRef.current?.contains(target) ?? false);
 
-    // Panning activation: Middle click (button 1), Pan Mode enabled, Spacebar pressed, or Left drag on background when zoom > 1x
-    if (e.button === 1 || isPanMode || isSpacePressed || (e.button === 0 && zoomLevel > 1.0 && isCanvasSelf)) {
+    // Panning activation: Middle click (button 1), Pan Mode enabled, Spacebar pressed, or Left drag on background when client/view mode and zoom > 1x
+    const shouldPan = e.button === 1 || isPanMode || isSpacePressed || (!effectiveEditMode && e.button === 0 && zoomLevel > 1.0 && isCanvasTarget);
+    if (shouldPan) {
       e.preventDefault();
       startPanning(e.clientX, e.clientY);
-      if (e.button === 1 || isPanMode || isSpacePressed) {
-        return;
-      }
+      return;
     }
 
-    if (!effectiveEditMode || e.button !== 0) return;
+    if (!effectiveEditMode || e.button !== 0 || !isCanvasTarget) return;
 
-    if (isCanvasSelf) {
-      if (contextMenu.isOpen) setContextMenu({ isOpen: false, x: 0, y: 0 });
+    // Prevent default browser text selection & ghost dragging on empty canvas
+    e.preventDefault();
 
-      const { x: startX, y: startY } = getCanvasCoords(e.clientX, e.clientY);
+    if (contextMenu.isOpen) setContextMenu({ isOpen: false, x: 0, y: 0 });
 
-      hasDraggedMarqueeRef.current = false;
-      setIsMarqueeSelecting(true);
-      setMarqueeRect({ startX, startY, currentX: startX, currentY: startY });
+    const { x: startX, y: startY } = getCanvasCoords(e.clientX, e.clientY);
 
-      if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
-        setSelectedPanelIds([]);
-        setMasterPanelId(null);
-      }
+    hasDraggedMarqueeRef.current = false;
+    marqueeStartPosRef.current = { startX, startY };
+    setIsMarqueeSelecting(true);
+    setMarqueeRect({ startX, startY, currentX: startX, currentY: startY });
+
+    if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
+      setSelectedPanelIds([]);
+      setMasterPanelId(null);
     }
   };
 
@@ -1229,7 +1417,6 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     setSelectedNodeInfo(null);
   };
 
-  const activeDashboard = appState.dashboards.find(d => d.dashboardId === activeDashboardId) || appState.dashboards[0];
   const panels = appState.panels.filter(p => p.dashboardId === activeDashboardId);
 
   const primarySelectedPanelId = masterPanelId && selectedPanelIds.includes(masterPanelId)
@@ -1343,13 +1530,156 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
   // Update canvas screen background color
   const updateCanvasBgColor = (color: string) => {
-    const updatedDashboards = appState.dashboards.map(d => {
-      if (d.dashboardId === activeDashboardId) {
-        return { ...d, bgColor: color, canvasBgColor: color };
+    updateDashboardCanvasSettings({ bgColor: color, canvasBgColor: color });
+  };
+
+  // Set target canvas resolution preset or custom dimensions
+  const handleSetTargetResolution = (presetId: string) => {
+    if (presetId === 'custom') {
+      const wStr = window.prompt('Enter Target Canvas Width in pixels (e.g. 1920):', String(customCanvasWidth || 1920));
+      if (!wStr) return;
+      const hStr = window.prompt('Enter Target Canvas Height in pixels (e.g. 1080):', String(customCanvasHeight || 1080));
+      if (!hStr) return;
+      const w = parseInt(wStr, 10);
+      const h = parseInt(hStr, 10);
+      if (!isNaN(w) && !isNaN(h) && w > 100 && h > 100) {
+        updateDashboardCanvasSettings({
+          targetResolution: 'custom',
+          canvasWidth: w,
+          canvasHeight: h
+        });
       }
-      return d;
+      return;
+    }
+
+    const preset = CANVAS_RESOLUTION_PRESETS.find(p => p.id === presetId);
+    if (!preset) return;
+
+    updateDashboardCanvasSettings({
+      targetResolution: preset.id,
+      canvasWidth: preset.width || undefined,
+      canvasHeight: preset.height || undefined
     });
-    onUpdateAppState({ ...appState, dashboards: updatedDashboards });
+  };
+
+  // Helper to scale layout to target resolution (supports uniform No-Stretch vs stretch)
+  const handleScaleLayoutToTarget = (mode: 'uniform' | 'stretch' = 'uniform') => {
+    if (!isFixedResolution || fixedWidth <= 0 || fixedHeight <= 0) return;
+    if (activeScreenPanels.length === 0) return;
+
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const p of activeScreenPanels) {
+      const right = Number(p.x || 0) + Number(p.w || 180);
+      const bottom = Number(p.y || 0) + Number(p.h || 60);
+      if (right > maxX) maxX = right;
+      if (bottom > maxY) maxY = bottom;
+    }
+    if (maxX <= 0 || maxY <= 0) return;
+
+    let scaleX = fixedWidth / maxX;
+    let scaleY = fixedHeight / maxY;
+
+    // UNIFORM PROPORTIONAL SCALE: Preserves aspect ratio 100% so gauges stay circular & nothing stretches!
+    if (mode === 'uniform') {
+      const uniform = Math.min(fixedWidth / maxX, fixedHeight / maxY);
+      scaleX = uniform;
+      scaleY = uniform;
+    }
+
+    const updatedPanels = appState.panels.map(p => {
+      if (p.dashboardId === activeDashboardId) {
+        const origW = Number(p.w || 180);
+        const origH = Number(p.h || 60);
+        let newW = Math.max(20, Math.round(origW * scaleX));
+        let newH = Math.max(20, Math.round(origH * scaleY));
+        let newX = Math.round(Number(p.x || 0) * scaleX);
+        let newY = Math.round(Number(p.y || 0) * scaleY);
+
+        // Circular widget preservation (gauges, circular shapes)
+        if (p.type === 'gauge' || p.displayType === 'gauge' || p.shapeType === 'circle') {
+          const gScale = Math.min(scaleX, scaleY);
+          newW = Math.round(origW * gScale);
+          newH = Math.round(origH * gScale);
+          newX += Math.round((origW * scaleX - newW) / 2);
+          newY += Math.round((origH * scaleY - newH) / 2);
+        }
+
+        return {
+          ...p,
+          x: newX,
+          y: newY,
+          w: newW,
+          h: newH
+        };
+      }
+      return p;
+    });
+
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
+  };
+
+  // Helper to scale currently selected panels to fill canvas resolution
+  const handleScaleSelectionToTarget = (mode: 'uniform' | 'stretch' = 'uniform') => {
+    if (selectedPanelIds.length < 2) return;
+    const targetW = isFixedResolution && fixedWidth > 0 ? fixedWidth : 1920;
+    const targetH = isFixedResolution && fixedHeight > 0 ? fixedHeight : 1080;
+
+    const selectedPanels = appState.panels.filter(p => selectedPanelIds.includes(p.panelId));
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    selectedPanels.forEach(p => {
+      const idx = panels.findIndex(item => item.panelId === p.panelId);
+      const pos = getPanelPos(p, idx);
+      if (pos.x < minX) minX = pos.x;
+      if (pos.y < minY) minY = pos.y;
+      if (pos.x + pos.w > maxX) maxX = pos.x + pos.w;
+      if (pos.y + pos.h > maxY) maxY = pos.y + pos.h;
+    });
+
+    const selW = maxX - minX;
+    const selH = maxY - minY;
+    if (selW <= 0 || selH <= 0) return;
+
+    let factorX = targetW / selW;
+    let factorY = targetH / selH;
+
+    if (mode === 'uniform') {
+      const uniform = Math.min(targetW / selW, targetH / selH);
+      factorX = uniform;
+      factorY = uniform;
+    }
+
+    const updatedPanels = appState.panels.map(p => {
+      if (!selectedPanelIds.includes(p.panelId)) return p;
+      const idx = panels.findIndex(item => item.panelId === p.panelId);
+      const pos = getPanelPos(p, idx);
+
+      const relX = pos.x - minX;
+      const relY = pos.y - minY;
+
+      let newX = minX + relX * factorX;
+      let newY = minY + relY * factorY;
+      let newW = pos.w * factorX;
+      let newH = pos.h * factorY;
+
+      if (p.type === 'gauge' || p.displayType === 'gauge' || p.shapeType === 'circle') {
+        const gScale = Math.min(factorX, factorY);
+        newW = pos.w * gScale;
+        newH = pos.h * gScale;
+        newX += (pos.w * factorX - newW) / 2;
+        newY += (pos.h * factorY - newH) / 2;
+      }
+
+      return {
+        ...p,
+        x: Math.max(0, Math.round(newX)),
+        y: Math.max(0, Math.round(newY)),
+        w: Math.max(20, Math.round(newW)),
+        h: Math.max(20, Math.round(newH))
+      };
+    });
+
+    updateAppStateWithHistory({ ...appState, panels: updatedPanels });
   };
 
   // Update selected panel properties
@@ -1368,56 +1698,201 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   const [copiedProperties, setCopiedProperties] = useState<Partial<Panel> | null>(null);
   const [propertyCopiedToast, setPropertyCopiedToast] = useState<string | null>(null);
 
-  // Copy & Paste Visual Formatting Properties
-  const handleCopyProperties = () => {
-    const targetPanel = selectedPanel || masterPanel;
+  // Copy & Paste Visual Formatting Properties (Full-Fledge: Style, Colors, Text, Icons, Dynamics)
+  const handleCopyProperties = useCallback(() => {
+    const targetPanel = (selectedPanelIds.length > 0
+      ? appState.panels.find(p => p.panelId === (masterPanelId || selectedPanelIds[0]))
+      : null) || selectedPanel || masterPanel;
     if (!targetPanel) return;
 
+    // Resolve effective typography
+    const effFontSize = targetPanel.fontSize !== undefined && targetPanel.fontSize !== ''
+      ? Number(targetPanel.fontSize)
+      : (targetPanel.type === PanelType.LED || targetPanel.type === PanelType.SWITCH
+          ? 12
+          : targetPanel.type === PanelType.STATIC_TEXT
+            ? 16
+            : targetPanel.type === PanelType.BUTTON
+              ? 13
+              : 14);
+
+    // Resolve icon properties if source element has icon capabilities (LED, symbols, action buttons)
+    const isLed = targetPanel.type === PanelType.LED;
+    const hasIconConfig = isLed ||
+      targetPanel.iconOn !== undefined ||
+      targetPanel.iconOff !== undefined ||
+      targetPanel.iconColorOn !== undefined ||
+      targetPanel.iconColorOff !== undefined;
+
+    const effIconOn = targetPanel.iconOn || (isLed ? 'fa-fan' : undefined);
+    const effIconOff = targetPanel.iconOff || effIconOn || (isLed ? 'fa-fan' : undefined);
+    const effIconColorOn = targetPanel.iconColorOn || (isLed ? '#10b981' : undefined);
+    const effIconColorOff = targetPanel.iconColorOff || (isLed ? '#475569' : undefined);
+    const effIconSize = targetPanel.iconSize !== undefined
+      ? Number(targetPanel.iconSize)
+      : (isLed ? 24 : undefined);
+
     const propsToCopy: Partial<Panel> = {
+      // 1. Box Model & Colors
       bgColor: targetPanel.bgColor,
-      textColor: targetPanel.textColor,
+      textColor: targetPanel.textColor || '#f8fafc',
       borderColor: targetPanel.borderColor,
-      borderWidth: targetPanel.borderWidth,
-      borderRadius: targetPanel.borderRadius,
-      opacity: targetPanel.opacity,
-      rotation: targetPanel.rotation,
-      shadowEnabled: targetPanel.shadowEnabled,
-      shadowColor: targetPanel.shadowColor,
-      shadowIntensity: targetPanel.shadowIntensity,
-      fontSize: targetPanel.fontSize,
+      borderWidth: targetPanel.borderWidth !== undefined ? targetPanel.borderWidth : 1,
+      borderRadius: targetPanel.borderRadius !== undefined ? targetPanel.borderRadius : 8,
+      opacity: targetPanel.opacity !== undefined ? targetPanel.opacity : 1,
+      rotation: targetPanel.rotation !== undefined ? targetPanel.rotation : 0,
+
+      // 2. Shadows & Glow Effects (Font Glow / Element Glow)
+      shadowEnabled: !!targetPanel.shadowEnabled,
+      shadowColor: targetPanel.shadowColor || '#38bdf8',
+      shadowIntensity: targetPanel.shadowIntensity !== undefined ? targetPanel.shadowIntensity : 15,
+
+      // 3. Typography & Text Formatting (Applies across all widgets: labels, inputs, banners)
+      fontSize: effFontSize,
       fontFamily: targetPanel.fontFamily,
-      textAlign: targetPanel.textAlign,
-      buttonStyle: targetPanel.buttonStyle,
+      textAlign: targetPanel.textAlign || 'left',
+      textWrap: targetPanel.textWrap !== undefined ? targetPanel.textWrap : false,
+      labelFontSize: targetPanel.labelFontSize !== undefined ? Number(targetPanel.labelFontSize) : effFontSize,
+      inputFontSize: targetPanel.inputFontSize !== undefined ? Number(targetPanel.inputFontSize) : effFontSize,
+      inputAreaHeight: targetPanel.inputAreaHeight !== undefined ? Number(targetPanel.inputAreaHeight) : undefined,
+
+      // 4. Icons & Indicator Dynamics (Full-fledge icon support)
+      ...(hasIconConfig ? {
+        iconOn: effIconOn,
+        iconOff: effIconOff,
+        iconColorOn: effIconColorOn,
+        iconColorOff: effIconColorOff,
+        iconSize: effIconSize,
+        rotateOn: targetPanel.rotateOn ?? (isLed ? false : undefined),
+        rotateOff: targetPanel.rotateOff ?? false,
+        flashOn: targetPanel.flashOn ?? false,
+        flashOff: targetPanel.flashOff ?? false,
+        animSpeedOn: targetPanel.animSpeedOn || 'medium',
+        animSpeedOff: targetPanel.animSpeedOff || 'medium',
+      } : {}),
+
+      // 5. Palettes & Multi-Color Accents (Gauges, Lines, Indicators, Lamps)
       firstColor: targetPanel.firstColor,
       secondColor: targetPanel.secondColor,
       thirdColor: targetPanel.thirdColor,
-      iconColorOn: targetPanel.iconColorOn,
-      iconColorOff: targetPanel.iconColorOff,
-      imageFit: targetPanel.imageFit
+
+      // 6. Action Button / Switch Styles
+      buttonStyle: targetPanel.buttonStyle,
+      buttonText: targetPanel.buttonText,
+      payloadOnText: targetPanel.payloadOnText,
+      payloadOffText: targetPanel.payloadOffText,
+      switchSize: targetPanel.switchSize,
+      imageFit: targetPanel.imageFit,
+      shapeType: targetPanel.shapeType,
+
+      // 7. Graph & Industrial Piping Visuals
+      penColor: targetPanel.penColor,
+      penThickness: targetPanel.penThickness,
+      graphType: targetPanel.graphType,
+      showGrid: targetPanel.showGrid,
+      fillArea: targetPanel.fillArea,
+      showNodeMarkers: targetPanel.showNodeMarkers,
+      pipeFlowDirection: targetPanel.pipeFlowDirection,
+      pipeEndType: targetPanel.pipeEndType,
+      pipeAnimStyle: targetPanel.pipeAnimStyle,
+      pipeCornerRadius: targetPanel.pipeCornerRadius,
+      symbolAnimType: targetPanel.symbolAnimType,
+      clockFormat: targetPanel.clockFormat
     };
 
     setCopiedProperties(propsToCopy);
-    setPropertyCopiedToast(`Copied property from "${targetPanel.panelName || 'Element'}"`);
+    const hasIcon = !!propsToCopy.iconOn;
+    setPropertyCopiedToast(`Copied visual properties (Style, Text${hasIcon ? ', Icon' : ''}) from "${targetPanel.panelName || 'Element'}"`);
     setTimeout(() => setPropertyCopiedToast(null), 2500);
-  };
+  }, [selectedPanelIds, masterPanelId, selectedPanel, masterPanel, appState.panels]);
 
-  const handlePasteProperties = () => {
+  const handlePasteProperties = useCallback(() => {
     if (!copiedProperties || selectedPanelIds.length === 0) return;
 
     const updatedPanels = appState.panels.map(p => {
-      if (selectedPanelIds.includes(p.panelId)) {
-        return {
-          ...p,
-          ...copiedProperties
-        };
+      if (!selectedPanelIds.includes(p.panelId)) return p;
+
+      const updated: Panel = { ...p };
+
+      // 1. Box Model & Colors
+      if (copiedProperties.bgColor !== undefined) updated.bgColor = copiedProperties.bgColor;
+      if (copiedProperties.textColor !== undefined) updated.textColor = copiedProperties.textColor;
+      if (copiedProperties.borderColor !== undefined) updated.borderColor = copiedProperties.borderColor;
+      if (copiedProperties.borderWidth !== undefined) updated.borderWidth = copiedProperties.borderWidth;
+      if (copiedProperties.borderRadius !== undefined) updated.borderRadius = copiedProperties.borderRadius;
+      if (copiedProperties.opacity !== undefined) updated.opacity = copiedProperties.opacity;
+      if (copiedProperties.rotation !== undefined) updated.rotation = copiedProperties.rotation;
+
+      // 2. Shadows & Glow Effects
+      if (copiedProperties.shadowEnabled !== undefined) updated.shadowEnabled = copiedProperties.shadowEnabled;
+      if (copiedProperties.shadowColor !== undefined) updated.shadowColor = copiedProperties.shadowColor;
+      if (copiedProperties.shadowIntensity !== undefined) updated.shadowIntensity = copiedProperties.shadowIntensity;
+
+      // 3. Typography & Text Formatting (Sync across all widget types)
+      if (copiedProperties.fontSize !== undefined) {
+        updated.fontSize = copiedProperties.fontSize;
+        updated.labelFontSize = copiedProperties.labelFontSize !== undefined ? copiedProperties.labelFontSize : copiedProperties.fontSize;
+        updated.inputFontSize = copiedProperties.inputFontSize !== undefined ? copiedProperties.inputFontSize : copiedProperties.fontSize;
       }
-      return p;
+      if (copiedProperties.fontFamily !== undefined) updated.fontFamily = copiedProperties.fontFamily;
+      if (copiedProperties.textAlign !== undefined) updated.textAlign = copiedProperties.textAlign;
+      if (copiedProperties.textWrap !== undefined) updated.textWrap = copiedProperties.textWrap;
+      if (copiedProperties.inputAreaHeight !== undefined) updated.inputAreaHeight = copiedProperties.inputAreaHeight;
+
+      // 4. Icons & Indicator Dynamics (Full-fledge icon support)
+      if (copiedProperties.iconOn !== undefined) {
+        updated.iconOn = copiedProperties.iconOn;
+        updated.iconOff = copiedProperties.iconOff || copiedProperties.iconOn;
+      }
+      if (copiedProperties.iconColorOn !== undefined) updated.iconColorOn = copiedProperties.iconColorOn;
+      if (copiedProperties.iconColorOff !== undefined) updated.iconColorOff = copiedProperties.iconColorOff;
+      if (copiedProperties.iconSize !== undefined) updated.iconSize = copiedProperties.iconSize;
+      if (copiedProperties.rotateOn !== undefined) updated.rotateOn = copiedProperties.rotateOn;
+      if (copiedProperties.rotateOff !== undefined) updated.rotateOff = copiedProperties.rotateOff;
+      if (copiedProperties.flashOn !== undefined) updated.flashOn = copiedProperties.flashOn;
+      if (copiedProperties.flashOff !== undefined) updated.flashOff = copiedProperties.flashOff;
+      if (copiedProperties.animSpeedOn !== undefined) updated.animSpeedOn = copiedProperties.animSpeedOn;
+      if (copiedProperties.animSpeedOff !== undefined) updated.animSpeedOff = copiedProperties.animSpeedOff;
+
+      // 5. Palettes & Multi-Color Accents
+      if (copiedProperties.firstColor !== undefined) updated.firstColor = copiedProperties.firstColor;
+      if (copiedProperties.secondColor !== undefined) updated.secondColor = copiedProperties.secondColor;
+      if (copiedProperties.thirdColor !== undefined) updated.thirdColor = copiedProperties.thirdColor;
+
+      // 6. Action Button / Switch Styles
+      if (copiedProperties.buttonStyle !== undefined) updated.buttonStyle = copiedProperties.buttonStyle;
+      if (copiedProperties.buttonText !== undefined) updated.buttonText = copiedProperties.buttonText;
+      if (copiedProperties.payloadOnText !== undefined) updated.payloadOnText = copiedProperties.payloadOnText;
+      if (copiedProperties.payloadOffText !== undefined) updated.payloadOffText = copiedProperties.payloadOffText;
+      if (copiedProperties.switchSize !== undefined) updated.switchSize = copiedProperties.switchSize;
+      if (copiedProperties.imageFit !== undefined) updated.imageFit = copiedProperties.imageFit;
+      if (copiedProperties.shapeType !== undefined) updated.shapeType = copiedProperties.shapeType;
+
+      // 7. Graph & Industrial Piping Visuals
+      if (copiedProperties.penColor !== undefined) updated.penColor = copiedProperties.penColor;
+      if (copiedProperties.penThickness !== undefined) updated.penThickness = copiedProperties.penThickness;
+      if (copiedProperties.graphType !== undefined) updated.graphType = copiedProperties.graphType;
+      if (copiedProperties.showGrid !== undefined) updated.showGrid = copiedProperties.showGrid;
+      if (copiedProperties.fillArea !== undefined) updated.fillArea = copiedProperties.fillArea;
+      if (copiedProperties.showNodeMarkers !== undefined) updated.showNodeMarkers = copiedProperties.showNodeMarkers;
+      if (copiedProperties.pipeFlowDirection !== undefined) updated.pipeFlowDirection = copiedProperties.pipeFlowDirection;
+      if (copiedProperties.pipeEndType !== undefined) updated.pipeEndType = copiedProperties.pipeEndType;
+      if (copiedProperties.pipeAnimStyle !== undefined) updated.pipeAnimStyle = copiedProperties.pipeAnimStyle;
+      if (copiedProperties.pipeCornerRadius !== undefined) updated.pipeCornerRadius = copiedProperties.pipeCornerRadius;
+      if (copiedProperties.symbolAnimType !== undefined) updated.symbolAnimType = copiedProperties.symbolAnimType;
+      if (copiedProperties.clockFormat !== undefined) updated.clockFormat = copiedProperties.clockFormat;
+
+      return updated;
     });
 
     updateAppStateWithHistory({ ...appState, panels: updatedPanels });
-    setPropertyCopiedToast(`Pasted property to ${selectedPanelIds.length} element(s)`);
+    setPropertyCopiedToast(`Pasted visual properties to ${selectedPanelIds.length} element(s)`);
     setTimeout(() => setPropertyCopiedToast(null), 2500);
-  };
+  }, [copiedProperties, selectedPanelIds, appState, updateAppStateWithHistory]);
+
+  // Keep refs synchronized
+  handleCopyPropertiesRef.current = handleCopyProperties;
+  handlePastePropertiesRef.current = handlePasteProperties;
 
   // Layering (Z-Index / Stack Order) Controls
   const handleBringToVeryFront = () => {
@@ -1550,8 +2025,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     const handleMouseMove = (e: MouseEvent) => {
       if (!isDragging || selectedPanelIds.length === 0) return;
 
-      const deltaX = (e.clientX - dragStartPos.current.mouseX) / effectiveScale;
-      const deltaY = (e.clientY - dragStartPos.current.mouseY) / effectiveScale;
+      const deltaX = (e.clientX - dragStartPos.current.mouseX) / (effectiveScaleX || 1);
+      const deltaY = (e.clientY - dragStartPos.current.mouseY) / (effectiveScaleY || 1);
 
       const updatedPanels = appState.panels.map(p => {
         if (selectedPanelIds.includes(p.panelId)) {
@@ -1596,24 +2071,28 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
   // Effect for Marquee Drag Box Selection
   useEffect(() => {
+    if (!isMarqueeSelecting) return;
+
     const handleMarqueeMouseMove = (e: MouseEvent) => {
-      if (!isMarqueeSelecting || !marqueeRect || !canvasRef.current) return;
+      if (!canvasRef.current || !marqueeStartPosRef.current) return;
 
       const { x: currentX, y: currentY } = getCanvasCoords(e.clientX, e.clientY);
+      const { startX, startY } = marqueeStartPosRef.current;
 
-      if (Math.abs(currentX - marqueeRect.startX) > 4 || Math.abs(currentY - marqueeRect.startY) > 4) {
+      if (Math.abs(currentX - startX) > 3 || Math.abs(currentY - startY) > 3) {
         hasDraggedMarqueeRef.current = true;
       }
 
-      setMarqueeRect(prev => prev ? { ...prev, currentX, currentY } : null);
+      setMarqueeRect({ startX, startY, currentX, currentY });
 
-      const left = Math.min(marqueeRect.startX, currentX);
-      const top = Math.min(marqueeRect.startY, currentY);
-      const right = Math.max(marqueeRect.startX, currentX);
-      const bottom = Math.max(marqueeRect.startY, currentY);
+      const left = Math.min(startX, currentX);
+      const top = Math.min(startY, currentY);
+      const right = Math.max(startX, currentX);
+      const bottom = Math.max(startY, currentY);
 
       const selectedIds: string[] = [];
       panels.forEach((p, idx) => {
+        if (p.isHidden) return;
         const pos = getPanelPos(p, idx);
         const pLeft = pos.x;
         const pTop = pos.y;
@@ -1632,25 +2111,22 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     };
 
     const handleMarqueeMouseUp = () => {
-      if (isMarqueeSelecting) {
-        setIsMarqueeSelecting(false);
-        setMarqueeRect(null);
-        if (hasDraggedMarqueeRef.current) {
-          justFinishedMarqueeRef.current = true;
-          hasDraggedMarqueeRef.current = false;
-        }
+      setIsMarqueeSelecting(false);
+      setMarqueeRect(null);
+      marqueeStartPosRef.current = null;
+      if (hasDraggedMarqueeRef.current) {
+        justFinishedMarqueeRef.current = true;
+        hasDraggedMarqueeRef.current = false;
       }
     };
 
-    if (isMarqueeSelecting) {
-      window.addEventListener('mousemove', handleMarqueeMouseMove);
-      window.addEventListener('mouseup', handleMarqueeMouseUp);
-      return () => {
-        window.removeEventListener('mousemove', handleMarqueeMouseMove);
-        window.removeEventListener('mouseup', handleMarqueeMouseUp);
-      };
-    }
-  }, [isMarqueeSelecting, marqueeRect, panels, getCanvasCoords]);
+    window.addEventListener('mousemove', handleMarqueeMouseMove);
+    window.addEventListener('mouseup', handleMarqueeMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMarqueeMouseMove);
+      window.removeEventListener('mouseup', handleMarqueeMouseUp);
+    };
+  }, [isMarqueeSelecting, panels, getCanvasCoords]);
 
   // Effect for Node Point Vertex Dragging
   useEffect(() => {
@@ -1828,6 +2304,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     type: 'resize' | 'rotate';
     handle?: 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
     panelId: string;
+    isGroupTransform?: boolean;
+    initialGroupBounds?: { minX: number; minY: number; maxX: number; maxY: number; w: number; h: number };
+    initialPanelsState?: Record<string, { x: number; y: number; w: number; h: number; type?: string; shapeType?: string }>;
     initialMouseX: number;
     initialMouseY: number;
     initialX: number;
@@ -1838,6 +2317,50 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     centerX: number;
     centerY: number;
   } | null>(null);
+
+  const handleGroupResizeStart = (
+    e: React.MouseEvent,
+    handle: 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
+  ) => {
+    if (!effectiveEditMode || selectedPanelIds.length < 2) return;
+    e.stopPropagation();
+    e.preventDefault();
+
+    const selectedPanels = appState.panels.filter(p => selectedPanelIds.includes(p.panelId));
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const initialPanelsState: Record<string, { x: number; y: number; w: number; h: number; type?: string; shapeType?: string }> = {};
+
+    selectedPanels.forEach(p => {
+      const idx = panels.findIndex(item => item.panelId === p.panelId);
+      const pos = getPanelPos(p, idx);
+      if (pos.x < minX) minX = pos.x;
+      if (pos.y < minY) minY = pos.y;
+      if (pos.x + pos.w > maxX) maxX = pos.x + pos.w;
+      if (pos.y + pos.h > maxY) maxY = pos.y + pos.h;
+      initialPanelsState[p.panelId] = { x: pos.x, y: pos.y, w: pos.w, h: pos.h, type: p.type, shapeType: p.shapeType };
+    });
+
+    const w = maxX - minX;
+    const h = maxY - minY;
+
+    setTransformState({
+      type: 'resize',
+      handle,
+      panelId: '',
+      isGroupTransform: true,
+      initialGroupBounds: { minX, minY, maxX, maxY, w, h },
+      initialPanelsState,
+      initialMouseX: e.clientX,
+      initialMouseY: e.clientY,
+      initialX: minX,
+      initialY: minY,
+      initialW: w,
+      initialH: h,
+      initialRotation: 0,
+      centerX: minX + w / 2,
+      centerY: minY + h / 2
+    });
+  };
 
   const handleResizeStart = (
     e: React.MouseEvent,
@@ -1911,6 +2434,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
         type,
         handle,
         panelId,
+        isGroupTransform,
+        initialGroupBounds,
+        initialPanelsState,
         initialMouseX,
         initialMouseY,
         initialX,
@@ -1921,8 +2447,109 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
         centerY
       } = transformState;
 
-      const deltaX = (e.clientX - initialMouseX) / (effectiveScale || 1);
-      const deltaY = (e.clientY - initialMouseY) / (effectiveScale || 1);
+      const deltaX = (e.clientX - initialMouseX) / (effectiveScaleX || 1);
+      const deltaY = (e.clientY - initialMouseY) / (effectiveScaleY || 1);
+
+      if (type === 'resize' && isGroupTransform && initialGroupBounds && initialPanelsState) {
+        let newMinX = initialGroupBounds.minX;
+        let newMinY = initialGroupBounds.minY;
+        let newW = initialGroupBounds.w;
+        let newH = initialGroupBounds.h;
+        const minSize = 40;
+
+        if (handle?.includes('e')) {
+          newW = Math.max(minSize, initialGroupBounds.w + deltaX);
+        }
+        if (handle?.includes('s')) {
+          newH = Math.max(minSize, initialGroupBounds.h + deltaY);
+        }
+        if (handle?.includes('w')) {
+          const potW = Math.max(minSize, initialGroupBounds.w - deltaX);
+          newMinX = initialGroupBounds.minX + (initialGroupBounds.w - potW);
+          newW = potW;
+        }
+        if (handle?.includes('n')) {
+          const potH = Math.max(minSize, initialGroupBounds.h - deltaY);
+          newMinY = initialGroupBounds.minY + (initialGroupBounds.h - potH);
+          newH = potH;
+        }
+
+        const isCorner = ['nw', 'ne', 'se', 'sw'].includes(handle || '');
+        const shouldLockRatio = isCorner && (lockGroupRatio || e.shiftKey);
+        if (shouldLockRatio && initialGroupBounds.w > 0 && initialGroupBounds.h > 0) {
+          const scaleW = newW / initialGroupBounds.w;
+          const scaleH = newH / initialGroupBounds.h;
+          const uniformScale = Math.abs(deltaX) >= Math.abs(deltaY) ? scaleW : scaleH;
+          newW = Math.max(minSize, initialGroupBounds.w * uniformScale);
+          newH = Math.max(minSize, initialGroupBounds.h * uniformScale);
+
+          if (handle?.includes('w')) {
+            newMinX = initialGroupBounds.minX + (initialGroupBounds.w - newW);
+          }
+          if (handle?.includes('n')) {
+            newMinY = initialGroupBounds.minY + (initialGroupBounds.h - newH);
+          }
+        }
+
+        if (gridSnap) {
+          newMinX = Math.round(newMinX / 10) * 10;
+          newMinY = Math.round(newMinY / 10) * 10;
+          newW = Math.round(newW / 10) * 10;
+          newH = Math.round(newH / 10) * 10;
+        }
+
+        newMinX = Math.max(0, newMinX);
+        newMinY = Math.max(0, newMinY);
+
+        const factorX = initialGroupBounds.w > 0 ? (newW / initialGroupBounds.w) : 1;
+        const factorY = initialGroupBounds.h > 0 ? (newH / initialGroupBounds.h) : 1;
+
+        const updatedPanels = appState.panels.map(p => {
+          const init = initialPanelsState[p.panelId];
+          if (!init) return p;
+
+          const relX = init.x - initialGroupBounds.minX;
+          const relY = init.y - initialGroupBounds.minY;
+
+          let panelX = newMinX + relX * factorX;
+          let panelY = newMinY + relY * factorY;
+          let panelW = init.w * factorX;
+          let panelH = init.h * factorY;
+
+          // Industrial SCADA protection: Circular gauges, round shapes or lamps never distort into ovals
+          const isCircular = p.type === 'gauge' || p.displayType === 'gauge' || p.shapeType === 'circle';
+          if (isCircular) {
+            const circScale = Math.min(factorX, factorY);
+            panelW = init.w * circScale;
+            panelH = init.h * circScale;
+            panelX += (init.w * factorX - panelW) / 2;
+            panelY += (init.h * factorY - panelH) / 2;
+          }
+
+          if (gridSnap) {
+            panelX = Math.round(panelX / 10) * 10;
+            panelY = Math.round(panelY / 10) * 10;
+            panelW = Math.max(20, Math.round(panelW / 10) * 10);
+            panelH = Math.max(20, Math.round(panelH / 10) * 10);
+          } else {
+            panelX = Math.round(panelX);
+            panelY = Math.round(panelY);
+            panelW = Math.max(20, Math.round(panelW));
+            panelH = Math.max(20, Math.round(panelH));
+          }
+
+          return {
+            ...p,
+            x: Math.max(0, panelX),
+            y: Math.max(0, panelY),
+            w: panelW,
+            h: panelH
+          };
+        });
+
+        onUpdateAppState({ ...appState, panels: updatedPanels });
+        return;
+      }
 
       if (type === 'resize') {
         let newX = initialX;
@@ -2003,7 +2630,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [transformState, gridSnap, appState, onUpdateAppState]);
+  }, [transformState, gridSnap, appState, onUpdateAppState, lockGroupRatio, effectiveScaleX, effectiveScaleY]);
 
   // Alignment Tools (With Respect to Master Reference Element)
   const alignSelectedPanels = (
@@ -2169,7 +2796,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   const handleAddDynamicRule = (panelId: string, partId: string | null, ruleType: DynamicPropertyType) => {
     const isLevel = ruleType === 'level_fill';
     const newRule: DynamicBehaviorRule = {
-      id: `dyn_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id: generateUniqueId('dyn'),
       type: ruleType,
       name: ruleType === 'color_shift' ? 'Color Shift' : ruleType === 'rotation' ? 'Rotation Spin' : ruleType === 'level_fill' ? 'Level Fill' : ruleType === 'visibility_blink' ? 'Visibility & Hide/Show' : ruleType === 'opacity_fade' ? 'Opacity Fade' : 'Motion Path',
       enabled: true,
@@ -2497,13 +3124,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     setMasterPanelId(null);
   };
 
-  // Select All Elements
-  const handleSelectAll = () => {
-    if (!effectiveEditMode || isClientMode) return;
-    const allIds = panels.map(p => p.panelId);
-    setSelectedPanelIds(allIds);
-    if (allIds.length > 0) setMasterPanelId(allIds[0]);
-  };
+
 
   // Insert Symbol Factory 3.0 Industrial Equipment (SVG or PNG)
   const handleSelectIndustrialSymbol = async (
@@ -2698,6 +3319,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     }
 
     if (panel.type === PanelType.SWITCH) {
+      const now = Date.now();
+      if (now - (lastToggleClickTimeRef.current[panel.panelId] || 0) < 400) return;
+      lastToggleClickTimeRef.current[panel.panelId] = now;
+
       const liveData = latestValues[panel.panelId] || (panel.topic ? latestValues[panel.topic] : undefined);
       const currentVal = liveData?.val;
       const onVal = panel.payloadOn ?? '1';
@@ -2721,6 +3346,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       const offVal = panel.payloadOff !== undefined && panel.payloadOff !== '' ? panel.payloadOff : '0';
 
       if (act === 'toggle') {
+        const now = Date.now();
+        if (now - (lastToggleClickTimeRef.current[panel.panelId] || 0) < 400) return;
+        lastToggleClickTimeRef.current[panel.panelId] = now;
+
         const liveData = latestValues[panel.panelId] || (panel.topic ? latestValues[panel.topic] : undefined);
         const currentVal = liveData?.val;
         const isCurrentlyOn = String(currentVal) === String(onVal);
@@ -3263,19 +3892,100 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   </button>
                 </div>
 
-                {/* Auto-Fit Screen Toggle Button */}
+                {/* Canvas Target Resolution Selector (SCADA Display Frame) */}
+                <div className="flex items-center space-x-1 bg-slate-950 px-1.5 py-1 rounded-xl border border-slate-800 shrink-0" title="Target Canvas Resolution (Design Frame for Industrial HMI Display)">
+                  <i className="fas fa-desktop text-xs text-sky-400"></i>
+                  <select
+                    value={targetResolution}
+                    onChange={(e) => handleSetTargetResolution(e.target.value)}
+                    className="bg-transparent text-xs font-bold text-sky-300 outline-none cursor-pointer max-w-[110px] sm:max-w-[140px]"
+                  >
+                    {CANVAS_RESOLUTION_PRESETS.map((preset) => (
+                      <option key={preset.id} value={preset.id} className="bg-slate-900 text-white font-medium">
+                        {preset.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* SCADA Canvas Fit Mode: Fill 100% (Zero-Waste Stretch) vs Uniform Fit */}
+                <div className="flex items-center space-x-0.5 bg-slate-950 p-0.5 rounded-xl border border-slate-800 shrink-0" title="SCADA Fit Mode: Fill 100% utilizes every pixel with zero dead space; Uniform preserves aspect ratio">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isAutoFit) setIsAutoFit(true);
+                      updateDashboardCanvasSettings({ canvasFitMode: 'stretch' });
+                    }}
+                    className={`px-1.5 py-0.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer ${
+                      isAutoFit && canvasFitMode === 'stretch'
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    title="Fill 100% (Stretch to full screen — Zero dead space!)"
+                  >
+                    <i className="fas fa-up-right-and-down-left-from-center text-[10px] text-emerald-400"></i>
+                    <span>Fill 100%</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isAutoFit) setIsAutoFit(true);
+                      updateDashboardCanvasSettings({ canvasFitMode: 'uniform' });
+                    }}
+                    className={`px-1.5 py-0.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer ${
+                      isAutoFit && canvasFitMode === 'uniform'
+                        ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    title="Uniform Fit (Preserve Aspect Ratio)"
+                  >
+                    <i className="fas fa-expand text-[10px] text-sky-400"></i>
+                    <span>Fit</span>
+                  </button>
+                </div>
+
+                {/* Alignment Mode (Top Flush is Industrial SCADA Standard) */}
                 <button
                   type="button"
-                  onClick={() => setIsAutoFit(prev => !prev)}
-                  className={`px-2 py-1 rounded-xl text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shadow-sm shrink-0 ${isAutoFit
-                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 hover:bg-sky-500/30'
-                    : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
-                    }`}
-                  title="Auto Fit Screen (Dynamically scales all canvas elements to fit mobile/desktop screen without scrolling)"
+                  onClick={() => {
+                    const nextAlign: CanvasAlignMode = canvasAlign === 'top' ? 'center' : 'top';
+                    updateDashboardCanvasSettings({ canvasAlign: nextAlign });
+                  }}
+                  className={`px-1.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shrink-0 border ${
+                    canvasAlign === 'top'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
+                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
+                  }`}
+                  title={canvasAlign === 'top' ? "Top-Aligned (Flush to top — Locks header banner to top with zero dead space)" : "Center-Aligned (Centered in viewport)"}
                 >
-                  <i className="fas fa-expand text-xs text-sky-400"></i>
-                  <span>{isAutoFit ? 'Fit ON' : 'Fit'}</span>
+                  <i className={`fas ${canvasAlign === 'top' ? 'fa-arrow-up-to-line' : 'fa-arrows-up-down'} text-xs ${canvasAlign === 'top' ? 'text-amber-400' : 'text-slate-400'}`}></i>
+                  <span className="hidden sm:inline">{canvasAlign === 'top' ? 'Top' : 'Center'}</span>
                 </button>
+
+                {/* Scale & Distribute Layout to Target Resolution Action */}
+                {isFixedResolution && activeScreenPanels.length > 0 && (
+                  <div className="flex items-center space-x-0.5 bg-indigo-500/10 border border-indigo-500/40 rounded-xl p-0.5 shrink-0 shadow-sm">
+                    <button
+                      type="button"
+                      onClick={() => handleScaleLayoutToTarget('uniform')}
+                      className="px-2 py-1 hover:bg-indigo-500/30 text-indigo-300 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shrink-0"
+                      title={`Scale layout proportionately to fill ${activeResolutionPreset.name} WITHOUT stretching (Preserves circular gauges & exact aspect ratio)`}
+                    >
+                      <i className="fas fa-arrows-up-down-left-right text-xs text-indigo-400"></i>
+                      <span>Fit (No Stretch)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleScaleLayoutToTarget('stretch')}
+                      className="px-1.5 py-1 hover:bg-indigo-500/30 text-indigo-400 rounded-lg text-[10px] font-bold transition-all flex items-center space-x-1 cursor-pointer shrink-0 border-l border-indigo-500/30"
+                      title={`Fill entire ${activeResolutionPreset.name} by stretching width & height to touch edges`}
+                    >
+                      <i className="fas fa-maximize text-[10px]"></i>
+                      <span className="hidden sm:inline">Fill Edges</span>
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -3290,7 +4000,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
               e.currentTarget.scrollLeft += e.deltaY;
             }
           }}
-          className={`bg-slate-950 border-b border-slate-800 px-2 sm:px-3 py-1.5 flex items-center justify-between gap-1.5 text-xs z-20 animate-in fade-in shadow-xl w-full max-w-full shrink-0 min-h-[36px] ${isDesktop
+          className={`bg-slate-950 border-b border-slate-800 px-2 sm:px-3 py-1 flex items-center gap-1.5 text-xs z-20 animate-in fade-in shadow-xl w-full max-w-full shrink-0 min-h-[32px] ${isDesktop
             ? 'flex-wrap overflow-visible'
             : 'overflow-x-auto custom-horizontal-scrollbar touch-scroll overscroll-x-contain'
             }`}
@@ -3485,6 +4195,24 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   />
                 </div>
 
+                {/* Wrap Panel Name Toggle */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newWrap = !selectedPanel.textWrap;
+                    updateSelectedPanelProp('textWrap', newWrap);
+                  }}
+                  className={`flex items-center space-x-1 px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer shrink-0 ${
+                    selectedPanel.textWrap
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-[0_0_8px_rgba(245,158,11,0.3)]'
+                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200 hover:bg-slate-800'
+                  }`}
+                  title="Toggle Wrap Panel Name across multiple lines instead of truncating with ellipsis (...)"
+                >
+                  <i className={`fas fa-text-width text-[10px] ${selectedPanel.textWrap ? 'text-amber-400' : ''}`}></i>
+                  <span>Wrap: {selectedPanel.textWrap ? 'ON' : 'OFF'}</span>
+                </button>
+
                 {/* Geometrical & Vector Shape Dropdown */}
                 <div className="flex items-center space-x-1 bg-slate-900 px-1.5 py-0.5 rounded-lg border border-slate-800 shrink-0" title="Geometrical / Vector Shape Dropdown Selection">
                   <i className="fas fa-shapes text-[10px] text-amber-400"></i>
@@ -3643,16 +4371,47 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
             )}
 
             {/* Grouping / Ungrouping Buttons */}
+            {/* Grouping / Ungrouping Buttons */}
             {selectedPanelIds.length >= 2 && (
-              <button
-                type="button"
-                onClick={handleGroupSelected}
-                className="px-2 py-0.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center space-x-1 shrink-0"
-                title="Group Selected Elements Together"
-              >
-                <i className="fas fa-link text-xs"></i>
-                <span>Group</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={handleGroupSelected}
+                  className="px-2 py-0.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center space-x-1 shrink-0"
+                  title="Group Selected Elements Together into a Container"
+                >
+                  <i className="fas fa-link text-xs"></i>
+                  <span>Group</span>
+                </button>
+
+                {/* Aspect Ratio Lock for Multi-Selection & Group Resizing */}
+                <button
+                  type="button"
+                  onClick={() => setLockGroupRatio(!lockGroupRatio)}
+                  className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer flex items-center space-x-1 shrink-0 ${
+                    lockGroupRatio
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm'
+                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                  }`}
+                  title={lockGroupRatio ? "Aspect Ratio Locked: Pulling corner resizes uniformly without stretching" : "Aspect Ratio Unlocked: Free stretch"}
+                >
+                  <i className={`fas ${lockGroupRatio ? 'fa-lock text-emerald-400' : 'fa-lock-open text-slate-400'} text-xs`}></i>
+                  <span>{lockGroupRatio ? 'Ratio: Locked' : 'Ratio: Free'}</span>
+                </button>
+
+                {/* Fit Selection to Target Resolution (No Stretch) */}
+                {isFixedResolution && (
+                  <button
+                    type="button"
+                    onClick={() => handleScaleSelectionToTarget('uniform')}
+                    className="px-2 py-0.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center space-x-1 shrink-0 shadow-sm"
+                    title="Scale selected elements to fill canvas resolution without stretching"
+                  >
+                    <i className="fas fa-expand text-xs text-cyan-400"></i>
+                    <span>Fit to Canvas (No Stretch)</span>
+                  </button>
+                )}
+              </>
             )}
 
             {hasGroupedSelected && (
@@ -3666,18 +4425,37 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 <span>Ungroup</span>
               </button>
             )}
-          </div>
 
-          {/* Action Buttons: Copy Property, Duplicate, Config & Delete */}
-          <div className={`flex items-center gap-1 sm:gap-1.5 ${isDesktop ? 'flex-wrap' : 'shrink-0 whitespace-nowrap'}`}>
+            {selectedPanelIds.length >= 2 && (
+              <button
+                type="button"
+                onClick={() => {
+                  const anyUnwrapped = panels.some(p => selectedPanelIds.includes(p.panelId) && !p.textWrap);
+                  updateSelectedPanelProp('textWrap', anyUnwrapped);
+                }}
+                className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer flex items-center space-x-1 shrink-0 ${
+                  selectedPanel?.textWrap
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
+                    : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800'
+                }`}
+                title="Toggle Wrap Panel Name for all selected elements"
+              >
+                <i className="fas fa-text-width text-xs text-amber-400"></i>
+                <span>Wrap: {selectedPanel?.textWrap ? 'ON' : 'OFF'}</span>
+              </button>
+            )}
 
+            {/* Subtle Divider before Actions */}
+            <div className="w-px h-4 bg-slate-800 mx-0.5 shrink-0 hidden sm:block" />
+
+            {/* Action Buttons: Copy Property, Duplicate, Config & Delete */}
             {/* Copy & Paste Property Buttons */}
             <div className="flex items-center space-x-0.5 bg-slate-900 p-0.5 rounded-xl border border-slate-800 shrink-0">
               <button
                 type="button"
                 onClick={handleCopyProperties}
                 className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-amber-200 rounded-lg text-[10px] font-bold transition-colors cursor-pointer flex items-center space-x-1"
-                title="Copy Visual Properties"
+                title="Copy Visual Properties: Style, Text, Icon, Colors (Ctrl+Shift+C)"
               >
                 <i className="fas fa-paintbrush text-[9px] text-amber-400"></i>
                 <span className="hidden md:inline">Copy</span>
@@ -3691,7 +4469,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 shadow-sm'
                   : 'bg-slate-950 text-slate-600 cursor-not-allowed border border-slate-800/50'
                   }`}
-                title={copiedProperties ? "Paste Visual Properties" : "No Properties Copied"}
+                title={copiedProperties ? `Paste Visual Properties to ${selectedPanelIds.length} element(s) (Ctrl+Shift+V)` : "No Properties Copied (Use Copy first)"}
               >
                 <i className={`fas fa-paint-roller text-[9px] ${copiedProperties ? 'text-amber-400' : 'text-slate-600'}`}></i>
                 <span className="hidden md:inline">Paste</span>
@@ -3844,7 +4622,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
           className={`flex-1 relative p-0.5 transition-colors ${!isEditMode || isAutoFit ? 'overflow-hidden' : 'overflow-auto min-h-[600px] min-w-[1220px]'
             } ${isPanning
               ? 'cursor-grabbing select-none'
-              : isPanMode || isSpacePressed || zoomLevel > 1.0
+              : isPanMode || isSpacePressed || (!effectiveEditMode && zoomLevel > 1.0)
                 ? 'cursor-grab'
                 : 'cursor-default'
             }`}
@@ -3858,19 +4636,35 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
         >
           {/* Scaled Canvas Inner Container */}
           <div
+            id="hmi-canvas-inner-area"
+            data-canvas-bg="true"
             style={{
               position: isAutoFit ? 'absolute' : 'relative',
               left: isAutoFit ? `${autoFitOffset.left}px` : '0px',
               top: isAutoFit ? `${autoFitOffset.top}px` : '0px',
-              transform: `scale(${effectiveScale})`,
+              transform: effectiveScaleX === effectiveScaleY ? `scale(${effectiveScaleX})` : `scale(${effectiveScaleX}, ${effectiveScaleY})`,
               transformOrigin: 'top left',
               width: `${contentBounds.totalW}px`,
               height: `${contentBounds.totalH}px`,
               minWidth: isEditMode && !isAutoFit ? '1220px' : '0px',
-              minHeight: isEditMode && !isAutoFit ? '600px' : '0px'
+              minHeight: isEditMode && !isAutoFit ? '600px' : '0px',
+              border: isFixedResolution && effectiveEditMode ? '1.5px dashed rgba(56, 189, 248, 0.45)' : undefined,
+              boxShadow: isFixedResolution && effectiveEditMode ? '0 0 0 1px rgba(15, 23, 42, 0.6), 0 20px 40px -15px rgba(0, 0, 0, 0.7)' : undefined
             }}
             className="transition-all duration-100 ease-out shrink-0"
           >
+
+            {/* Target Resolution Safe-Area Frame Badge in Design Mode */}
+            {isFixedResolution && effectiveEditMode && (
+              <div
+                className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-slate-950/80 border border-sky-500/40 text-[10px] font-mono text-sky-300 pointer-events-none select-none z-10 flex items-center space-x-1.5 shadow-md"
+                title="Target Canvas Resolution Frame"
+              >
+                <i className="fas fa-desktop text-sky-400 text-[9px]"></i>
+                <span className="font-bold">{activeResolutionPreset.name}</span>
+                <span className="text-slate-400">({contentBounds.totalW} × {contentBounds.totalH} px)</span>
+              </div>
+            )}
 
             {/* Marquee Drag Box Selection Overlay */}
             {isMarqueeSelecting && marqueeRect && (
@@ -4282,6 +5076,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                           if (effectiveEditMode || !onPublish || !targetTopic) return;
 
                           if (isToggle) {
+                            const now = Date.now();
+                            if (now - (lastToggleClickTimeRef.current[panel.panelId] || 0) < 400) return;
+                            lastToggleClickTimeRef.current[panel.panelId] = now;
+
                             const nextPayload = isLiveOn ? offVal : onVal;
                             onPublish(targetTopic, formatPublishPayload(nextPayload, panel));
                           } else if (isSetBit) {
@@ -4327,19 +5125,33 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                 borderRadius: panel.borderRadius !== undefined ? `${panel.borderRadius}px` : undefined
                               }}
                             >
-                              <div className={`w-2.5 h-2.5 rounded-full transition-transform shrink-0 ${
-                                isBtnActive
-                                  ? 'bg-emerald-400 shadow-[0_0_10px_#10b981] scale-125'
-                                  : isResetBit
-                                    ? 'bg-rose-500 shadow-[0_0_6px_#f43f5e]'
-                                    : 'bg-amber-500 shadow-[0_0_6px_#f59e0b]'
-                              }`}></div>
-                              <span className="font-extrabold text-xs uppercase tracking-wider truncate drop-shadow" style={{ color: panel.textColor || '#ffffff' }}>
-                                {buttonLabel}
-                              </span>
-                              <i className={`fas ${
-                                isMomentary ? 'fa-hand-pointer' : isToggle ? 'fa-toggle-on' : isSetBit ? 'fa-circle-check' : 'fa-circle-xmark'
-                              } text-amber-400 text-xs opacity-75 group-hover/btn:opacity-100 shrink-0`}></i>
+                              {(() => {
+                                const btnFontSize = panel.fontSize ? Number(panel.fontSize) : 13;
+                                const btnIconFontSize = Math.max(10, Math.round(btnFontSize * 0.9));
+                                return (
+                                  <>
+                                    <div className={`w-2.5 h-2.5 rounded-full transition-transform shrink-0 ${
+                                      isBtnActive
+                                        ? 'bg-emerald-400 shadow-[0_0_10px_#10b981] scale-125'
+                                        : isResetBit
+                                          ? 'bg-rose-500 shadow-[0_0_6px_#f43f5e]'
+                                          : 'bg-amber-500 shadow-[0_0_6px_#f59e0b]'
+                                    }`}></div>
+                                    <span
+                                      className={`font-extrabold uppercase tracking-wider drop-shadow ${panel.textWrap ? 'break-words whitespace-normal leading-tight text-center' : 'truncate'}`}
+                                      style={{ fontSize: `${btnFontSize}px`, color: panel.textColor || '#ffffff' }}
+                                    >
+                                      {buttonLabel}
+                                    </span>
+                                    <i
+                                      className={`fas ${
+                                        isMomentary ? 'fa-hand-pointer' : isToggle ? 'fa-toggle-on' : isSetBit ? 'fa-circle-check' : 'fa-circle-xmark'
+                                      } text-amber-400 opacity-75 group-hover/btn:opacity-100 shrink-0`}
+                                      style={{ fontSize: `${btnIconFontSize}px` }}
+                                    ></i>
+                                  </>
+                                );
+                              })()}
                             </button>
                           </div>
                         );
@@ -4373,9 +5185,11 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                 : 'justify-between space-x-2 text-left'
                             }`}
                           >
-                            <div className="flex flex-col min-w-0 truncate" style={{ textAlign: align }}>
+                            <div className={`flex flex-col min-w-0 ${panel.textWrap ? '' : 'truncate'}`} style={{ textAlign: align }}>
                               <span
-                                className="font-extrabold truncate uppercase tracking-wider leading-tight"
+                                className={`font-extrabold uppercase tracking-wider leading-tight ${
+                                  panel.textWrap ? 'break-words whitespace-normal' : 'truncate'
+                                }`}
                                 style={{
                                   fontSize: `${labelFontSize}px`,
                                   color: panel.textColor || '#cbd5e1'
@@ -4397,6 +5211,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                               onClick={(e) => {
                                 if (effectiveEditMode) return;
                                 e.stopPropagation();
+                                const now = Date.now();
+                                if (now - (lastToggleClickTimeRef.current[panel.panelId] || 0) < 400) return;
+                                lastToggleClickTimeRef.current[panel.panelId] = now;
+
                                 const targetVal = isOn ? (panel.payloadOff ?? '0') : (panel.payloadOn ?? '1');
                                 if (onPublish) {
                                   onPublish(panel.publishTopic || panel.topic, formatPublishPayload(targetVal, panel));
@@ -4453,12 +5271,12 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                               }}
                               className={`w-full h-full rounded-xl bg-gradient-to-r from-sky-900/80 to-indigo-900/80 hover:from-sky-700 hover:to-indigo-700 border-2 border-sky-400 text-sky-100 font-extrabold uppercase tracking-wider px-3 py-1 flex items-center ${alignJustify} shadow-lg active:scale-95 transition-all cursor-pointer`}
                             >
-                              <div className="flex items-center space-x-2 truncate">
+                              <div className={`flex items-center space-x-2 ${panel.textWrap ? 'min-w-0 flex-1' : 'truncate'}`}>
                                 <i 
                                   className="fas fa-desktop text-sky-400 shrink-0"
                                   style={{ fontSize: `${iconFontSize}px`, color: panel.textColor ? `${panel.textColor}dd` : undefined }}
                                 ></i>
-                                <span className="truncate" style={{ color: panel.textColor || '#e0f2fe' }}>
+                                <span className={panel.textWrap ? 'break-words whitespace-normal leading-tight' : 'truncate'} style={{ color: panel.textColor || '#e0f2fe' }}>
                                   {panel.panelName || 'JUMP SCREEN'}
                                 </span>
                               </div>
@@ -4473,16 +5291,30 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     ) : panel.type === PanelType.SLIDER ? (
                       /* Interactive Range Slider Element */
                       <div className="w-full h-full p-2 flex flex-col justify-between overflow-hidden">
-                        <div className="flex items-center justify-between mb-0.5">
-                          <span className="text-[10px] font-bold truncate uppercase tracking-wider" style={{ color: panel.textColor || '#cbd5e1' }}>
+                        <div className={`flex ${panel.textWrap ? 'items-start' : 'items-center'} justify-between mb-0.5 gap-1`}>
+                          <span
+                            className={`text-[10px] font-bold uppercase tracking-wider ${
+                              panel.textWrap ? 'break-words whitespace-normal leading-tight min-w-0 flex-1' : 'truncate'
+                            }`}
+                            style={{ color: panel.textColor || '#cbd5e1' }}
+                          >
                             {panel.panelName || 'SLIDER'}
                           </span>
-                          <span className="text-[11px] font-extrabold font-mono text-sky-400 bg-sky-500/10 border border-sky-500/20 px-1.5 py-0.5 rounded-md shrink-0">
-                            {sliderValues[panel.panelId] !== undefined
-                              ? sliderValues[panel.panelId]
-                              : (liveValue !== undefined ? Number(liveValue) : (panel.payloadMin ?? 0))}
-                            {panel.unit ? ` ${panel.unit}` : ''}
-                          </span>
+                          {(() => {
+                            const sliderValueFontSize = panel.fontSize ? Number(panel.fontSize) : 12;
+                            const sliderDisplayVal = sliderValues[panel.panelId] !== undefined
+                              ? formatProcessValue(sliderValues[panel.panelId], panel.decimalPrecision ?? 2)
+                              : (liveValue !== undefined ? formatProcessValue(Number(liveValue), panel.decimalPrecision ?? 2) : formatProcessValue(panel.payloadMin ?? 0, panel.decimalPrecision ?? 2));
+                            return (
+                              <span
+                                className="font-extrabold font-mono text-sky-400 bg-sky-500/10 border border-sky-500/20 px-1.5 py-0.5 rounded-md shrink-0"
+                                style={{ fontSize: `${sliderValueFontSize}px` }}
+                              >
+                                {sliderDisplayVal}
+                                {panel.unit ? ` ${panel.unit}` : ''}
+                              </span>
+                            );
+                          })()}
                         </div>
 
                         <div className="relative w-full my-1 flex flex-col justify-center">
@@ -4538,14 +5370,23 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                           : pct > 35
                             ? (panel.secondColor || '#10b981')
                             : (panel.thirdColor || '#f43f5e');
+                        const progressFontSize = panel.fontSize ? Number(panel.fontSize) : 12;
 
                         return (
                           <div className="w-full h-full p-2 flex flex-col justify-between overflow-hidden">
-                            <div className="flex items-center justify-between mb-0.5">
-                              <span className="text-[10px] font-bold truncate uppercase tracking-wider" style={{ color: panel.textColor || '#cbd5e1' }}>
+                            <div className={`flex ${panel.textWrap ? 'items-start' : 'items-center'} justify-between mb-0.5 gap-1`}>
+                              <span
+                                className={`text-[10px] font-bold uppercase tracking-wider ${
+                                  panel.textWrap ? 'break-words whitespace-normal leading-tight min-w-0 flex-1' : 'truncate'
+                                }`}
+                                style={{ color: panel.textColor || '#cbd5e1' }}
+                              >
                                 {panel.panelName || 'PROGRESS'}
                               </span>
-                              <span className="text-[11px] font-extrabold font-mono text-sky-400 bg-sky-500/10 border border-sky-500/20 px-1.5 py-0.5 rounded-md shrink-0">
+                              <span
+                                className="font-extrabold font-mono text-sky-400 bg-sky-500/10 border border-sky-500/20 px-1.5 py-0.5 rounded-md shrink-0"
+                                style={{ fontSize: `${progressFontSize}px` }}
+                              >
                                 {Math.round(pct)}%
                               </span>
                             </div>
@@ -4557,8 +5398,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                               />
                             </div>
 
-                            <div className="flex justify-between text-[9px] font-mono text-slate-500 px-0.5">
-                              <span>{numVal} {panel.unit || ''}</span>
+                            <div className="flex justify-between font-mono text-slate-500 px-0.5" style={{ fontSize: `${Math.max(9, Math.round(progressFontSize * 0.8))}px` }}>
+                              <span>{formatProcessValue(numVal, panel.decimalPrecision ?? 2)} {panel.unit || ''}</span>
                               <span>Max: {max}</span>
                             </div>
                           </div>
@@ -4585,10 +5426,19 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                           }
                         }
 
+                        const outFontSize = panel.fontSize ? Number(panel.fontSize) : 16;
+                        const unitFontSize = Math.max(10, Math.round(outFontSize * 0.55));
+                        const displayVal = formatProcessValue(
+                          liveValue !== undefined && liveValue !== null ? liveValue : (rawStringValue !== '' ? rawStringValue : 0),
+                          panel.decimalPrecision ?? 2
+                        );
+
                         return (
                           <div className="w-full h-full p-2 flex flex-col justify-between overflow-hidden">
                             <span
-                              className="text-[10px] font-bold truncate uppercase tracking-wider mb-0.5 w-full block"
+                              className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 w-full block ${
+                                panel.textWrap ? 'break-words whitespace-normal leading-tight' : 'truncate'
+                              }`}
                               style={{
                                 color: panel.textColor || '#94a3b8',
                                 textAlign: panel.textAlign || 'left'
@@ -4606,14 +5456,14 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                             >
                               <span
                                 className={`font-bold tracking-wider truncate ${panel.digitalDisplay !== false ? 'digital-font' : ''} ${isOffline ? 'opacity-30' : ''}`}
-                                style={{ fontSize: `${panel.fontSize || 16}px`, color: dynamicColor }}
+                                style={{ fontSize: `${outFontSize}px`, color: dynamicColor }}
                               >
-                                {rawStringValue !== '' ? rawStringValue : (liveValue !== undefined ? String(liveValue) : '0')}
+                                {displayVal}
                               </span>
                               {panel.unit && (
                                 <span
-                                  className={`text-[10px] font-mono font-bold ml-1.5 shrink-0 ${isOffline ? 'opacity-30' : ''}`}
-                                  style={{ color: dynamicColor }}
+                                  className={`font-mono font-bold ml-1.5 shrink-0 ${isOffline ? 'opacity-30' : ''}`}
+                                  style={{ fontSize: `${unitFontSize}px`, color: dynamicColor }}
                                 >
                                   {panel.unit}
                                 </span>
@@ -4624,135 +5474,175 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       })()
                     ) : panel.type === PanelType.TEXT_INPUT ? (
                       /* Interactive Text / Numeric Input Field */
-                      <div
-                        className="w-full h-full p-2 flex flex-col justify-between overflow-hidden"
-                        onMouseDown={(e) => {
-                          if (effectiveEditMode) {
-                            handlePanelSelect(panel.panelId, e.shiftKey || e.ctrlKey || e.metaKey);
-                          }
-                        }}
-                      >
-                        <div className="flex items-center justify-between mb-0.5">
-                          <span
-                            className={`text-[10px] font-bold truncate uppercase tracking-wider ${
-                              panel.textAlign === 'center' ? 'text-center flex-1' : panel.textAlign === 'right' ? 'text-right flex-1' : ''
-                            }`}
-                            style={{ color: panel.textColor || '#94a3b8' }}
-                          >
-                            {panel.panelName || 'TEXT INPUT'}
-                          </span>
-                          {panel.dataType !== 'text' && (panel.payloadMin !== undefined || panel.payloadMax !== undefined) && (
-                            <span className="text-[9px] font-mono text-slate-400 bg-slate-900 border border-slate-800 px-1.5 py-0.2 rounded ml-1 shrink-0">
-                              {panel.payloadMin ?? 0}..{panel.payloadMax ?? 100}
-                            </span>
-                          )}
-                        </div>
+                      (() => {
+                        const inHeight = panel.inputAreaHeight ? Number(panel.inputAreaHeight) : 42;
+                        const inFontSize = panel.inputFontSize ? Number(panel.inputFontSize) : (panel.fontSize ? Number(panel.fontSize) : 18);
+                        const btnFontSize = Math.max(11, Math.min(24, Math.round(inFontSize * 0.75)));
+                        const unitFontSize = Math.max(10, Math.min(18, Math.round(inFontSize * 0.65)));
+                        const labelFontSize = panel.labelFontSize ? Number(panel.labelFontSize) : 11;
+                        const effectivePrecision = panel.decimalPrecision !== undefined ? panel.decimalPrecision : (panel.decimals !== undefined ? panel.decimals : 2);
 
-                        <div className="flex items-center space-x-1.5 my-0.5">
-                          <div className="relative flex-1 flex items-center min-w-0">
-                            <input
-                              type={panel.dataType === 'text' ? 'text' : 'number'}
-                              value={
-                                focusedInputPanelId === panel.panelId
-                                  ? (textInputValues[panel.panelId] ?? '')
-                                  : (liveValue !== undefined && liveValue !== null ? String(liveValue) : (textInputValues[panel.panelId] ?? ''))
+                        const formatVal = (v: any) => {
+                          if (panel.dataType === 'text') return String(v);
+                          return formatProcessValue(v, effectivePrecision);
+                        };
+
+                        const displayValue = focusedInputPanelId === panel.panelId
+                          ? (textInputValues[panel.panelId] ?? '')
+                          : (liveValue !== undefined && liveValue !== null
+                              ? formatVal(liveValue)
+                              : (textInputValues[panel.panelId] ?? ''));
+
+                        return (
+                          <div
+                            className="w-full h-full p-2 flex flex-col justify-between overflow-hidden"
+                            onMouseDown={(e) => {
+                              if (effectiveEditMode) {
+                                handlePanelSelect(panel.panelId, e.shiftKey || e.ctrlKey || e.metaKey);
                               }
-                              onFocus={() => {
-                                setFocusedInputPanelId(panel.panelId);
-                                setTextInputValues(prev => ({
-                                  ...prev,
-                                  [panel.panelId]: liveValue !== undefined && liveValue !== null ? String(liveValue) : (prev[panel.panelId] ?? '')
-                                }));
-                                if (textInputErrors[panel.panelId]) {
-                                  setTextInputErrors(prev => ({ ...prev, [panel.panelId]: null }));
-                                }
-                              }}
-                              onBlur={() => {
-                                setFocusedInputPanelId(null);
-                                setTextInputValues(prev => {
-                                  const next = { ...prev };
-                                  delete next[panel.panelId];
-                                  return next;
-                                });
-                              }}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setTextInputValues(prev => ({ ...prev, [panel.panelId]: val }));
-                                if (textInputErrors[panel.panelId]) {
-                                  setTextInputErrors(prev => ({ ...prev, [panel.panelId]: null }));
-                                }
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
+                            }}
+                          >
+                            <div className={`flex ${panel.textWrap ? 'items-start' : 'items-center'} justify-between mb-0.5 gap-1`}>
+                              <span
+                                className={`font-bold uppercase tracking-wider ${
+                                  panel.textWrap
+                                    ? 'break-words whitespace-normal leading-tight min-w-0 flex-1'
+                                    : 'truncate'
+                                } ${
+                                  panel.textAlign === 'center' ? 'text-center flex-1' : panel.textAlign === 'right' ? 'text-right flex-1' : ''
+                                }`}
+                                style={{
+                                  fontSize: `${labelFontSize}px`,
+                                  color: panel.textColor || '#94a3b8'
+                                }}
+                              >
+                                {panel.panelName || 'TEXT INPUT'}
+                              </span>
+                              {panel.dataType !== 'text' && (panel.payloadMin !== undefined || panel.payloadMax !== undefined) && (
+                                <span
+                                  className="font-mono text-slate-400 bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded ml-1 shrink-0"
+                                  style={{ fontSize: `${Math.max(9, Math.round(labelFontSize * 0.85))}px` }}
+                                >
+                                  {panel.payloadMin ?? 0}..{panel.payloadMax ?? 100}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center space-x-1.5 my-auto">
+                              <div className="relative flex-1 flex items-center min-w-0">
+                                <input
+                                  type={panel.dataType === 'text' ? 'text' : 'number'}
+                                  step="any"
+                                  value={displayValue}
+                                  onFocus={() => {
+                                    setFocusedInputPanelId(panel.panelId);
+                                    setTextInputValues(prev => ({
+                                      ...prev,
+                                      [panel.panelId]: liveValue !== undefined && liveValue !== null ? formatVal(liveValue) : (prev[panel.panelId] ?? '')
+                                    }));
+                                    if (textInputErrors[panel.panelId]) {
+                                      setTextInputErrors(prev => ({ ...prev, [panel.panelId]: null }));
+                                    }
+                                  }}
+                                  onBlur={() => {
+                                    setFocusedInputPanelId(null);
+                                    setTextInputValues(prev => {
+                                      const next = { ...prev };
+                                      delete next[panel.panelId];
+                                      return next;
+                                    });
+                                  }}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setTextInputValues(prev => ({ ...prev, [panel.panelId]: val }));
+                                    if (textInputErrors[panel.panelId]) {
+                                      setTextInputErrors(prev => ({ ...prev, [panel.panelId]: null }));
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.stopPropagation();
+                                      const val = textInputValues[panel.panelId] ?? (liveValue !== undefined && liveValue !== null ? formatVal(liveValue) : '');
+                                      const ok = handleSendTextInput(panel, val);
+                                      if (ok) {
+                                        (e.target as HTMLInputElement).blur();
+                                      }
+                                    } else if (e.key === 'Escape') {
+                                      e.stopPropagation();
+                                      setFocusedInputPanelId(null);
+                                      setTextInputValues(prev => {
+                                        const next = { ...prev };
+                                        delete next[panel.panelId];
+                                        return next;
+                                      });
+                                      (e.target as HTMLInputElement).blur();
+                                    }
+                                  }}
+                                  onMouseDown={(e) => {
+                                    if (!effectiveEditMode) e.stopPropagation();
+                                  }}
+                                  onTouchStart={(e) => {
+                                    if (!effectiveEditMode) e.stopPropagation();
+                                  }}
+                                  onClick={(e) => {
+                                    if (!effectiveEditMode) e.stopPropagation();
+                                  }}
+                                  placeholder={panel.dataType === 'text' ? 'Enter text...' : `Value (${panel.payloadMin ?? 0} - ${panel.payloadMax ?? 100})...`}
+                                  style={{
+                                    height: `${inHeight}px`,
+                                    fontSize: `${inFontSize}px`,
+                                    paddingRight: panel.unit ? `${Math.max(30, Math.round(inFontSize * 1.8))}px` : undefined
+                                  }}
+                                  className={`w-full bg-black/80 border text-amber-300 font-mono rounded-lg px-2.5 outline-none min-w-0 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                                    focusedInputPanelId === panel.panelId
+                                      ? 'border-amber-400 ring-1 ring-amber-400/50 shadow-[0_0_8px_rgba(245,158,11,0.25)]'
+                                      : 'border-slate-700 hover:border-slate-600'
+                                  }`}
+                                />
+                                {panel.unit && (
+                                  <span
+                                    className="absolute right-2 font-mono font-bold text-sky-400 pointer-events-none select-none"
+                                    style={{ fontSize: `${unitFontSize}px` }}
+                                  >
+                                    {panel.unit}
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                style={{
+                                  height: `${inHeight}px`,
+                                  fontSize: `${btnFontSize}px`
+                                }}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  if (!effectiveEditMode) e.stopPropagation();
+                                }}
+                                onClick={(e) => {
                                   e.stopPropagation();
-                                  const val = textInputValues[panel.panelId] ?? (liveValue !== undefined && liveValue !== null ? String(liveValue) : '');
+                                  const val = textInputValues[panel.panelId] ?? (liveValue !== undefined && liveValue !== null ? formatVal(liveValue) : '');
                                   const ok = handleSendTextInput(panel, val);
                                   if (ok) {
-                                    (e.target as HTMLInputElement).blur();
+                                    if (document.activeElement instanceof HTMLElement) {
+                                      document.activeElement.blur();
+                                    }
                                   }
-                                } else if (e.key === 'Escape') {
-                                  e.stopPropagation();
-                                  setFocusedInputPanelId(null);
-                                  setTextInputValues(prev => {
-                                    const next = { ...prev };
-                                    delete next[panel.panelId];
-                                    return next;
-                                  });
-                                  (e.target as HTMLInputElement).blur();
-                                }
-                              }}
-                              onMouseDown={(e) => {
-                                if (!effectiveEditMode) e.stopPropagation();
-                              }}
-                              onTouchStart={(e) => {
-                                if (!effectiveEditMode) e.stopPropagation();
-                              }}
-                              onClick={(e) => {
-                                if (!effectiveEditMode) e.stopPropagation();
-                              }}
-                              placeholder={panel.dataType === 'text' ? 'Enter text...' : `Value (${panel.payloadMin ?? 0} - ${panel.payloadMax ?? 100})...`}
-                              className={`w-full bg-black/80 border text-amber-300 font-mono text-xs rounded-lg px-2 py-1 outline-none min-w-0 transition-colors ${
-                                focusedInputPanelId === panel.panelId
-                                  ? 'border-amber-400 ring-1 ring-amber-400/50 shadow-[0_0_8px_rgba(245,158,11,0.25)]'
-                                  : 'border-slate-700 hover:border-slate-600'
-                              } ${panel.unit ? 'pr-7' : ''}`}
-                            />
-                            {panel.unit && (
-                              <span className="absolute right-2 text-[10px] font-mono font-bold text-sky-400 pointer-events-none select-none">
-                                {panel.unit}
+                                }}
+                                className="px-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg transition-transform active:scale-95 shrink-0 cursor-pointer flex items-center space-x-1.5"
+                              >
+                                <span>Send</span>
+                                <i className="fas fa-paper-plane" style={{ fontSize: `${Math.max(9, Math.round(btnFontSize * 0.75))}px` }}></i>
+                              </button>
+                            </div>
+
+                            {textInputErrors[panel.panelId] && (
+                              <span className="text-[9px] text-rose-400 font-semibold truncate block mt-0.5">
+                                {textInputErrors[panel.panelId]}
                               </span>
                             )}
                           </div>
-                          <button
-                            type="button"
-                            onMouseDown={(e) => {
-                              // Prevent input from blurring before button click fires
-                              e.preventDefault();
-                              if (!effectiveEditMode) e.stopPropagation();
-                            }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const val = textInputValues[panel.panelId] ?? (liveValue !== undefined && liveValue !== null ? String(liveValue) : '');
-                              const ok = handleSendTextInput(panel, val);
-                              if (ok) {
-                                if (document.activeElement instanceof HTMLElement) {
-                                  document.activeElement.blur();
-                                }
-                              }
-                            }}
-                            className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition-transform active:scale-95 shrink-0 cursor-pointer flex items-center space-x-1"
-                          >
-                            <span>Send</span>
-                            <i className="fas fa-paper-plane text-[9px]"></i>
-                          </button>
-                        </div>
-
-                        {textInputErrors[panel.panelId] && (
-                          <span className="text-[9px] text-rose-400 font-semibold truncate block">
-                            {textInputErrors[panel.panelId]}
-                          </span>
-                        )}
-                      </div>
+                        );
+                      })()
                     ) : panel.type === PanelType.LED ? (
                       /* Fan / Status Indicator Lamp */
                       ((isOn: boolean) => {
@@ -4778,9 +5668,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                 : 'justify-between space-x-2 text-left'
                             }`}
                           >
-                            <div className="flex flex-col min-w-0 truncate" style={{ textAlign: align }}>
+                            <div className={`flex flex-col min-w-0 ${panel.textWrap ? '' : 'truncate'}`} style={{ textAlign: align }}>
                               <span
-                                className="font-bold truncate leading-tight"
+                                className={`font-bold leading-tight ${panel.textWrap ? 'break-words whitespace-normal' : 'truncate'}`}
                                 style={{
                                   fontSize: `${labelFontSize}px`,
                                   color: panel.textColor || '#cbd5e1'
@@ -4817,64 +5707,75 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       })(String(liveValue) === String(panel.payloadOn ?? '1'))
                     ) : panel.type === PanelType.COMBO_BOX ? (
                       /* Combo Box Dropdown Element */
-                      <div className="w-full h-full p-2 flex flex-col justify-between overflow-hidden">
-                        <span className="text-[10px] font-bold truncate uppercase tracking-wider mb-1" style={{ color: panel.textColor || '#94a3b8' }}>
-                          {panel.panelName}
-                        </span>
-                        <select
-                          value={rawStringValue}
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            const selectedVal = e.target.value;
-                            if (onPublish) onPublish(panel.publishTopic || panel.topic, formatPublishPayload(selectedVal, panel));
-                          }}
-                          style={{ color: panel.textColor || '#fcd34d' }}
-                          className="w-full bg-slate-950 border border-slate-700 font-bold text-xs rounded-lg px-2 py-1.5 outline-none cursor-pointer font-mono"
-                        >
-                          <option value="" disabled className="text-slate-500">Select option...</option>
-                          {getNormalizedOptions(panel).map((opt, i) => (
-                            <option key={i} value={opt.value} className="bg-slate-900 text-white">
-                              {opt.label} ({opt.value})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      (() => {
+                        const selectFontSize = panel.fontSize ? Number(panel.fontSize) : 13;
+                        return (
+                          <div className="w-full h-full p-2 flex flex-col justify-between overflow-hidden">
+                            <span className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${panel.textWrap ? 'break-words whitespace-normal leading-tight' : 'truncate'}`} style={{ color: panel.textColor || '#94a3b8' }}>
+                              {panel.panelName}
+                            </span>
+                            <select
+                              value={rawStringValue}
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                const selectedVal = e.target.value;
+                                if (onPublish) onPublish(panel.publishTopic || panel.topic, formatPublishPayload(selectedVal, panel));
+                              }}
+                              style={{ color: panel.textColor || '#fcd34d', fontSize: `${selectFontSize}px` }}
+                              className="w-full bg-slate-950 border border-slate-700 font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer font-mono"
+                            >
+                              <option value="" disabled className="text-slate-500">Select option...</option>
+                              {getNormalizedOptions(panel).map((opt, i) => (
+                                <option key={i} value={opt.value} className="bg-slate-900 text-white">
+                                  {opt.label} ({opt.value})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      })()
                     ) : panel.type === PanelType.RADIO_BUTTONS || panel.type === PanelType.MULTI_STATE ? (
                       /* Radio Button Group Element */
-                      <div className="w-full h-full p-2 flex flex-col overflow-hidden">
-                        <span className="text-[10px] font-bold truncate uppercase tracking-wider mb-1" style={{ color: panel.textColor || '#94a3b8' }}>
-                          {panel.panelName}
-                        </span>
-                        <div className="flex flex-wrap gap-1.5 overflow-y-auto max-h-full">
-                          {getNormalizedOptions(panel).map((opt, i) => {
-                            const isActive = rawStringValue === opt.value || rawStringValue === opt.label || rawStringValue === String(i);
-                            return (
-                              <button
-                                key={i}
-                                type="button"
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  if (onPublish) onPublish(panel.publishTopic || panel.topic, formatPublishPayload(opt.value, panel));
-                                }}
-                                className={`px-2 py-1 rounded-lg text-[11px] font-semibold flex items-center space-x-1.5 border transition-colors cursor-pointer ${isActive
-                                  ? 'bg-amber-500/20 text-amber-300 border-amber-500 font-bold shadow-sm'
-                                  : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
-                                  }`}
-                              >
-                                <div className={`w-3 h-3 rounded-full border flex items-center justify-center shrink-0 ${isActive ? 'border-amber-400 bg-amber-400/20' : 'border-slate-600'
-                                  }`}>
-                                  {isActive && <div className="w-1 h-1 rounded-full bg-amber-400 shadow-[0_0_4px_#f59e0b]"></div>}
-                                </div>
-                                <span style={{ color: panel.textColor }}>{opt.label}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
+                      (() => {
+                        const radioFontSize = panel.fontSize ? Number(panel.fontSize) : 11;
+                        return (
+                          <div className="w-full h-full p-2 flex flex-col overflow-hidden">
+                            <span className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${panel.textWrap ? 'break-words whitespace-normal leading-tight' : 'truncate'}`} style={{ color: panel.textColor || '#94a3b8' }}>
+                              {panel.panelName}
+                            </span>
+                            <div className="flex flex-wrap gap-1.5 overflow-y-auto max-h-full">
+                              {getNormalizedOptions(panel).map((opt, i) => {
+                                const isActive = rawStringValue === opt.value || rawStringValue === opt.label || rawStringValue === String(i);
+                                return (
+                                  <button
+                                    key={i}
+                                    type="button"
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      if (onPublish) onPublish(panel.publishTopic || panel.topic, formatPublishPayload(opt.value, panel));
+                                    }}
+                                    style={{ fontSize: `${radioFontSize}px` }}
+                                    className={`px-2 py-1 rounded-lg font-semibold flex items-center space-x-1.5 border transition-colors cursor-pointer ${isActive
+                                      ? 'bg-amber-500/20 text-amber-300 border-amber-500 font-bold shadow-sm'
+                                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
+                                      }`}
+                                  >
+                                    <div className={`w-3 h-3 rounded-full border flex items-center justify-center shrink-0 ${isActive ? 'border-amber-400 bg-amber-400/20' : 'border-slate-600'
+                                      }`}>
+                                      {isActive && <div className="w-1 h-1 rounded-full bg-amber-400 shadow-[0_0_4px_#f59e0b]"></div>}
+                                    </div>
+                                    <span style={{ color: panel.textColor }}>{opt.label}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()
                     ) : panel.type === PanelType.LINE_GRAPH ? (
                       /* Line Graph Element */
                       <div className="w-full h-full p-1 flex flex-col overflow-hidden bg-[#080d16] border border-slate-800/80 rounded-xl shadow-2xl">
@@ -4898,7 +5799,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       </div>
                     ) : panel.type === PanelType.GAUGE ? (
                       <div className="w-full h-full p-2 flex flex-col items-center justify-between text-center overflow-hidden">
-                        <span className="text-[10px] font-bold truncate w-full text-center shrink-0" style={{ color: panel.textColor || '#94a3b8' }}>
+                        <span className={`text-[10px] font-bold w-full text-center shrink-0 ${panel.textWrap ? 'break-words whitespace-normal leading-tight' : 'truncate'}`} style={{ color: panel.textColor || '#94a3b8' }}>
                           {panel.panelName || 'GAUGE'}
                         </span>
                         <div className="w-full flex-1 flex items-center justify-center overflow-hidden min-h-0">
@@ -4910,7 +5811,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                             color1={panel.firstColor || '#38bdf8'}
                             color2={panel.secondColor || '#10b981'}
                             color3={panel.thirdColor || '#f43f5e'}
-                            precision={panel.decimalPrecision ?? 1}
+                            precision={panel.decimalPrecision !== undefined ? panel.decimalPrecision : 2}
                             lowThreshold={panel.lowThreshold}
                             highThreshold={panel.highThreshold}
                             fontSize={panel.fontSize}
@@ -5542,9 +6443,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                               )}
 
                               {/* Shape Label / Numeric Readout Overlay */}
-                              <div className="relative z-10 flex flex-col items-center justify-center p-1 text-center truncate max-w-full">
+                              <div className={`relative z-10 flex flex-col items-center justify-center p-1 text-center max-w-full ${panel.textWrap ? '' : 'truncate'}`}>
                                 {panel.panelName && (
-                                  <span className="text-[10px] font-bold text-slate-200 truncate px-2 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                                  <span className={`text-[10px] font-bold text-slate-200 px-2 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)] ${panel.textWrap ? 'break-words whitespace-normal leading-tight' : 'truncate'}`}>
                                     {panel.panelName}
                                   </span>
                                 )}
@@ -5623,7 +6524,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       ))
                     ) : (
                       /* Default fallback box with Liquid Level Fill */
-                      <div className="w-full h-full p-2 flex flex-col justify-center items-center text-center truncate relative overflow-hidden">
+                      <div className={`w-full h-full p-2 flex flex-col justify-center items-center text-center relative overflow-hidden ${panel.textWrap ? '' : 'truncate'}`}>
                         {/* Liquid Level Fill Overlay Layer */}
                         {dynEval.levelFill && dynEval.levelFill.isLevelFill && (
                           <div
@@ -5644,7 +6545,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                           </div>
                         )}
                         <div className="relative z-10">
-                          <span className="text-[10px] font-bold truncate w-full" style={{ color: panel.textColor || '#cbd5e1' }}>{panel.panelName}</span>
+                          <span className={`text-[10px] font-bold w-full ${panel.textWrap ? 'break-words whitespace-normal leading-tight' : 'truncate'}`} style={{ color: panel.textColor || '#cbd5e1' }}>{panel.panelName}</span>
                           {liveValue !== undefined ? (
                             <span className="text-xs font-mono font-bold mt-1 block" style={{ color: panel.textColor || '#fbbf24' }}>
                               {String(liveValue)}
@@ -5697,72 +6598,78 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                             {/* Outline dashed border */}
                             <div className="absolute inset-0 border-2 border-sky-400 border-dashed rounded-[inherit] pointer-events-none" />
 
-                            {/* Rotation Handle (Top Center) */}
-                            <div
-                              className={`absolute ${pos.y < 45 ? 'top-2 left-1/2 -translate-x-1/2' : '-top-9 left-1/2 -translate-x-1/2'} flex flex-col items-center pointer-events-auto cursor-grab active:cursor-grabbing group/rot z-[70]`}
-                              onMouseDown={(e) => handleRotateStart(e, panel, e.currentTarget.parentElement)}
-                              title="Click and drag to rotate element (Shift for 15° snap)"
-                            >
-                              <div className="w-6 h-6 rounded-full bg-amber-400 text-slate-950 border-2 border-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.8)] flex items-center justify-center text-[10px] font-bold hover:scale-125 transition-transform">
-                                <i className="fas fa-rotate"></i>
-                              </div>
-                              <div className="w-0.5 h-3 bg-amber-400"></div>
-                            </div>
+                            {/* Only show individual 8 handles & rotation handle if ONLY 1 panel is selected.
+                                When multiple panels are selected, the Collective Group Bounding Box provides the handles! */}
+                            {selectedPanelIds.length === 1 && (
+                              <>
+                                {/* Rotation Handle (Top Center) */}
+                                <div
+                                  className={`absolute ${pos.y < 45 ? 'top-2 left-1/2 -translate-x-1/2' : '-top-9 left-1/2 -translate-x-1/2'} flex flex-col items-center pointer-events-auto cursor-grab active:cursor-grabbing group/rot z-[70]`}
+                                  onMouseDown={(e) => handleRotateStart(e, panel, e.currentTarget.parentElement)}
+                                  title="Click and drag to rotate element (Shift for 15° snap)"
+                                >
+                                  <div className="w-6 h-6 rounded-full bg-amber-400 text-slate-950 border-2 border-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.8)] flex items-center justify-center text-[10px] font-bold hover:scale-125 transition-transform">
+                                    <i className="fas fa-rotate"></i>
+                                  </div>
+                                  <div className="w-0.5 h-3 bg-amber-400"></div>
+                                </div>
 
-                            {/* 8 Corner & Edge Resize Handles */}
-                            {/* Top-Left */}
-                            <div
-                              onMouseDown={(e) => handleResizeStart(e, panel, 'nw')}
-                              className="absolute -top-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nwse-resize pointer-events-auto hover:scale-125 transition-transform"
-                              title="Resize Top-Left"
-                            />
-                            {/* Top-Center */}
-                            <div
-                              onMouseDown={(e) => handleResizeStart(e, panel, 'n')}
-                              className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ns-resize pointer-events-auto hover:scale-125 transition-transform"
-                              title="Resize Height (Top)"
-                            />
-                            {/* Top-Right */}
-                            <div
-                              onMouseDown={(e) => handleResizeStart(e, panel, 'ne')}
-                              className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nesw-resize pointer-events-auto hover:scale-125 transition-transform"
-                              title="Resize Top-Right"
-                            />
-                            {/* Middle-Right */}
-                            <div
-                              onMouseDown={(e) => handleResizeStart(e, panel, 'e')}
-                              className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ew-resize pointer-events-auto hover:scale-125 transition-transform"
-                              title="Resize Width (Right)"
-                            />
-                            {/* Bottom-Right */}
-                            <div
-                              onMouseDown={(e) => handleResizeStart(e, panel, 'se')}
-                              className="absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nwse-resize pointer-events-auto hover:scale-125 transition-transform"
-                              title="Resize Bottom-Right"
-                            />
-                            {/* Bottom-Center */}
-                            <div
-                              onMouseDown={(e) => handleResizeStart(e, panel, 's')}
-                              className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ns-resize pointer-events-auto hover:scale-125 transition-transform"
-                              title="Resize Height (Bottom)"
-                            />
-                            {/* Bottom-Left */}
-                            <div
-                              onMouseDown={(e) => handleResizeStart(e, panel, 'sw')}
-                              className="absolute -bottom-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nesw-resize pointer-events-auto hover:scale-125 transition-transform"
-                              title="Resize Bottom-Left"
-                            />
-                            {/* Middle-Left */}
-                            <div
-                              onMouseDown={(e) => handleResizeStart(e, panel, 'w')}
-                              className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ew-resize pointer-events-auto hover:scale-125 transition-transform"
-                              title="Resize Width (Left)"
-                            />
+                                {/* 8 Corner & Edge Resize Handles */}
+                                {/* Top-Left */}
+                                <div
+                                  onMouseDown={(e) => handleResizeStart(e, panel, 'nw')}
+                                  className="absolute -top-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nwse-resize pointer-events-auto hover:scale-125 transition-transform"
+                                  title="Resize Top-Left"
+                                />
+                                {/* Top-Center */}
+                                <div
+                                  onMouseDown={(e) => handleResizeStart(e, panel, 'n')}
+                                  className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ns-resize pointer-events-auto hover:scale-125 transition-transform"
+                                  title="Resize Height (Top)"
+                                />
+                                {/* Top-Right */}
+                                <div
+                                  onMouseDown={(e) => handleResizeStart(e, panel, 'ne')}
+                                  className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nesw-resize pointer-events-auto hover:scale-125 transition-transform"
+                                  title="Resize Top-Right"
+                                />
+                                {/* Middle-Right */}
+                                <div
+                                  onMouseDown={(e) => handleResizeStart(e, panel, 'e')}
+                                  className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ew-resize pointer-events-auto hover:scale-125 transition-transform"
+                                  title="Resize Width (Right)"
+                                />
+                                {/* Bottom-Right */}
+                                <div
+                                  onMouseDown={(e) => handleResizeStart(e, panel, 'se')}
+                                  className="absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nwse-resize pointer-events-auto hover:scale-125 transition-transform"
+                                  title="Resize Bottom-Right"
+                                />
+                                {/* Bottom-Center */}
+                                <div
+                                  onMouseDown={(e) => handleResizeStart(e, panel, 's')}
+                                  className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ns-resize pointer-events-auto hover:scale-125 transition-transform"
+                                  title="Resize Height (Bottom)"
+                                />
+                                {/* Bottom-Left */}
+                                <div
+                                  onMouseDown={(e) => handleResizeStart(e, panel, 'sw')}
+                                  className="absolute -bottom-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-nesw-resize pointer-events-auto hover:scale-125 transition-transform"
+                                  title="Resize Bottom-Left"
+                                />
+                                {/* Middle-Left */}
+                                <div
+                                  onMouseDown={(e) => handleResizeStart(e, panel, 'w')}
+                                  className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-3.5 h-3.5 bg-white border-2 border-sky-500 rounded-sm shadow-md cursor-ew-resize pointer-events-auto hover:scale-125 transition-transform"
+                                  title="Resize Width (Left)"
+                                />
 
-                            {/* Dimension & Rotation Badge Overlay */}
-                            <div className={`absolute ${pos.y + pos.h > 720 ? 'bottom-1' : '-bottom-6'} left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-900/95 text-amber-300 border border-slate-700 rounded text-[9px] font-mono shadow-xl font-bold whitespace-nowrap pointer-events-none z-[70]`}>
-                              {pos.w} × {pos.h} px {panel.rotation ? `| ${panel.rotation}°` : ''}
-                            </div>
+                                {/* Dimension & Rotation Badge Overlay */}
+                                <div className={`absolute ${pos.y + pos.h > 720 ? 'bottom-1' : '-bottom-6'} left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-900/95 text-amber-300 border border-slate-700 rounded text-[9px] font-mono shadow-xl font-bold whitespace-nowrap pointer-events-none z-[70]`}>
+                                  {pos.w} × {pos.h} px {panel.rotation ? `| ${panel.rotation}°` : ''}
+                                </div>
+                              </>
+                            )}
                           </div>
                         )}
 
@@ -5888,6 +6795,130 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 );
               })
             )}
+
+            {/* ─── COLLECTIVE SELECTION & GROUP BOUNDING BOX WITH ACTIVE CORNER HANDLES ─── */}
+            {effectiveEditMode && selectedPanelIds.length > 1 && (() => {
+              const selectedPanels = appState.panels.filter(p => selectedPanelIds.includes(p.panelId));
+              if (selectedPanels.length < 2) return null;
+
+              let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+              selectedPanels.forEach(p => {
+                const idx = panels.findIndex(item => item.panelId === p.panelId);
+                const pos = getPanelPos(p, idx);
+                if (pos.x < minX) minX = pos.x;
+                if (pos.y < minY) minY = pos.y;
+                if (pos.x + pos.w > maxX) maxX = pos.x + pos.w;
+                if (pos.y + pos.h > maxY) maxY = pos.y + pos.h;
+              });
+
+              const groupW = maxX - minX;
+              const groupH = maxY - minY;
+              if (groupW <= 0 || groupH <= 0) return null;
+
+              const isAllGrouped = selectedPanels.every(p => p.groupId && p.groupId === selectedPanels[0].groupId);
+              const groupName = isAllGrouped ? (selectedPanels[0].groupName || 'Group Container') : null;
+              const borderColor = isAllGrouped ? 'border-indigo-400' : 'border-sky-400';
+              const handleBorder = isAllGrouped ? 'border-indigo-500' : 'border-sky-500';
+
+              return (
+                <div
+                  className="absolute pointer-events-none z-[65]"
+                  style={{
+                    left: `${minX}px`,
+                    top: `${minY}px`,
+                    width: `${groupW}px`,
+                    height: `${groupH}px`,
+                  }}
+                >
+                  {/* Outer Lining of Group / Selection (Corner Lining) */}
+                  <div className={`absolute inset-0 border-2 border-dashed ${borderColor} rounded-sm shadow-[0_0_15px_rgba(56,189,248,0.3)] pointer-events-none`} />
+
+                  {/* Corner Accent Brackets for CAD / Industrial SCADA Styling */}
+                  <div className={`absolute -top-1.5 -left-1.5 w-4 h-4 border-t-2 border-l-2 ${isAllGrouped ? 'border-indigo-300' : 'border-sky-300'} pointer-events-none`} />
+                  <div className={`absolute -top-1.5 -right-1.5 w-4 h-4 border-t-2 border-r-2 ${isAllGrouped ? 'border-indigo-300' : 'border-sky-300'} pointer-events-none`} />
+                  <div className={`absolute -bottom-1.5 -left-1.5 w-4 h-4 border-b-2 border-l-2 ${isAllGrouped ? 'border-indigo-300' : 'border-sky-300'} pointer-events-none`} />
+                  <div className={`absolute -bottom-1.5 -right-1.5 w-4 h-4 border-b-2 border-r-2 ${isAllGrouped ? 'border-indigo-300' : 'border-sky-300'} pointer-events-none`} />
+
+                  {/* Group / Multi-Selection Header Badge */}
+                  <div className={`absolute ${minY < 35 ? 'top-2 left-2' : '-top-8 left-0'} flex items-center space-x-1.5 bg-slate-950/95 border ${isAllGrouped ? 'border-indigo-500/50 text-indigo-300' : 'border-sky-500/50 text-sky-300'} px-2.5 py-1 rounded-xl text-[10px] font-mono font-bold shadow-2xl pointer-events-auto select-none whitespace-nowrap`}>
+                    <i className={`fas ${isAllGrouped ? 'fa-box' : 'fa-object-group'} text-[9px] ${isAllGrouped ? 'text-indigo-400' : 'text-sky-400'}`}></i>
+                    <span>{isAllGrouped ? groupName : `${selectedPanels.length} Elements Selected`}</span>
+                    <span className="text-slate-500">•</span>
+                    <span className="text-slate-300">{Math.round(groupW)} × {Math.round(groupH)} px</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setLockGroupRatio(!lockGroupRatio);
+                      }}
+                      className={`ml-1 px-1.5 py-0.5 rounded-lg text-[9px] font-bold border transition-colors cursor-pointer flex items-center space-x-1 ${
+                        lockGroupRatio
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                          : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      }`}
+                      title={lockGroupRatio ? "Aspect Ratio Locked (Proportional - No distortion)" : "Free Stretch Mode"}
+                    >
+                      <i className={`fas ${lockGroupRatio ? 'fa-lock text-emerald-400' : 'fa-unlock text-amber-400'} text-[8px]`}></i>
+                      <span>{lockGroupRatio ? 'No Stretch' : 'Free Stretch'}</span>
+                    </button>
+                  </div>
+
+                  {/* 8 Corner & Edge Resize Handles on Group Bounding Box */}
+                  {/* Top-Left */}
+                  <div
+                    onMouseDown={(e) => handleGroupResizeStart(e, 'nw')}
+                    className={`absolute -top-2 -left-2 w-4 h-4 bg-white border-2 ${handleBorder} rounded-sm shadow-xl cursor-nwse-resize pointer-events-auto hover:scale-125 transition-transform z-30`}
+                    title="Resize Group (Top-Left)"
+                  />
+                  {/* Top-Center */}
+                  <div
+                    onMouseDown={(e) => handleGroupResizeStart(e, 'n')}
+                    className={`absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white border-2 ${handleBorder} rounded-sm shadow-xl cursor-ns-resize pointer-events-auto hover:scale-125 transition-transform z-30`}
+                    title="Resize Group Height (Top)"
+                  />
+                  {/* Top-Right */}
+                  <div
+                    onMouseDown={(e) => handleGroupResizeStart(e, 'ne')}
+                    className={`absolute -top-2 -right-2 w-4 h-4 bg-white border-2 ${handleBorder} rounded-sm shadow-xl cursor-nesw-resize pointer-events-auto hover:scale-125 transition-transform z-30`}
+                    title="Resize Group (Top-Right)"
+                  />
+                  {/* Middle-Right */}
+                  <div
+                    onMouseDown={(e) => handleGroupResizeStart(e, 'e')}
+                    className={`absolute top-1/2 -right-2 -translate-y-1/2 w-4 h-4 bg-white border-2 ${handleBorder} rounded-sm shadow-xl cursor-ew-resize pointer-events-auto hover:scale-125 transition-transform z-30`}
+                    title="Resize Group Width (Right)"
+                  />
+                  {/* Bottom-Right (PULL CORNER HANDLE) */}
+                  <div
+                    onMouseDown={(e) => handleGroupResizeStart(e, 'se')}
+                    className="absolute -bottom-2.5 -right-2.5 w-6 h-6 bg-white border-[2.5px] border-emerald-500 rounded-sm shadow-2xl cursor-nwse-resize pointer-events-auto hover:scale-125 transition-transform z-30 ring-2 ring-emerald-400/60"
+                    title="Pull to Scale Entire Group / Selection (Hold Shift to toggle stretch)"
+                  >
+                    <div className="w-full h-full flex items-center justify-center text-[8px] text-emerald-600 font-black">
+                      <i className="fas fa-arrows-up-down-left-right"></i>
+                    </div>
+                  </div>
+                  {/* Bottom-Center */}
+                  <div
+                    onMouseDown={(e) => handleGroupResizeStart(e, 's')}
+                    className={`absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white border-2 ${handleBorder} rounded-sm shadow-xl cursor-ns-resize pointer-events-auto hover:scale-125 transition-transform z-30`}
+                    title="Resize Group Height (Bottom)"
+                  />
+                  {/* Bottom-Left */}
+                  <div
+                    onMouseDown={(e) => handleGroupResizeStart(e, 'sw')}
+                    className={`absolute -bottom-2 -left-2 w-4 h-4 bg-white border-2 ${handleBorder} rounded-sm shadow-xl cursor-nesw-resize pointer-events-auto hover:scale-125 transition-transform z-30`}
+                    title="Resize Group (Bottom-Left)"
+                  />
+                  {/* Middle-Left */}
+                  <div
+                    onMouseDown={(e) => handleGroupResizeStart(e, 'w')}
+                    className={`absolute top-1/2 -left-2 -translate-y-1/2 w-4 h-4 bg-white border-2 ${handleBorder} rounded-sm shadow-xl cursor-ew-resize pointer-events-auto hover:scale-125 transition-transform z-30`}
+                    title="Resize Group Width (Left)"
+                  />
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -5969,6 +7000,30 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
               <button
                 type="button"
                 onClick={() => {
+                  const p = panels.find(item => item.panelId === contextMenu.panelId);
+                  if (p) {
+                    updateSelectedPanelProp('textWrap', !p.textWrap);
+                  }
+                  setContextMenu({ isOpen: false, x: 0, y: 0 });
+                }}
+                className="w-full text-left px-3 py-1.5 rounded-xl hover:bg-slate-800 text-slate-200 hover:text-white flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center space-x-2.5">
+                  <i className="fas fa-text-width text-amber-400 w-4 text-center"></i>
+                  <span>Wrap Panel Name</span>
+                </div>
+                <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                  panels.find(item => item.panelId === contextMenu.panelId)?.textWrap
+                    ? 'bg-amber-500/20 text-amber-300'
+                    : 'bg-slate-800 text-slate-400'
+                }`}>
+                  {panels.find(item => item.panelId === contextMenu.panelId)?.textWrap ? 'ON' : 'OFF'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
                   handleDuplicateSelected();
                   setContextMenu({ isOpen: false, x: 0, y: 0 });
                 }}
@@ -5992,6 +7047,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
               >
                 <i className="fas fa-paintbrush text-amber-400 w-4 text-center"></i>
                 <span>Copy Visual Properties</span>
+                <span className="ml-auto text-[10px] font-mono text-slate-500">Ctrl+Shift+C</span>
               </button>
 
               <button
@@ -6008,6 +7064,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
               >
                 <i className="fas fa-paint-roller text-amber-400 w-4 text-center"></i>
                 <span>Paste Visual Properties ({selectedPanelIds.length})</span>
+                <span className="ml-auto text-[10px] font-mono text-slate-500">Ctrl+Shift+V</span>
               </button>
 
               {/* Layering Z-Index Sub-Menu / Items */}

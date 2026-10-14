@@ -12,6 +12,7 @@ import {
 import { initReportScheduler, getUnreadScheduledCount } from '../utils/reportScheduler';
 import { initAiMemoryWorker } from '../utils/aiChunkingWorker';
 import { initMobileHapticPriming } from '../utils/hapticFeedback';
+import { isTourSuppressed } from '../utils/tourRegistry';
 import {
   saveCommunityState,
   saveCommercialState,
@@ -2820,6 +2821,7 @@ export function useSessionEngine() {
 
   const [isTourOpen, setIsTourOpen] = useState<boolean>(() => {
     try {
+      if (typeof localStorage === 'undefined' || isTourSuppressed('global')) return false;
       return !localStorage.getItem('tasc_product_tour_completed');
     } catch {
       return false;

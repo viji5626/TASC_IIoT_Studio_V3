@@ -8,7 +8,7 @@ interface GaugeProps {
   color1?: string;
   color2?: string;
   color3?: string;
-  precision?: number;
+  precision?: number | string;
   lowThreshold?: number;
   highThreshold?: number;
   hideText?: boolean;
@@ -23,7 +23,7 @@ const Gauge: React.FC<GaugeProps> = ({
   color1 = '#38bdf8', 
   color2 = '#10b981', 
   color3 = '#f43f5e',
-  precision = 1,
+  precision = 2,
   lowThreshold,
   highThreshold,
   hideText = false,
@@ -181,12 +181,24 @@ const Gauge: React.FC<GaugeProps> = ({
 
       {!hideText && (
         <div className="mt-[-4px] text-center flex items-baseline justify-center space-x-1 shrink-0">
-          <span 
-            className="font-bold tracking-tight text-white digital-font"
-            style={{ fontSize: fontSize ? (typeof fontSize === 'number' ? `${fontSize}px` : `${parseInt(String(fontSize))}px`) : undefined }}
-          >
-            {displayValue.toFixed(precision)}
-          </span>
+          {(() => {
+            let formattedStr = String(displayValue);
+            if (String(precision).toLowerCase() !== 'none') {
+              const p = typeof precision === 'number' ? precision : parseInt(String(precision));
+              if (!isNaN(p)) {
+                const clamped = Math.max(0, Math.min(12, p));
+                formattedStr = displayValue.toFixed(clamped);
+              }
+            }
+            return (
+              <span 
+                className="font-bold tracking-tight text-white digital-font"
+                style={{ fontSize: fontSize ? (typeof fontSize === 'number' ? `${fontSize}px` : `${parseInt(String(fontSize))}px`) : undefined }}
+              >
+                {formattedStr}
+              </span>
+            );
+          })()}
           {unit && (
             <span 
               className="text-sky-400 font-semibold"

@@ -86,7 +86,10 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({
         ...panel,
         qos: panel.qos ?? 0,
         messageFactor: panel.messageFactor ?? 1,
-        decimalPrecision: panel.decimalPrecision ?? 1,
+        decimalPrecision: panel.decimalPrecision !== undefined ? panel.decimalPrecision : 2,
+        inputFontSize: panel.inputFontSize ?? (panel.fontSize ?? 18),
+        inputAreaHeight: panel.inputAreaHeight ?? 42,
+        labelFontSize: panel.labelFontSize ?? 11,
         payloadMin: pMin,
         payloadMax: pMax,
         lowThreshold: lowDefault,
@@ -110,7 +113,7 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({
         iconSize: panel.iconSize ?? 24,
         switchSize: panel.switchSize ?? 48,
         textAlign: panel.textAlign ?? (panel.type === PanelType.GAUGE ? 'center' : 'left'),
-        textWrap: panel.textWrap ?? true,
+        textWrap: panel.textWrap ?? (panel.type === PanelType.STATIC_TEXT),
         payloadOn: panel.payloadOn ?? '1',
         payloadOff: panel.payloadOff ?? '0',
         showReceivedTimeStamp: panel.showReceivedTimeStamp ?? true,
@@ -265,9 +268,9 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({
         </div>
 
         <div className="space-y-4 text-xs">
-          {/* Panel Name, Name Alignment & Description */}
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-            <div className="sm:col-span-5 relative border-b border-gray-700 py-2">
+          {/* Panel Name, Name Alignment, Wrap Name & Description */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+            <div className="sm:col-span-4 relative border-b border-gray-700 py-2">
               <label className="text-xs text-amber-500 absolute -top-2">Panel Name *</label>
               <input name="panelName" value={formData.panelName || ''} onChange={handleChange} required className="w-full bg-transparent outline-none text-white py-2" placeholder="e.g. Tank Level" />
             </div>
@@ -295,7 +298,26 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({
                 ))}
               </div>
             </div>
-            <div className="sm:col-span-4 relative border-b border-gray-700 py-2">
+            <div className="sm:col-span-2 relative border-b border-gray-700 py-1 flex flex-col justify-end">
+              <label className="text-xs text-amber-500 mb-1 flex items-center space-x-1">
+                <i className="fas fa-text-width text-[10px]"></i>
+                <span>Wrap Name</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setFormData((prev: any) => ({ ...prev, textWrap: !prev.textWrap }))}
+                className={`w-full py-1 px-1.5 rounded text-[11px] font-bold flex items-center justify-center space-x-1 transition-all cursor-pointer ${
+                  formData.textWrap
+                    ? 'bg-amber-500 text-black shadow-md'
+                    : 'bg-[#1e1e1e] text-gray-400 hover:text-white'
+                }`}
+                title="Toggle Wrap Panel Name across multiple lines instead of truncating with ellipsis"
+              >
+                <i className={`fas fa-text-width text-[10px] ${formData.textWrap ? 'text-black' : 'text-amber-400'}`}></i>
+                <span>{formData.textWrap ? 'ON' : 'OFF'}</span>
+              </button>
+            </div>
+            <div className="sm:col-span-3 relative border-b border-gray-700 py-2">
               <label className="text-xs text-gray-400 absolute -top-2">Description</label>
               <input name="description" value={formData.description || ''} onChange={handleChange} className="w-full bg-transparent outline-none text-white py-2" placeholder="Optional notes" />
             </div>

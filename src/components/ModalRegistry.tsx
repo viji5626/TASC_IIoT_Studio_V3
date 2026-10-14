@@ -386,6 +386,7 @@ export const ModalRegistry: React.FC<ModalRegistryProps> = React.memo(({
 
       {/* Interactive CoachMark / Product Tour Overlay */}
       <CoachMarkOverlay
+        tourId="global"
         isOpen={isTourOpen && !isAiDrawerOpen}
         onClose={() => setIsTourOpen(false)}
         onNavigate={setCurrentView}

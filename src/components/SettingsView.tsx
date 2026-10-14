@@ -3,7 +3,7 @@ import { AppState, MqttConnection, ProductEdition } from '../types';
 import { EditionManager } from '../utils/EditionManager';
 import { APP_THEMES } from '../utils/theme';
 import { CoachMarkOverlay } from './CoachMarkOverlay';
-import { isTourSuppressed } from '../utils/tourRegistry';
+import { isTourSuppressed, isAllToursSuppressed, setAllToursSuppressed, resetAllTourSuppressions } from '../utils/tourRegistry';
 import { useCurrency } from '../utils/currencyManager';
 import { useNetbirdVpn } from '../hooks/useNetbirdVpn';
 import { NetbirdVpnControlWidget } from './vpn/NetbirdVpnControlWidget';
@@ -61,6 +61,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const [enteredPinForRemove, setEnteredPinForRemove] = useState('');
   const [removePinError, setRemovePinError] = useState('');
   const [isSettingsTourOpen, setIsSettingsTourOpen] = useState(false);
+  const [allToursDisabled, setAllToursDisabled] = useState<boolean>(() => isAllToursSuppressed());
   const [currency, setCurrency] = useCurrency();
   const [showNetbirdVpnModal, setShowNetbirdVpnModal] = useState(false);
   const { state: vpnState } = useNetbirdVpn();
@@ -499,6 +500,59 @@ const SettingsView: React.FC<SettingsViewProps> = ({
             <span className="text-xs text-gray-400 font-semibold bg-[#181818] px-3 py-1 rounded border border-[#333]">
               {settings.language}
             </span>
+          </div>
+        </div>
+
+        {/* Software Guided Tours & Onboarding Tips */}
+        <div className="bg-[#121212] p-5 rounded-2xl border border-slate-800 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2.5">
+              <i className="fas fa-wand-magic-sparkles text-indigo-400 text-base shrink-0"></i>
+              <div>
+                <h3 className="text-sm font-bold text-white">Software Guided Tours & Tips</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Control automatic coach mark guidance popups across all modules</p>
+              </div>
+            </div>
+            <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shrink-0 ${
+              allToursDisabled
+                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+            }`}>
+              {allToursDisabled ? 'Tours Disabled' : 'Tours Active'}
+            </span>
+          </div>
+
+          <div className="pt-2 border-t border-slate-800/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-sm font-medium text-gray-200">Disable All Guided Tours</span>
+                <p className="text-xs text-gray-400">Prevent any tour popups from appearing automatically in any section of the software</p>
+              </div>
+              <div 
+                onClick={() => {
+                  const nextVal = !allToursDisabled;
+                  setAllToursDisabled(nextVal);
+                  setAllToursSuppressed(nextVal);
+                }}
+                className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${allToursDisabled ? 'bg-rose-500' : 'bg-gray-700'}`}
+              >
+                <div className={`absolute top-1 left-1 w-3 h-3 rounded-full bg-black transition-transform ${allToursDisabled ? 'translate-x-5' : ''}`}></div>
+              </div>
+            </div>
+
+            {allToursDisabled && (
+              <button
+                type="button"
+                onClick={() => {
+                  resetAllTourSuppressions();
+                  setAllToursDisabled(false);
+                }}
+                className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold rounded-xl border border-slate-700 transition-colors flex items-center justify-center space-x-2 cursor-pointer"
+              >
+                <i className="fas fa-rotate-left text-xs"></i>
+                <span>Re-enable All Module Tours</span>
+              </button>
+            )}
           </div>
         </div>
 

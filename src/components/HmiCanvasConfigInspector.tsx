@@ -546,6 +546,20 @@ export const HmiCanvasConfigInspector: React.FC<HmiCanvasConfigInspectorProps> =
                       <i className={`fas fa-align-${align}`}></i>
                     </button>
                   ))}
+                  <div className="w-px h-3 bg-slate-800 mx-0.5"></div>
+                  <button
+                    type="button"
+                    onClick={() => onUpdatePanelProp(targetPanel.panelId, 'textWrap', !targetPanel.textWrap)}
+                    className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase transition-all flex items-center space-x-1 ${
+                      targetPanel.textWrap
+                        ? 'bg-amber-500 text-slate-950 shadow-sm'
+                        : 'text-slate-400 hover:text-white bg-slate-900 border border-slate-800'
+                    }`}
+                    title="Toggle Wrap Panel Name across multiple lines instead of truncating with ellipsis"
+                  >
+                    <i className="fas fa-text-width text-[8px]"></i>
+                    <span>Wrap</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -643,10 +657,34 @@ export const HmiCanvasConfigInspector: React.FC<HmiCanvasConfigInspectorProps> =
                       max="72"
                       step="1"
                       value={targetPanel.fontSize ?? 16}
-                      onChange={(e) => onUpdatePanelProp(targetPanel.panelId, 'fontSize', parseInt(e.target.value) || 16)}
+                      onChange={(e) => {
+                        const sz = parseInt(e.target.value) || 16;
+                        onUpdatePanelProp(targetPanel.panelId, 'fontSize', sz);
+                        if (targetPanel.type === 'text_input') {
+                          onUpdatePanelProp(targetPanel.panelId, 'inputFontSize', sz);
+                        }
+                      }}
                       className="w-full accent-sky-500 cursor-pointer h-1.5 bg-slate-700 rounded-lg appearance-none"
                     />
                   </div>
+
+                  {targetPanel.type === 'text_input' && (
+                    <div className="space-y-1 border-t border-slate-800/80 pt-1.5">
+                      <div className="flex justify-between text-[10px] text-slate-400">
+                        <span>Input Box Height:</span>
+                        <span className="font-mono text-amber-300">{targetPanel.inputAreaHeight ?? 42}px</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="28"
+                        max="100"
+                        step="2"
+                        value={targetPanel.inputAreaHeight ?? 42}
+                        onChange={(e) => onUpdatePanelProp(targetPanel.panelId, 'inputAreaHeight', parseInt(e.target.value) || 42)}
+                        className="w-full accent-amber-500 cursor-pointer h-1.5 bg-slate-700 rounded-lg appearance-none"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -704,6 +742,26 @@ export const HmiCanvasConfigInspector: React.FC<HmiCanvasConfigInspectorProps> =
                     onChange={(newColor) => onUpdatePanelProp(targetPanel.panelId, 'borderColor', newColor)}
                     defaultColor="#0284c7"
                   />
+                </div>
+
+                {/* Wrap Panel Name Toggle */}
+                <div className="flex items-center justify-between py-1 border-t border-slate-800/80">
+                  <div className="flex flex-col">
+                    <span className="text-[11px] text-slate-200 font-medium flex items-center space-x-1.5">
+                      <i className="fas fa-text-width text-amber-400 text-[10px]"></i>
+                      <span>Wrap Panel Name</span>
+                    </span>
+                    <span className="text-[9px] text-slate-400">Auto-wrap title into multiple lines</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!targetPanel.textWrap}
+                      onChange={(e) => onUpdatePanelProp(targetPanel.panelId, 'textWrap', e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
+                  </label>
                 </div>
 
                 {/* Opacity */}
@@ -899,15 +957,31 @@ export const HmiCanvasConfigInspector: React.FC<HmiCanvasConfigInspectorProps> =
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] text-slate-400 font-mono">Decimals:</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="6"
-                      value={targetPanel.decimals ?? 1}
-                      onChange={(e) => onUpdatePanelProp(targetPanel.panelId, 'decimals', parseInt(e.target.value) || 0)}
+                    <label className="text-[10px] text-slate-400 font-mono">Decimals (0..12):</label>
+                    <select
+                      value={targetPanel.decimalPrecision !== undefined ? String(targetPanel.decimalPrecision).toLowerCase() : (targetPanel.decimals !== undefined ? String(targetPanel.decimals) : '2')}
+                      onChange={(e) => {
+                        const val = e.target.value === 'none' ? 'none' : parseInt(e.target.value);
+                        onUpdatePanelProp(targetPanel.panelId, 'decimalPrecision', val);
+                        onUpdatePanelProp(targetPanel.panelId, 'decimals', val === 'none' ? 0 : val);
+                      }}
                       className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white"
-                    />
+                    >
+                      <option value="none">None (Raw Float)</option>
+                      <option value="0">0 Digits</option>
+                      <option value="1">1 Digit</option>
+                      <option value="2">2 Digits (Default)</option>
+                      <option value="3">3 Digits</option>
+                      <option value="4">4 Digits</option>
+                      <option value="5">5 Digits</option>
+                      <option value="6">6 Digits</option>
+                      <option value="7">7 Digits</option>
+                      <option value="8">8 Digits</option>
+                      <option value="9">9 Digits</option>
+                      <option value="10">10 Digits</option>
+                      <option value="11">11 Digits</option>
+                      <option value="12">12 Digits</option>
+                    </select>
                   </div>
                 </div>
               </div>

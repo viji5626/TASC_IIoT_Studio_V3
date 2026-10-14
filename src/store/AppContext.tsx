@@ -22,6 +22,7 @@ import { getSampleProject } from '../utils/sampleProjectPreset';
 import { sanitizeAppState } from '../utils/EditionManager';
 import { OperatorAuthContext } from './OperatorAuthContext';
 import { operatorAuthClient } from '../services/operatorAuthClientService';
+import { generateUniqueId } from '../utils/idGenerator';
 
 export interface AppContextType {
   // Session / State
@@ -715,7 +716,7 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
       .filter(p => panelIds.includes(p.panelId))
       .map(p => ({
         ...p,
-        panelId: `panel_clone_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        panelId: generateUniqueId('panel_clone'),
         dashboardId: activeDashboard?.dashboardId || p.dashboardId,
         panelName: `${p.panelName} (Copy)`
       }));
@@ -882,7 +883,7 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     const dashIdMap: Record<string, string> = {};
 
     const newDashboards: Dashboard[] = sourceDashboards.map(d => {
-      const newDashId = `dash_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+      const newDashId = generateUniqueId('dash');
       dashIdMap[d.dashboardId] = newDashId;
       return {
         ...d,
@@ -894,7 +895,7 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     const sourcePanels = appState.panels.filter(p => sourceDashboards.some(d => d.dashboardId === p.dashboardId));
     const newPanels: Panel[] = sourcePanels.map(p => ({
       ...p,
-      panelId: `panel_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      panelId: generateUniqueId('panel'),
       connectionId: newConnId,
       dashboardId: dashIdMap[p.dashboardId] || p.dashboardId
     }));
@@ -1047,7 +1048,7 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     const sourceDash = appState.dashboards.find(d => d.dashboardId === dashId);
     if (!sourceDash) return;
 
-    const newDashId = `dash_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+    const newDashId = generateUniqueId('dash');
     const newDash: Dashboard = {
       ...sourceDash,
       dashboardId: newDashId,
@@ -1057,7 +1058,7 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     const sourcePanels = appState.panels.filter(p => p.dashboardId === dashId);
     const newPanels: Panel[] = sourcePanels.map(p => ({
       ...p,
-      panelId: `panel_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      panelId: generateUniqueId('panel'),
       dashboardId: newDashId
     }));
 

@@ -74,6 +74,9 @@ export interface MqttConnection {
   connected?: boolean;
 }
 
+export type CanvasFitMode = 'uniform' | 'stretch' | 'fit_width' | 'fit_height' | 'none';
+export type CanvasAlignMode = 'top' | 'center';
+
 export interface Dashboard {
   dashboardId: string;
   dashboardName: string;
@@ -85,6 +88,11 @@ export interface Dashboard {
   legacyLayout?: boolean;
   bgColor?: string;
   canvasBgColor?: string;
+  targetResolution?: string;
+  canvasWidth?: number;
+  canvasHeight?: number;
+  canvasFitMode?: CanvasFitMode;
+  canvasAlign?: CanvasAlignMode;
 }
 
 export interface OptionItem {
@@ -125,6 +133,9 @@ export interface Panel {
   rotateOff?: boolean;
   animSpeedOff?: 'slow' | 'medium' | 'fast';
   fontSize?: number | string;
+  inputFontSize?: number | string;
+  inputAreaHeight?: number | string;
+  labelFontSize?: number | string;
   iconSize?: number;
   switchSize?: number | 'sm' | 'md' | 'lg' | 'xl';
   digitalDisplay?: boolean;

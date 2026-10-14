@@ -13,6 +13,10 @@ memlab_snapshots/
 graphify-out/
 chrome_*.png
 jev_*.png
+*.exe
+bridge_dist/*.exe
+public/downloads/*.exe
+bun.lock
 
 # Python & AI binary data
 __pycache__/

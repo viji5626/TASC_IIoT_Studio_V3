@@ -27,8 +27,6 @@ export function matchesTopic(
       cleanTopic === fullTopic ||
       cleanTopic === cleanRawTopic ||
       cleanTopic.endsWith('/' + cleanRawTopic) ||
-      cleanTopic.endsWith(cleanRawTopic) ||
-      cleanRawTopic.endsWith('/' + cleanTopic) ||
       mqttWildcardMatch(fullTopic, cleanTopic) ||
       mqttWildcardMatch(cleanRawTopic, cleanTopic)
     ) {
@@ -52,7 +50,11 @@ export function extractPanelValue(
   if (!panel.topic && !panel.publishTopic && (!panel.pens || panel.pens.length === 0)) return null;
 
   const penTopics = (panel.pens || []).map(p => p.topic?.trim()).filter(Boolean) as string[];
-  const rawTopics = [panel.topic?.trim(), panel.publishTopic?.trim(), ...penTopics].filter(Boolean) as string[];
+  // If panel has a dedicated read topic (panel.topic), ONLY match against read topic (and pens).
+  // publishTopic is an outbound write/command topic, NOT a telemetry read topic.
+  // Only fall back to publishTopic if panel has NO dedicated read topic configured.
+  const readTopic = panel.topic?.trim() || (!panel.topic?.trim() ? panel.publishTopic?.trim() : undefined);
+  const rawTopics = [readTopic, ...penTopics].filter(Boolean) as string[];
 
   const isMatch = matchesTopic(
     topic,
@@ -70,12 +72,35 @@ export function extractPanelValue(
     const jsonVal = getJsonValue(payloadStr, effectiveJsonPath);
     if (jsonVal !== undefined) {
       extracted = jsonVal;
+    } else {
+      // The incoming message does NOT contain this panel's specific JSONPath.
+      // This happens when an HMI / IoT Gateway transmits status, heartbeat, or screen-saver
+      // packets (e.g. {"ID": "...", "status": "sleep"}) on the same topic.
+      // Do NOT overwrite the panel with the irrelevant raw JSON string!
+      return null;
     }
   } else if (panel.isJSONPayload) {
     try {
       extracted = JSON.parse(payloadStr);
     } catch {
       extracted = payloadStr;
+    }
+  } else {
+    // If panel is a scalar / binary widget (LED, switch, gauge, etc.) without JSONPath,
+    // and the incoming payload is an unparsed JSON object (e.g. {"ID": ...}),
+    // an un-extracted JSON packet should not overwrite scalar controls.
+    const trimmed = payloadStr.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      if (
+        panel.type === 'led' || 
+        panel.type === 'switch' || 
+        panel.type === 'gauge' || 
+        panel.type === 'progress' || 
+        panel.type === 'slider' ||
+        panel.type === 'text_output'
+      ) {
+        return null;
+      }
     }
   }
 
