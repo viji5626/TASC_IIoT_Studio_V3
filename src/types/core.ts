@@ -136,6 +136,11 @@ export interface Panel {
   inputFontSize?: number | string;
   inputAreaHeight?: number | string;
   labelFontSize?: number | string;
+  // --- Fixed Decimal / Scaled Integer Scaling (e.g. 16-bit PLC 5573 <-> Real 55.73) ---
+  enableDecimalScaling?: boolean;
+  scaleIntegerDigits?: number;
+  scaleFractionDigits?: number;
+  scaleDivisor?: number;
   iconSize?: number;
   switchSize?: number | 'sm' | 'md' | 'lg' | 'xl';
   digitalDisplay?: boolean;

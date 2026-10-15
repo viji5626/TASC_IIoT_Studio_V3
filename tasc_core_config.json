@@ -12,7 +12,7 @@
       "autoConnect": true,
       "cleanSession": true,
       "keepAlive": 60,
-      "enableWillMessage": false,
+      "enableWillMessage": true,
       "connectionId": "conn_demo"
     }
   ],

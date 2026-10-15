@@ -1024,8 +1024,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   }, [effectiveEditMode, isClientMode, appState.panels, activeDashboardId]);
 
   // Forward refs for Copy & Paste Visual Properties shortcuts
-  const handleCopyPropertiesRef = useRef<() => void>(() => {});
-  const handlePastePropertiesRef = useRef<() => void>(() => {});
+  const handleCopyPropertiesRef = useRef<() => void>(() => { });
+  const handlePastePropertiesRef = useRef<() => void>(() => { });
 
   // Global Keyboard Shortcut Listener for Undo, Redo, Cut, Copy, Paste, Duplicate, Delete, Format Painter
   useEffect(() => {
@@ -1274,6 +1274,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     const trimmed = rawVal.trim();
     if (!trimmed) return false;
 
+    let valueToSend = trimmed;
+
     if (panel.dataType !== 'text') {
       const numVal = Number(trimmed);
       const min = panel.payloadMin ?? 0;
@@ -1286,13 +1288,35 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
           }));
           return false;
         }
+
+        // Integer digits check if configured (e.g. 2 digits = max 99)
+        if (panel.enableDecimalScaling && panel.scaleIntegerDigits) {
+          const intDigits = Math.max(1, Math.min(8, Number(panel.scaleIntegerDigits)));
+          const maxInt = Math.pow(10, intDigits) - 1;
+          const absInt = Math.floor(Math.abs(numVal));
+          if (absInt > maxInt) {
+            setTextInputErrors(prev => ({
+              ...prev,
+              [panel.panelId]: `Max ${intDigits} integer digits (max ${maxInt})`
+            }));
+            return false;
+          }
+        }
+
+        // Decimal Scaling conversion (Real input e.g. 55.73 -> Integer String "5573")
+        if (panel.enableDecimalScaling) {
+          const fracDigits = panel.scaleFractionDigits !== undefined ? Number(panel.scaleFractionDigits) : 2;
+          const multiplier = panel.scaleDivisor ? Number(panel.scaleDivisor) : Math.pow(10, fracDigits);
+          const scaledInt = Math.round(numVal * multiplier);
+          valueToSend = String(scaledInt);
+        }
       }
     }
 
     setTextInputErrors(prev => ({ ...prev, [panel.panelId]: null }));
     const targetTopic = panel.publishTopic?.trim() || panel.topic?.trim() || panel.driverWriteTagId?.trim() || panel.driverTagId?.trim();
     if (onPublish && targetTopic) {
-      onPublish(targetTopic, formatPublishPayload(trimmed, panel));
+      onPublish(targetTopic, formatPublishPayload(valueToSend, panel));
     }
     setTextInputValues(prev => {
       const next = { ...prev };
@@ -1715,12 +1739,12 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     const effFontSize = targetPanel.fontSize !== undefined && targetPanel.fontSize !== ''
       ? Number(targetPanel.fontSize)
       : (targetPanel.type === PanelType.LED || targetPanel.type === PanelType.SWITCH
-          ? 12
-          : targetPanel.type === PanelType.STATIC_TEXT
-            ? 16
-            : targetPanel.type === PanelType.BUTTON
-              ? 13
-              : 14);
+        ? 12
+        : targetPanel.type === PanelType.STATIC_TEXT
+          ? 16
+          : targetPanel.type === PanelType.BUTTON
+            ? 13
+            : 14);
 
     // Resolve icon properties if source element has icon capabilities (LED, symbols, action buttons)
     const isLed = targetPanel.type === PanelType.LED;
@@ -3928,11 +3952,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       if (!isAutoFit) setIsAutoFit(true);
                       updateDashboardCanvasSettings({ canvasFitMode: 'stretch' });
                     }}
-                    className={`px-1.5 py-0.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer ${
-                      isAutoFit && canvasFitMode === 'stretch'
+                    className={`px-1.5 py-0.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer ${isAutoFit && canvasFitMode === 'stretch'
                         ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 shadow-sm'
                         : 'text-slate-400 hover:text-slate-200'
-                    }`}
+                      }`}
                     title="Fill 100% (Stretch to full screen — Zero dead space!)"
                   >
                     <i className="fas fa-up-right-and-down-left-from-center text-[10px] text-emerald-400"></i>
@@ -3945,11 +3968,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       if (!isAutoFit) setIsAutoFit(true);
                       updateDashboardCanvasSettings({ canvasFitMode: 'uniform' });
                     }}
-                    className={`px-1.5 py-0.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer ${
-                      isAutoFit && canvasFitMode === 'uniform'
+                    className={`px-1.5 py-0.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer ${isAutoFit && canvasFitMode === 'uniform'
                         ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 shadow-sm'
                         : 'text-slate-400 hover:text-slate-200'
-                    }`}
+                      }`}
                     title="Uniform Fit (Preserve Aspect Ratio)"
                   >
                     <i className="fas fa-expand text-[10px] text-sky-400"></i>
@@ -3964,11 +3986,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     const nextAlign: CanvasAlignMode = canvasAlign === 'top' ? 'center' : 'top';
                     updateDashboardCanvasSettings({ canvasAlign: nextAlign });
                   }}
-                  className={`px-1.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shrink-0 border ${
-                    canvasAlign === 'top'
+                  className={`px-1.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer shrink-0 border ${canvasAlign === 'top'
                       ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
                       : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
-                  }`}
+                    }`}
                   title={canvasAlign === 'top' ? "Top-Aligned (Flush to top — Locks header banner to top with zero dead space)" : "Center-Aligned (Centered in viewport)"}
                 >
                   <i className={`fas ${canvasAlign === 'top' ? 'fa-arrow-up-to-line' : 'fa-arrows-up-down'} text-xs ${canvasAlign === 'top' ? 'text-amber-400' : 'text-slate-400'}`}></i>
@@ -4214,11 +4235,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     const newWrap = !selectedPanel.textWrap;
                     updateSelectedPanelProp('textWrap', newWrap);
                   }}
-                  className={`flex items-center space-x-1 px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer shrink-0 ${
-                    selectedPanel.textWrap
+                  className={`flex items-center space-x-1 px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer shrink-0 ${selectedPanel.textWrap
                       ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-[0_0_8px_rgba(245,158,11,0.3)]'
                       : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200 hover:bg-slate-800'
-                  }`}
+                    }`}
                   title="Toggle Wrap Panel Name across multiple lines instead of truncating with ellipsis (...)"
                 >
                   <i className={`fas fa-text-width text-[10px] ${selectedPanel.textWrap ? 'text-amber-400' : ''}`}></i>
@@ -4275,11 +4295,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       setIsLeftDockOpen(true);
                       setActiveDockTab('dynamics');
                     }}
-                    className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold font-mono transition-all flex items-center space-x-1 border cursor-pointer ${
-                      selectedPanel.enableMotionDynamics || selectedPanel.dynamics?.some(d => d.type === 'motion_path')
+                    className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold font-mono transition-all flex items-center space-x-1 border cursor-pointer ${selectedPanel.enableMotionDynamics || selectedPanel.dynamics?.some(d => d.type === 'motion_path')
                         ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
                         : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800'
-                    }`}
+                      }`}
                     title="Open Motion Dynamics in Studio Dock (Alt+D)"
                   >
                     <i className="fas fa-route text-[10px] text-amber-400"></i>
@@ -4292,11 +4311,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       setIsLeftDockOpen(true);
                       setActiveDockTab('dynamics');
                     }}
-                    className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold font-mono transition-all flex items-center space-x-1 border cursor-pointer ${
-                      selectedPanel.enableRotationDynamics || selectedPanel.dynamics?.some(d => d.type === 'rotation')
+                    className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold font-mono transition-all flex items-center space-x-1 border cursor-pointer ${selectedPanel.enableRotationDynamics || selectedPanel.dynamics?.some(d => d.type === 'rotation')
                         ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
                         : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800'
-                    }`}
+                      }`}
                     title="Open Rotation Dynamics in Studio Dock (Alt+D)"
                   >
                     <i className="fas fa-rotate text-[10px] text-cyan-400"></i>
@@ -4400,11 +4418,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setLockGroupRatio(!lockGroupRatio)}
-                  className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer flex items-center space-x-1 shrink-0 ${
-                    lockGroupRatio
+                  className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer flex items-center space-x-1 shrink-0 ${lockGroupRatio
                       ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm'
                       : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
-                  }`}
+                    }`}
                   title={lockGroupRatio ? "Aspect Ratio Locked: Pulling corner resizes uniformly without stretching" : "Aspect Ratio Unlocked: Free stretch"}
                 >
                   <i className={`fas ${lockGroupRatio ? 'fa-lock text-emerald-400' : 'fa-lock-open text-slate-400'} text-xs`}></i>
@@ -4445,11 +4462,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   const anyUnwrapped = panels.some(p => selectedPanelIds.includes(p.panelId) && !p.textWrap);
                   updateSelectedPanelProp('textWrap', anyUnwrapped);
                 }}
-                className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer flex items-center space-x-1 shrink-0 ${
-                  selectedPanel?.textWrap
+                className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer flex items-center space-x-1 shrink-0 ${selectedPanel?.textWrap
                     ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
                     : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800'
-                }`}
+                  }`}
                 title="Toggle Wrap Panel Name for all selected elements"
               >
                 <i className="fas fa-text-width text-xs text-amber-400"></i>
@@ -5016,9 +5032,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     {/* Tx Sent Timestamp Badge */}
                     {showTx && panel.type !== PanelType.TEXT_INPUT && pos.w >= 85 && pos.h >= 40 && (
                       <div
-                        className={`absolute bottom-1 z-30 pointer-events-none transition-all ${
-                          showRx ? 'right-[76px]' : 'right-1.5'
-                        }`}
+                        className={`absolute bottom-1 z-30 pointer-events-none transition-all ${showRx ? 'right-[76px]' : 'right-1.5'
+                          }`}
                         title={`Last transmitted: ${lastTxTime}`}
                       >
                         <span className="text-[7.5px] font-mono text-amber-300 font-semibold flex items-center space-x-1 bg-slate-950/90 px-1.5 py-0.5 rounded border border-amber-500/40 shadow-sm backdrop-blur-md">
@@ -5036,10 +5051,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                           align === 'left'
                             ? 'text-left items-start'
                             : align === 'right'
-                            ? 'text-right items-end'
-                            : align === 'justify'
-                            ? 'text-justify items-stretch'
-                            : 'text-center items-center';
+                              ? 'text-right items-end'
+                              : align === 'justify'
+                                ? 'text-justify items-stretch'
+                                : 'text-center items-center';
 
                         return (
                           <div
@@ -5146,20 +5161,19 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                               onTouchStart={handleTriggerPressDown}
                               onTouchEnd={handleTriggerRelease}
                               onTouchCancel={handleTriggerRelease}
-                              className={`w-full h-full border-2 transition-all flex items-center justify-center space-x-2 px-3 py-1 cursor-pointer group/btn ${
-                                isPressed ? 'scale-95 shadow-inner' : 'active:scale-95 shadow-md'
-                              } ${panel.buttonStyle === 'square'
-                                ? 'rounded-none'
-                                : panel.buttonStyle === 'pill'
-                                  ? 'rounded-full'
-                                  : panel.buttonStyle === 'circular'
-                                    ? 'rounded-full aspect-square'
-                                    : panel.buttonStyle === 'bevel'
-                                      ? 'rounded-lg border-b-4 border-r-4'
-                                      : panel.buttonStyle === 'glossy'
-                                        ? 'rounded-xl bg-gradient-to-b from-sky-400/20 via-sky-900/40 to-slate-950 border-sky-400/50'
-                                        : 'rounded-xl'
-                              }`}
+                              className={`w-full h-full border-2 transition-all flex items-center justify-center space-x-2 px-3 py-1 cursor-pointer group/btn ${isPressed ? 'scale-95 shadow-inner' : 'active:scale-95 shadow-md'
+                                } ${panel.buttonStyle === 'square'
+                                  ? 'rounded-none'
+                                  : panel.buttonStyle === 'pill'
+                                    ? 'rounded-full'
+                                    : panel.buttonStyle === 'circular'
+                                      ? 'rounded-full aspect-square'
+                                      : panel.buttonStyle === 'bevel'
+                                        ? 'rounded-lg border-b-4 border-r-4'
+                                        : panel.buttonStyle === 'glossy'
+                                          ? 'rounded-xl bg-gradient-to-b from-sky-400/20 via-sky-900/40 to-slate-950 border-sky-400/50'
+                                          : 'rounded-xl'
+                                }`}
                               style={{
                                 backgroundColor: isBtnActive
                                   ? (panel.firstColor || '#10b981')
@@ -5175,13 +5189,12 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                 const btnIconFontSize = Math.max(10, Math.round(btnFontSize * 0.9));
                                 return (
                                   <>
-                                    <div className={`w-2.5 h-2.5 rounded-full transition-transform shrink-0 ${
-                                      isBtnActive
+                                    <div className={`w-2.5 h-2.5 rounded-full transition-transform shrink-0 ${isBtnActive
                                         ? 'bg-emerald-400 shadow-[0_0_10px_#10b981] scale-125'
                                         : isResetBit
                                           ? 'bg-rose-500 shadow-[0_0_6px_#f43f5e]'
                                           : 'bg-amber-500 shadow-[0_0_6px_#f59e0b]'
-                                    }`}></div>
+                                      }`}></div>
                                     <span
                                       className={`font-extrabold uppercase tracking-wider drop-shadow ${panel.textWrap ? 'break-words whitespace-normal leading-tight text-center' : 'truncate'}`}
                                       style={{ fontSize: `${btnFontSize}px`, color: panel.textColor || '#ffffff' }}
@@ -5189,9 +5202,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                       {buttonLabel}
                                     </span>
                                     <i
-                                      className={`fas ${
-                                        isMomentary ? 'fa-hand-pointer' : isToggle ? 'fa-toggle-on' : isSetBit ? 'fa-circle-check' : 'fa-circle-xmark'
-                                      } text-amber-400 opacity-75 group-hover/btn:opacity-100 shrink-0`}
+                                      className={`fas ${isMomentary ? 'fa-hand-pointer' : isToggle ? 'fa-toggle-on' : isSetBit ? 'fa-circle-check' : 'fa-circle-xmark'
+                                        } text-amber-400 opacity-75 group-hover/btn:opacity-100 shrink-0`}
                                       style={{ fontSize: `${btnIconFontSize}px` }}
                                     ></i>
                                   </>
@@ -5209,12 +5221,12 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         const swWidth = typeof panel.switchSize === 'number'
                           ? panel.switchSize
                           : panel.switchSize === 'sm'
-                          ? 36
-                          : panel.switchSize === 'lg'
-                          ? 64
-                          : panel.switchSize === 'xl'
-                          ? 80
-                          : 48;
+                            ? 36
+                            : panel.switchSize === 'lg'
+                              ? 64
+                              : panel.switchSize === 'xl'
+                                ? 80
+                                : 48;
                         const swHeight = Math.max(18, Math.round(swWidth * 0.52));
                         const knobSize = Math.max(12, swHeight - 6);
                         const align = panel.textAlign || 'left';
@@ -5222,19 +5234,17 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
                         return (
                           <div
-                            className={`w-full h-full p-2 flex items-center px-3 ${
-                              align === 'center'
+                            className={`w-full h-full p-2 flex items-center px-3 ${align === 'center'
                                 ? 'justify-center space-x-3 text-center'
                                 : align === 'right'
-                                ? 'justify-between flex-row-reverse space-x-reverse space-x-2 text-right'
-                                : 'justify-between space-x-2 text-left'
-                            }`}
+                                  ? 'justify-between flex-row-reverse space-x-reverse space-x-2 text-right'
+                                  : 'justify-between space-x-2 text-left'
+                              }`}
                           >
                             <div className={`flex flex-col min-w-0 ${panel.textWrap ? '' : 'truncate'}`} style={{ textAlign: align }}>
                               <span
-                                className={`font-extrabold uppercase tracking-wider leading-tight ${
-                                  panel.textWrap ? 'break-words whitespace-normal' : 'truncate'
-                                }`}
+                                className={`font-extrabold uppercase tracking-wider leading-tight ${panel.textWrap ? 'break-words whitespace-normal' : 'truncate'
+                                  }`}
                                 style={{
                                   fontSize: `${labelFontSize}px`,
                                   color: panel.textColor || '#cbd5e1'
@@ -5243,9 +5253,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                 {panel.panelName}
                               </span>
                               <span
-                                className={`font-mono font-bold leading-tight mt-0.5 truncate ${
-                                  isOn ? 'text-emerald-400' : 'text-slate-400'
-                                }`}
+                                className={`font-mono font-bold leading-tight mt-0.5 truncate ${isOn ? 'text-emerald-400' : 'text-slate-400'
+                                  }`}
                                 style={{ fontSize: `${statusFontSize}px` }}
                               >
                                 {isOn ? (panel.payloadOnText || 'STATE: ON') : (panel.payloadOffText || 'STATE: OFF')}
@@ -5265,11 +5274,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                   onPublish(panel.publishTopic || panel.topic, formatPublishPayload(targetVal, panel));
                                 }
                               }}
-                              className={`border-2 transition-all cursor-pointer flex items-center shrink-0 ${
-                                isOn
+                              className={`border-2 transition-all cursor-pointer flex items-center shrink-0 ${isOn
                                   ? 'bg-emerald-500/20 border-emerald-500 justify-end'
                                   : 'bg-slate-900 border-slate-700 justify-start'
-                              }`}
+                                }`}
                               style={{
                                 width: `${swWidth}px`,
                                 height: `${swHeight}px`,
@@ -5278,11 +5286,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                               }}
                             >
                               <div
-                                className={`rounded-full shadow-md transition-all ${
-                                  isOn
+                                className={`rounded-full shadow-md transition-all ${isOn
                                     ? 'bg-emerald-400 shadow-[0_0_10px_#10b981]'
                                     : 'bg-slate-500'
-                                }`}
+                                  }`}
                                 style={{
                                   width: `${knobSize}px`,
                                   height: `${knobSize}px`
@@ -5317,7 +5324,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                               className={`w-full h-full rounded-xl bg-gradient-to-r from-sky-900/80 to-indigo-900/80 hover:from-sky-700 hover:to-indigo-700 border-2 border-sky-400 text-sky-100 font-extrabold uppercase tracking-wider px-3 py-1 flex items-center ${alignJustify} shadow-lg active:scale-95 transition-all cursor-pointer`}
                             >
                               <div className={`flex items-center space-x-2 ${panel.textWrap ? 'min-w-0 flex-1' : 'truncate'}`}>
-                                <i 
+                                <i
                                   className="fas fa-desktop text-sky-400 shrink-0"
                                   style={{ fontSize: `${iconFontSize}px`, color: panel.textColor ? `${panel.textColor}dd` : undefined }}
                                 ></i>
@@ -5325,7 +5332,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                   {panel.panelName || 'JUMP SCREEN'}
                                 </span>
                               </div>
-                              <i 
+                              <i
                                 className="fas fa-arrow-right text-sky-400 shrink-0 ml-1.5"
                                 style={{ fontSize: `${iconFontSize}px`, color: panel.textColor ? `${panel.textColor}dd` : undefined }}
                               ></i>
@@ -5338,9 +5345,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       <div className="w-full h-full p-2 flex flex-col justify-between overflow-hidden">
                         <div className={`flex ${panel.textWrap ? 'items-start' : 'items-center'} justify-between mb-0.5 gap-1`}>
                           <span
-                            className={`text-[10px] font-bold uppercase tracking-wider ${
-                              panel.textWrap ? 'break-words whitespace-normal leading-tight min-w-0 flex-1' : 'truncate'
-                            }`}
+                            className={`text-[10px] font-bold uppercase tracking-wider ${panel.textWrap ? 'break-words whitespace-normal leading-tight min-w-0 flex-1' : 'truncate'
+                              }`}
                             style={{ color: panel.textColor || '#cbd5e1' }}
                           >
                             {panel.panelName || 'SLIDER'}
@@ -5421,9 +5427,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                           <div className="w-full h-full p-2 flex flex-col justify-between overflow-hidden">
                             <div className={`flex ${panel.textWrap ? 'items-start' : 'items-center'} justify-between mb-0.5 gap-1`}>
                               <span
-                                className={`text-[10px] font-bold uppercase tracking-wider ${
-                                  panel.textWrap ? 'break-words whitespace-normal leading-tight min-w-0 flex-1' : 'truncate'
-                                }`}
+                                className={`text-[10px] font-bold uppercase tracking-wider ${panel.textWrap ? 'break-words whitespace-normal leading-tight min-w-0 flex-1' : 'truncate'
+                                  }`}
                                 style={{ color: panel.textColor || '#cbd5e1' }}
                               >
                                 {panel.panelName || 'PROGRESS'}
@@ -5481,9 +5486,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         return (
                           <div className="w-full h-full p-2 flex flex-col justify-between overflow-hidden">
                             <span
-                              className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 w-full block ${
-                                panel.textWrap ? 'break-words whitespace-normal leading-tight' : 'truncate'
-                              }`}
+                              className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 w-full block ${panel.textWrap ? 'break-words whitespace-normal leading-tight' : 'truncate'
+                                }`}
                               style={{
                                 color: panel.textColor || '#94a3b8',
                                 textAlign: panel.textAlign || 'left'
@@ -5525,18 +5529,28 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         const btnFontSize = Math.max(11, Math.min(24, Math.round(inFontSize * 0.75)));
                         const unitFontSize = Math.max(10, Math.min(18, Math.round(inFontSize * 0.65)));
                         const labelFontSize = panel.labelFontSize ? Number(panel.labelFontSize) : 11;
-                        const effectivePrecision = panel.decimalPrecision !== undefined ? panel.decimalPrecision : (panel.decimals !== undefined ? panel.decimals : 2);
+                        const isScaled = !!panel.enableDecimalScaling && panel.dataType !== 'text';
+                        const fractionDigits = panel.scaleFractionDigits !== undefined ? Number(panel.scaleFractionDigits) : 2;
+                        const scaleDivisor = panel.scaleDivisor ? Number(panel.scaleDivisor) : Math.pow(10, fractionDigits);
+                        const effectivePrecision = isScaled
+                          ? fractionDigits
+                          : (panel.decimalPrecision !== undefined ? panel.decimalPrecision : (panel.decimals !== undefined ? panel.decimals : 2));
 
                         const formatVal = (v: any) => {
                           if (panel.dataType === 'text') return String(v);
-                          return formatProcessValue(v, effectivePrecision);
+                          let num = Number(v);
+                          if (isNaN(num)) return String(v);
+                          if (isScaled && scaleDivisor > 0) {
+                            num = num / scaleDivisor;
+                          }
+                          return formatProcessValue(num, effectivePrecision);
                         };
 
                         const displayValue = focusedInputPanelId === panel.panelId
                           ? (textInputValues[panel.panelId] ?? '')
                           : (liveValue !== undefined && liveValue !== null
-                              ? formatVal(liveValue)
-                              : (textInputValues[panel.panelId] ?? ''));
+                            ? formatVal(liveValue)
+                            : (textInputValues[panel.panelId] ?? ''));
 
                         const hasLimits = panel.dataType !== 'text' && (panel.payloadMin !== undefined || panel.payloadMax !== undefined);
                         const limitsStr = hasLimits ? `${panel.payloadMin ?? 0}..${panel.payloadMax ?? 100}` : '';
@@ -5570,11 +5584,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                             <div className={`flex ${isWrap ? 'items-start' : 'items-center'} justify-between mb-0.5 gap-1.5 min-w-0 w-full`}>
                               <div className="flex-1 min-w-0 pr-1">
                                 <span
-                                  className={`font-bold uppercase tracking-wider block ${alignClass} ${
-                                    isWrap
+                                  className={`font-bold uppercase tracking-wider block ${alignClass} ${isWrap
                                       ? 'break-words whitespace-normal leading-tight'
                                       : 'truncate'
-                                  }`}
+                                    }`}
                                   style={{
                                     fontSize: `${labelFontSize}px`,
                                     color: panel.textColor || '#94a3b8'
@@ -5675,11 +5688,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                     fontSize: `${inFontSize}px`,
                                     paddingRight: `${inputPaddingRight}px`
                                   }}
-                                  className={`w-full bg-black/80 border text-amber-300 font-mono rounded-lg px-2.5 outline-none min-w-0 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                                    focusedInputPanelId === panel.panelId
+                                  className={`w-full bg-black/80 border text-amber-300 font-mono rounded-lg px-2.5 outline-none min-w-0 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${focusedInputPanelId === panel.panelId
                                       ? 'border-amber-400 ring-1 ring-amber-400/50 shadow-[0_0_8px_rgba(245,158,11,0.25)]'
                                       : 'border-slate-700 hover:border-slate-600'
-                                  }`}
+                                    }`}
                                 />
 
                                 {/* Limit Viewer badge & Unit Badge inside input on the right (stacked vertically: unit on top, limit viewer below it) */}
@@ -5699,9 +5711,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                     )}
                                     {showLimitBadge && (
                                       <span
-                                        className={`font-mono text-slate-400 bg-slate-900/80 border border-slate-700/50 rounded-[2.5px] shadow-sm whitespace-nowrap leading-none ${
-                                          panel.unit ? 'px-1 py-0 mt-0.5' : 'px-1.5 py-0.5'
-                                        }`}
+                                        className={`font-mono text-slate-400 bg-slate-900/80 border border-slate-700/50 rounded-[2.5px] shadow-sm whitespace-nowrap leading-none ${panel.unit ? 'px-1 py-0 mt-0.5' : 'px-1.5 py-0.5'
+                                          }`}
                                         style={{
                                           fontSize: panel.unit
                                             ? `${Math.max(7.5, Math.min(9.5, Math.round(unitFontSize * 0.65)))}px`
@@ -5767,13 +5778,12 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
                         return (
                           <div
-                            className={`w-full h-full p-2 flex items-center ${
-                              align === 'center'
+                            className={`w-full h-full p-2 flex items-center ${align === 'center'
                                 ? 'justify-center space-x-3 text-center'
                                 : align === 'right'
-                                ? 'justify-between flex-row-reverse space-x-reverse space-x-2 text-right'
-                                : 'justify-between space-x-2 text-left'
-                            }`}
+                                  ? 'justify-between flex-row-reverse space-x-reverse space-x-2 text-right'
+                                  : 'justify-between space-x-2 text-left'
+                              }`}
                           >
                             <div className={`flex flex-col min-w-0 ${panel.textWrap ? '' : 'truncate'}`} style={{ textAlign: align }}>
                               <span
@@ -6958,11 +6968,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         e.stopPropagation();
                         setLockGroupRatio(!lockGroupRatio);
                       }}
-                      className={`ml-1 px-1.5 py-0.5 rounded-lg text-[9px] font-bold border transition-colors cursor-pointer flex items-center space-x-1 ${
-                        lockGroupRatio
+                      className={`ml-1 px-1.5 py-0.5 rounded-lg text-[9px] font-bold border transition-colors cursor-pointer flex items-center space-x-1 ${lockGroupRatio
                           ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                           : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                      }`}
+                        }`}
                       title={lockGroupRatio ? "Aspect Ratio Locked (Proportional - No distortion)" : "Free Stretch Mode"}
                     >
                       <i className={`fas ${lockGroupRatio ? 'fa-lock text-emerald-400' : 'fa-unlock text-amber-400'} text-[8px]`}></i>
@@ -7119,11 +7128,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                   <i className="fas fa-text-width text-amber-400 w-4 text-center"></i>
                   <span>Wrap Panel Name</span>
                 </div>
-                <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                  panels.find(item => item.panelId === contextMenu.panelId)?.textWrap
+                <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${panels.find(item => item.panelId === contextMenu.panelId)?.textWrap
                     ? 'bg-amber-500/20 text-amber-300'
                     : 'bg-slate-800 text-slate-400'
-                }`}>
+                  }`}>
                   {panels.find(item => item.panelId === contextMenu.panelId)?.textWrap ? 'ON' : 'OFF'}
                 </span>
               </button>
