@@ -5548,11 +5548,13 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
                         let inputPaddingRight = 10;
                         if (panel.unit && showLimitBadge) {
-                          inputPaddingRight = Math.max(70, Math.round((limitsStr.length * 6.5) + (String(panel.unit).length * 8) + 24));
+                          const badgeWidth = limitsStr.length * 5.2 + 10;
+                          const unitWidth = String(panel.unit).length * 7.5;
+                          inputPaddingRight = Math.max(36, Math.round(Math.max(badgeWidth, unitWidth) + 14));
                         } else if (panel.unit) {
-                          inputPaddingRight = Math.max(30, Math.round(inFontSize * 1.8));
+                          inputPaddingRight = Math.max(24, Math.round(String(panel.unit).length * 8 + 12));
                         } else if (showLimitBadge) {
-                          inputPaddingRight = Math.max(48, Math.round(limitsStr.length * 7 + 18));
+                          inputPaddingRight = Math.max(32, Math.round(limitsStr.length * 5.4 + 14));
                         }
 
                         return (
@@ -5680,24 +5682,34 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                   }`}
                                 />
 
-                                {/* Limit Viewer badge & Unit Badge inside input on the right */}
+                                {/* Limit Viewer badge & Unit Badge inside input on the right (stacked vertically: unit on top, limit viewer below it) */}
                                 {(showLimitBadge || panel.unit) && (
-                                  <div className="absolute right-2 flex items-center space-x-1.5 pointer-events-none select-none">
+                                  <div className="absolute right-2 top-0 bottom-0 flex flex-col items-center justify-center pointer-events-none select-none">
+                                    {panel.unit && (
+                                      <span
+                                        className="font-mono font-bold text-sky-400 whitespace-nowrap leading-none"
+                                        style={{
+                                          fontSize: showLimitBadge
+                                            ? `${Math.max(9, Math.min(13, Math.round(unitFontSize * 0.9)))}px`
+                                            : `${unitFontSize}px`
+                                        }}
+                                      >
+                                        {panel.unit}
+                                      </span>
+                                    )}
                                     {showLimitBadge && (
                                       <span
-                                        className="font-mono text-slate-400 bg-slate-900/90 border border-slate-700/60 px-1.5 py-0.5 rounded shadow-sm whitespace-nowrap"
-                                        style={{ fontSize: `${Math.max(8.5, Math.min(13, Math.round(unitFontSize * 0.75)))}px` }}
+                                        className={`font-mono text-slate-400 bg-slate-900/80 border border-slate-700/50 rounded-[2.5px] shadow-sm whitespace-nowrap leading-none ${
+                                          panel.unit ? 'px-1 py-0 mt-0.5' : 'px-1.5 py-0.5'
+                                        }`}
+                                        style={{
+                                          fontSize: panel.unit
+                                            ? `${Math.max(7.5, Math.min(9.5, Math.round(unitFontSize * 0.65)))}px`
+                                            : `${Math.max(8.5, Math.min(12, Math.round(unitFontSize * 0.75)))}px`
+                                        }}
                                         title={`Allowed Range: ${panel.payloadMin ?? 0} to ${panel.payloadMax ?? 100}`}
                                       >
                                         {limitsStr}
-                                      </span>
-                                    )}
-                                    {panel.unit && (
-                                      <span
-                                        className="font-mono font-bold text-sky-400 whitespace-nowrap"
-                                        style={{ fontSize: `${unitFontSize}px` }}
-                                      >
-                                        {panel.unit}
                                       </span>
                                     )}
                                   </div>
