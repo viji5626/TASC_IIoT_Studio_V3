@@ -5,7 +5,7 @@
       "connectionName": "broker1",
       "brokerAddress": "broker.emqx.io",
       "port": 1883,
-      "protocol": "Websocket",
+      "protocol": "TCP",
       "clientId": "",
       "username": "",
       "password": "",

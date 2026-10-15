@@ -5001,9 +5001,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     })()}
 
                     {/* Rx Received Timestamp Badge */}
-                    {showRx && pos.w >= 85 && pos.h >= 40 && (
+                    {showRx && panel.type !== PanelType.TEXT_INPUT && pos.w >= 85 && pos.h >= 40 && (
                       <div
-                        className={`absolute ${panel.type === PanelType.TEXT_INPUT ? 'bottom-[38px]' : 'bottom-1'} right-1.5 z-30 pointer-events-none transition-all`}
+                        className="absolute bottom-1 right-1.5 z-30 pointer-events-none transition-all"
                         title={`Last received: ${lastRxTime}`}
                       >
                         <span className="text-[7.5px] font-mono text-emerald-300 font-semibold flex items-center space-x-1 bg-slate-950/90 px-1.5 py-0.5 rounded border border-emerald-500/40 shadow-sm backdrop-blur-md">
@@ -5014,9 +5014,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     )}
 
                     {/* Tx Sent Timestamp Badge */}
-                    {showTx && pos.w >= 85 && pos.h >= 40 && (
+                    {showTx && panel.type !== PanelType.TEXT_INPUT && pos.w >= 85 && pos.h >= 40 && (
                       <div
-                        className={`absolute ${panel.type === PanelType.TEXT_INPUT ? 'bottom-[38px]' : 'bottom-1'} z-30 pointer-events-none transition-all ${
+                        className={`absolute bottom-1 z-30 pointer-events-none transition-all ${
                           showRx ? 'right-[76px]' : 'right-1.5'
                         }`}
                         title={`Last transmitted: ${lastTxTime}`}
@@ -5538,6 +5538,23 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                               ? formatVal(liveValue)
                               : (textInputValues[panel.panelId] ?? ''));
 
+                        const hasLimits = panel.dataType !== 'text' && (panel.payloadMin !== undefined || panel.payloadMax !== undefined);
+                        const limitsStr = hasLimits ? `${panel.payloadMin ?? 0}..${panel.payloadMax ?? 100}` : '';
+                        const showLimitBadge = hasLimits && pos.w >= 100;
+
+                        const isWrap = !!panel.textWrap;
+                        const align = panel.textAlign || 'left';
+                        const alignClass = align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left';
+
+                        let inputPaddingRight = 10;
+                        if (panel.unit && showLimitBadge) {
+                          inputPaddingRight = Math.max(70, Math.round((limitsStr.length * 6.5) + (String(panel.unit).length * 8) + 24));
+                        } else if (panel.unit) {
+                          inputPaddingRight = Math.max(30, Math.round(inFontSize * 1.8));
+                        } else if (showLimitBadge) {
+                          inputPaddingRight = Math.max(48, Math.round(limitsStr.length * 7 + 18));
+                        }
+
                         return (
                           <div
                             className="w-full h-full p-2 flex flex-col justify-between overflow-hidden"
@@ -5547,29 +5564,47 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                               }
                             }}
                           >
-                            <div className={`flex ${panel.textWrap ? 'items-start' : 'items-center'} justify-between mb-0.5 gap-1`}>
-                              <span
-                                className={`font-bold uppercase tracking-wider ${
-                                  panel.textWrap
-                                    ? 'break-words whitespace-normal leading-tight min-w-0 flex-1'
-                                    : 'truncate'
-                                } ${
-                                  panel.textAlign === 'center' ? 'text-center flex-1' : panel.textAlign === 'right' ? 'text-right flex-1' : ''
-                                }`}
-                                style={{
-                                  fontSize: `${labelFontSize}px`,
-                                  color: panel.textColor || '#94a3b8'
-                                }}
-                              >
-                                {panel.panelName || 'TEXT INPUT'}
-                              </span>
-                              {panel.dataType !== 'text' && (panel.payloadMin !== undefined || panel.payloadMax !== undefined) && (
+                            {/* Header: Title on Left, Rx/Tx on Right */}
+                            <div className={`flex ${isWrap ? 'items-start' : 'items-center'} justify-between mb-0.5 gap-1.5 min-w-0 w-full`}>
+                              <div className="flex-1 min-w-0 pr-1">
                                 <span
-                                  className="font-mono text-slate-400 bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded ml-1 shrink-0"
-                                  style={{ fontSize: `${Math.max(9, Math.round(labelFontSize * 0.85))}px` }}
+                                  className={`font-bold uppercase tracking-wider block ${alignClass} ${
+                                    isWrap
+                                      ? 'break-words whitespace-normal leading-tight'
+                                      : 'truncate'
+                                  }`}
+                                  style={{
+                                    fontSize: `${labelFontSize}px`,
+                                    color: panel.textColor || '#94a3b8'
+                                  }}
+                                  title={panel.panelName || 'TEXT INPUT'}
                                 >
-                                  {panel.payloadMin ?? 0}..{panel.payloadMax ?? 100}
+                                  {panel.panelName || 'TEXT INPUT'}
                                 </span>
+                              </div>
+
+                              {/* Rx & Tx Badges moved UP to header row */}
+                              {(showTx || showRx) && pos.w >= 85 && (
+                                <div className="flex items-center gap-1 shrink-0 select-none">
+                                  {showTx && (
+                                    <span
+                                      className="text-[7.5px] font-mono text-amber-300 font-semibold flex items-center space-x-1 bg-slate-950/90 px-1.5 py-0.5 rounded border border-amber-500/40 shadow-sm backdrop-blur-md whitespace-nowrap"
+                                      title={`Last transmitted: ${lastTxTime}`}
+                                    >
+                                      <i className="fas fa-arrow-up text-[6px] text-amber-400"></i>
+                                      <span>Tx {format24HourTime(lastTxTime)}</span>
+                                    </span>
+                                  )}
+                                  {showRx && (
+                                    <span
+                                      className="text-[7.5px] font-mono text-emerald-300 font-semibold flex items-center space-x-1 bg-slate-950/90 px-1.5 py-0.5 rounded border border-emerald-500/40 shadow-sm backdrop-blur-md whitespace-nowrap"
+                                      title={`Last received: ${lastRxTime}`}
+                                    >
+                                      <i className="fas fa-arrow-down text-[6px] text-emerald-400"></i>
+                                      <span>Rx {format24HourTime(lastRxTime)}</span>
+                                    </span>
+                                  )}
+                                </div>
                               )}
                             </div>
 
@@ -5636,7 +5671,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                   style={{
                                     height: `${inHeight}px`,
                                     fontSize: `${inFontSize}px`,
-                                    paddingRight: panel.unit ? `${Math.max(30, Math.round(inFontSize * 1.8))}px` : undefined
+                                    paddingRight: `${inputPaddingRight}px`
                                   }}
                                   className={`w-full bg-black/80 border text-amber-300 font-mono rounded-lg px-2.5 outline-none min-w-0 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
                                     focusedInputPanelId === panel.panelId
@@ -5644,13 +5679,28 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                       : 'border-slate-700 hover:border-slate-600'
                                   }`}
                                 />
-                                {panel.unit && (
-                                  <span
-                                    className="absolute right-2 font-mono font-bold text-sky-400 pointer-events-none select-none"
-                                    style={{ fontSize: `${unitFontSize}px` }}
-                                  >
-                                    {panel.unit}
-                                  </span>
+
+                                {/* Limit Viewer badge & Unit Badge inside input on the right */}
+                                {(showLimitBadge || panel.unit) && (
+                                  <div className="absolute right-2 flex items-center space-x-1.5 pointer-events-none select-none">
+                                    {showLimitBadge && (
+                                      <span
+                                        className="font-mono text-slate-400 bg-slate-900/90 border border-slate-700/60 px-1.5 py-0.5 rounded shadow-sm whitespace-nowrap"
+                                        style={{ fontSize: `${Math.max(8.5, Math.min(13, Math.round(unitFontSize * 0.75)))}px` }}
+                                        title={`Allowed Range: ${panel.payloadMin ?? 0} to ${panel.payloadMax ?? 100}`}
+                                      >
+                                        {limitsStr}
+                                      </span>
+                                    )}
+                                    {panel.unit && (
+                                      <span
+                                        className="font-mono font-bold text-sky-400 whitespace-nowrap"
+                                        style={{ fontSize: `${unitFontSize}px` }}
+                                      >
+                                        {panel.unit}
+                                      </span>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                               <button
