@@ -649,7 +649,7 @@ export const HmiCanvasDynamicsInspector: React.FC<HmiCanvasDynamicsInspectorProp
                           onChange={(e) => handleUpdateActiveRule({ state1Interlock: e.target.value as any })}
                           className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white outline-none cursor-pointer"
                         >
-                          <option value="disable">Disable / Grey Out (Write Locked)</option>
+                          <option value="disable">Disable / Grey Out (Disabled)</option>
                           <option value="enable">Enable (Interactive & Writable)</option>
                         </select>
                       </div>
@@ -776,7 +776,7 @@ export const HmiCanvasDynamicsInspector: React.FC<HmiCanvasDynamicsInspectorProp
                           className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white outline-none cursor-pointer"
                         >
                           <option value="enable">Enable (Interactive & Writable)</option>
-                          <option value="disable">Disable / Grey Out (Write Locked)</option>
+                          <option value="disable">Disable / Grey Out (Disabled)</option>
                         </select>
                       </div>
                     )}
@@ -957,7 +957,7 @@ export const HmiCanvasDynamicsInspector: React.FC<HmiCanvasDynamicsInspectorProp
                             onChange={(e) => handleUpdateActiveRule({ actionOnMatchInterlock: e.target.value as any })}
                             className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white outline-none cursor-pointer"
                           >
-                            <option value="disable">Disable / Grey Out (Locked)</option>
+                            <option value="disable">Disable / Grey Out (Disabled)</option>
                             <option value="enable">Enable (Writable)</option>
                           </select>
                         </div>
@@ -972,7 +972,7 @@ export const HmiCanvasDynamicsInspector: React.FC<HmiCanvasDynamicsInspectorProp
                             className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white outline-none cursor-pointer"
                           >
                             <option value="enable">Enable (Writable)</option>
-                            <option value="disable">Disable / Grey Out (Locked)</option>
+                            <option value="disable">Disable / Grey Out (Disabled)</option>
                           </select>
                         </div>
                       </div>

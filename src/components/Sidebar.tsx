@@ -107,16 +107,22 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
     enableAiAssistant: true,
     enableAiWorkbench: true,
     enableFdd: true,
-    enableVpn: true
+    enableVpn: true,
+    enable3dScada: false,
+    enableConnections: false,
+    enableTopicManager: false,
+    enableAlarmsHeader: false
   };
 
   // Group definitions (Desktop Workstation tools are hidden on mobile)
-  const workstationItems: MenuItemDef[] = isDesktop ? [
+  const show3dScada = isDesktop && (!isClient || currentFeatures.enable3dScada === true);
+  const workstationItems: MenuItemDef[] = show3dScada ? [
     { id: AppView.SCADA_3D, icon: 'fa-cube', label: '3D SCADA Studio', badge: '3D', badgeColor: 'bg-indigo-500/20 text-indigo-300' }
   ] : [];
 
   const dataItems: MenuItemDef[] = isClient ? [
-    { id: AppView.CONNECTIONS, icon: 'fa-network-wired', label: 'All Connections' },
+    ...(currentFeatures.enableConnections === true ? [{ id: AppView.CONNECTIONS, icon: 'fa-network-wired', label: 'All Connections' }] : []),
+    ...(currentFeatures.enableTopicManager === true ? [{ id: AppView.TOPIC_MANAGER, icon: 'fa-sitemap', label: 'MQTT Topic Manager' }] : []),
     ...(currentFeatures.enableVpn !== false ? [{ 
       id: 'netbird_vpn', 
       icon: 'fa-shield-halved', 

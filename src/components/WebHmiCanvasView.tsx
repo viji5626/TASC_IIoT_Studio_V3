@@ -44,6 +44,7 @@ import { getSmoothCurvePath, getPipeFilletPath } from '../utils/hmiPathMath';
 import { CANVAS_PRESET_COLORS, ELEMENT_PRESET_COLORS } from './canvas/CanvasPresetColors';
 import { LiveClockWidget } from './canvas/LiveClockWidget';
 import { AiCanvasBuilderModal } from './AiCanvasBuilderModal';
+import { DashboardFindReplaceModal } from './canvas/DashboardFindReplaceModal';
 
 const format24HourTime = (timeStr?: string): string => {
   if (!timeStr) return '';
@@ -204,6 +205,16 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   const [gridSnap, setGridSnap] = useState(true);
   const [isMobileToolsCollapsed, setIsMobileToolsCollapsed] = useState<boolean>(false);
   const [isAiBuilderModalOpen, setIsAiBuilderModalOpen] = useState<boolean>(false);
+  const [isFindReplaceOpen, setIsFindReplaceOpen] = useState<boolean>(false);
+  const [findReplaceMode, setFindReplaceMode] = useState<'find' | 'replace'>('find');
+  const [pulsingPanelId, setPulsingPanelId] = useState<string | null>(null);
+
+  const handleHighlightPanel = useCallback((panelId: string) => {
+    setPulsingPanelId(panelId);
+    setTimeout(() => {
+      setPulsingPanelId(prev => (prev === panelId ? null : prev));
+    }, 3000);
+  }, []);
 
   const handleAddPanelsFromAi = (newPanels: Partial<Panel>[]) => {
     if (!onUpdateAppState || !appState) return;
@@ -1066,6 +1077,14 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
         } else if (e.key === 'a' || e.key === 'A') {
           e.preventDefault();
           handleSelectAll();
+        } else if ((e.key === 'f' || e.key === 'F') && !e.shiftKey) {
+          e.preventDefault();
+          setFindReplaceMode('find');
+          setIsFindReplaceOpen(true);
+        } else if ((e.key === 'h' || e.key === 'H') && !e.shiftKey) {
+          e.preventDefault();
+          setFindReplaceMode('replace');
+          setIsFindReplaceOpen(true);
         }
       } else if (e.key === 'Delete' || e.key === 'Backspace' || e.code === 'Delete' || e.code === 'Backspace') {
         if (selectedPanelIds.length > 0) {
@@ -3844,6 +3863,21 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         {activeDockTab === 'explorer' ? 'Tree' : 'Config'}
                       </span>
                     </button>
+
+                    {/* Dashboard Find & Replace Button (Ctrl+F / Ctrl+H) */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFindReplaceMode('find');
+                        setIsFindReplaceOpen(true);
+                      }}
+                      className="px-2 sm:px-2.5 py-1 bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-600/20 hover:from-amber-500/30 text-amber-300 hover:text-white border border-amber-500/40 hover:border-amber-400 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer shrink-0 shadow-md active:scale-95"
+                      title="Find & Replace across Dashboard text, tags, and topics (Ctrl+F / Ctrl+H)"
+                    >
+                      <i className="fas fa-magnifying-glass text-xs text-amber-400"></i>
+                      <span className="hidden xl:inline">Find / Replace</span>
+                      <span className="bg-amber-500/30 text-amber-200 text-[9px] font-extrabold px-1 py-0.2 rounded-md border border-amber-400/30">F/R</span>
+                    </button>
                   </>
                 )}
               </>
@@ -4592,6 +4626,20 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
               </button>
             )}
 
+            {/* Find & Replace inside Selection */}
+            <button
+              type="button"
+              onClick={() => {
+                setFindReplaceMode('find');
+                setIsFindReplaceOpen(true);
+              }}
+              className="px-2 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-lg text-[10px] font-bold border border-amber-500/40 transition-colors cursor-pointer flex items-center space-x-1 shrink-0"
+              title="Find & Replace inside selected element(s)"
+            >
+              <i className="fas fa-magnifying-glass text-[9px] text-amber-400"></i>
+              <span>Find / Replace</span>
+            </button>
+
             <button
               type="button"
               onClick={handleDeleteSelected}
@@ -4965,7 +5013,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         : effectiveEditMode
                           ? 'hover:ring-1 hover:ring-sky-400/80 z-10'
                           : 'z-10'
-                      } ${tripAnimClass} ${isOverCommunityLimit ? 'grayscale opacity-40 filter contrast-75 brightness-75' : ''} ${isInterlocked ? 'grayscale opacity-50 cursor-not-allowed select-none filter contrast-75' : ''}`}
+                      } ${tripAnimClass} ${pulsingPanelId === panel.panelId ? 'ring-4 ring-amber-400 shadow-[0_0_35px_rgba(245,158,11,0.95)] animate-pulse z-40' : ''} ${isOverCommunityLimit ? 'grayscale opacity-40 filter contrast-75 brightness-75' : ''} ${isInterlocked ? 'grayscale opacity-50 cursor-not-allowed select-none filter contrast-75' : ''}`}
                     style={{
                       left: `${pos.x}px`,
                       top: `${pos.y}px`,
@@ -4988,10 +5036,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     {isInterlocked && !isDynHidden && !isOverCommunityLimit && (
                       <div
                         className="absolute top-1 right-1 z-40 text-[7.5px] font-bold font-mono uppercase px-1.5 py-0.5 rounded bg-slate-950/90 text-amber-400 border border-amber-500/50 shadow-md flex items-center space-x-1 pointer-events-none"
-                        title="Write Interlocked: Control disabled by dynamic tag"
+                        title="Interlocked: Control disabled by dynamic tag"
                       >
-                        <i className="fas fa-lock text-[7px] text-amber-400"></i>
-                        <span>LOCKED</span>
+                        <i className="fas fa-ban text-[7px] text-amber-400"></i>
+                        <span>DISABLED</span>
                       </div>
                     )}
                     {/* Community Edition 10+ Widget Gray-out Lock Overlay */}
@@ -7645,6 +7693,26 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
         onClose={() => setIsAiBuilderModalOpen(false)}
         onAddPanelsToCanvas={handleAddPanelsFromAi}
         activeDashboardId={activeDashboardId}
+      />
+
+      {/* Dashboard Find & Replace Modal */}
+      <DashboardFindReplaceModal
+        isOpen={isFindReplaceOpen}
+        onClose={() => setIsFindReplaceOpen(false)}
+        appState={appState}
+        activeDashboardId={activeDashboardId}
+        selectedPanelIds={selectedPanelIds}
+        onSelectDashboard={onSelectDashboard}
+        onSelectPanel={(panelId) => {
+          setSelectedPanelIds([panelId]);
+        }}
+        onUpdateAppState={updateAppStateWithHistory}
+        onHighlightPanel={handleHighlightPanel}
+        onToast={(msg) => {
+          setPropertyCopiedToast(msg);
+          setTimeout(() => setPropertyCopiedToast(null), 2500);
+        }}
+        initialMode={findReplaceMode}
       />
 
     </div>

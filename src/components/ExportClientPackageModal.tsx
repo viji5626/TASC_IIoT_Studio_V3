@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppState, ClientRuntimeFeatures } from '../types';
 import { generateClientPackage } from '../utils/clientSecurity';
 import { operatorAuthClient } from '../services/operatorAuthClientService';
@@ -26,7 +26,7 @@ const ExportClientPackageModal: React.FC<ExportClientPackageModalProps> = ({
   const [requireOperatorLogin, setRequireOperatorLogin] = useState(true);
   const [enableAuditTrail, setEnableAuditTrail] = useState(true);
 
-  const [clientFeatures, setClientFeatures] = useState<ClientRuntimeFeatures>({
+  const [clientFeatures, setClientFeatures] = useState<ClientRuntimeFeatures>(() => ({
     enableHistorian: true,
     enableReporting: true,
     enableOee: true,
@@ -37,8 +37,22 @@ const ExportClientPackageModal: React.FC<ExportClientPackageModalProps> = ({
     enableVpn: true,
     showBridgeIndication: false,
     enableSmsAlerts: true,
-    enableEmailAlerts: true
-  });
+    enableEmailAlerts: true,
+    enable3dScada: false,
+    enableConnections: false,
+    enableTopicManager: false,
+    enableAlarmsHeader: false,
+    ...(appState.clientFeatures || {})
+  }));
+
+  useEffect(() => {
+    if (isOpen && appState.clientFeatures) {
+      setClientFeatures(prev => ({
+        ...prev,
+        ...appState.clientFeatures
+      }));
+    }
+  }, [isOpen, appState.clientFeatures]);
 
   if (!isOpen) return null;
 
@@ -269,7 +283,11 @@ const ExportClientPackageModal: React.FC<ExportClientPackageModalProps> = ({
                 { key: 'enableVpn', label: 'NetBird VPN', icon: 'fa-shield-halved', color: 'text-amber-400' },
                 { key: 'enableSmsAlerts', label: 'SMS Alert System', icon: 'fa-comment-sms', color: 'text-sky-400' },
                 { key: 'enableEmailAlerts', label: 'Email Alert System', icon: 'fa-envelope-open-text', color: 'text-rose-400' },
-                { key: 'showBridgeIndication', label: 'Display Bridge Pill', icon: 'fa-network-wired', color: 'text-teal-400' }
+                { key: 'showBridgeIndication', label: 'Display Bridge Pill', icon: 'fa-network-wired', color: 'text-teal-400' },
+                { key: 'enable3dScada', label: '3D SCADA Studio', icon: 'fa-cube', color: 'text-indigo-400' },
+                { key: 'enableConnections', label: 'All Connections (Sidebar)', icon: 'fa-network-wired', color: 'text-emerald-400' },
+                { key: 'enableTopicManager', label: 'MQTT Topic Manager', icon: 'fa-sitemap', color: 'text-amber-400' },
+                { key: 'enableAlarmsHeader', label: 'Alarm Bell Button (Header)', icon: 'fa-bell', color: 'text-rose-400' }
               ].map(feat => (
                 <label key={feat.key} className="flex items-center space-x-2 cursor-pointer bg-slate-950/50 p-2 rounded-lg border border-slate-800/60 hover:bg-slate-900 transition-colors">
                   <input

@@ -120,6 +120,8 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
   const showTraceability = !isClient || clientFeatures?.enableTraceability !== false;
   const showReporting = !isClient || clientFeatures?.enableReporting !== false;
   const showAiWorkbench = !isClient || clientFeatures?.enableAiWorkbench !== false;
+  const showAlarmsHeader = !isClient || clientFeatures?.enableAlarmsHeader === true;
+  const showTopicManager = !isClient || clientFeatures?.enableTopicManager === true;
   const hasAnalysisItems = showHistorian || showFdd || showOee || showTraceability || showReporting;
 
   const handleCreateScreenCheck = () => {
@@ -208,25 +210,27 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
         </div>
 
         {/* Inbuilt Alarm Center Bell Button */}
-        <button
-          type="button"
-          data-tour="alarms-btn"
-          onClick={() => setIsAlarmModalOpen(true)}
-          className={`flex items-center space-x-1.5 px-3 sm:px-3.5 h-10 rounded-xl text-xs font-bold transition-all cursor-pointer relative shrink-0 shadow-sm ${
-            activeAlarms.length > 0
-              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/60 hover:bg-rose-500/30 animate-pulse'
-              : 'bg-slate-800/80 text-slate-300 border border-slate-700 hover:text-white hover:bg-slate-700/80'
-          }`}
-          title="Telemetry Inbuilt Parameter Alarms"
-        >
-          <i className={`fas fa-bell text-xs ${activeAlarms.length > 0 ? 'text-rose-400 animate-bounce' : 'text-slate-400'}`}></i>
-          <span className="hidden sm:inline">ALARMS</span>
-          {activeAlarms.length > 0 && (
-            <span className="bg-rose-500 text-black text-[9px] font-mono font-black px-1.5 py-0.5 rounded-full">
-              {activeAlarms.length}
-            </span>
-          )}
-        </button>
+        {showAlarmsHeader && (
+          <button
+            type="button"
+            data-tour="alarms-btn"
+            onClick={() => setIsAlarmModalOpen(true)}
+            className={`flex items-center space-x-1.5 px-3 sm:px-3.5 h-10 rounded-xl text-xs font-bold transition-all cursor-pointer relative shrink-0 shadow-sm ${
+              activeAlarms.length > 0
+                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/60 hover:bg-rose-500/30 animate-pulse'
+                : 'bg-slate-800/80 text-slate-300 border border-slate-700 hover:text-white hover:bg-slate-700/80'
+            }`}
+            title="Telemetry Inbuilt Parameter Alarms"
+          >
+            <i className={`fas fa-bell text-xs ${activeAlarms.length > 0 ? 'text-rose-400 animate-bounce' : 'text-slate-400'}`}></i>
+            <span className="hidden sm:inline">ALARMS</span>
+            {activeAlarms.length > 0 && (
+              <span className="bg-rose-500 text-black text-[9px] font-mono font-black px-1.5 py-0.5 rounded-full">
+                {activeAlarms.length}
+              </span>
+            )}
+          </button>
+        )}
 
         {/* Quick Tools & Insights Dropdown Menu (Consolidates Historian, FDD, Reports, Docs) */}
         <div className="relative shrink-0" ref={toolsMenuRef}>
@@ -399,22 +403,24 @@ export const TopNavbar: React.FC<TopNavbarProps> = React.memo(({
               </button>
 
               {/* MQTT Topic Manager */}
-              <button
-                type="button"
-                onClick={() => {
-                  setIsToolsMenuOpen(false);
-                  setCurrentView(AppView.TOPIC_MANAGER);
-                }}
-                className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-white flex items-center justify-between transition-colors"
-              >
-                <div className="flex items-center space-x-2">
-                  <i className="fas fa-sitemap text-amber-400 w-4 text-center text-xs"></i>
-                  <span>MQTT Topic Manager</span>
-                </div>
-                <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.2 rounded font-mono">
-                  Topics
-                </span>
-              </button>
+              {showTopicManager && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsToolsMenuOpen(false);
+                    setCurrentView(AppView.TOPIC_MANAGER);
+                  }}
+                  className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-white flex items-center justify-between transition-colors"
+                >
+                  <div className="flex items-center space-x-2">
+                    <i className="fas fa-sitemap text-amber-400 w-4 text-center text-xs"></i>
+                    <span>MQTT Topic Manager</span>
+                  </div>
+                  <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.2 rounded font-mono">
+                    Topics
+                  </span>
+                </button>
+              )}
 
               {/* Fullscreen Toggle in Dropdown */}
               <button

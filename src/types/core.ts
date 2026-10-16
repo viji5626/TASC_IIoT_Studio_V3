@@ -506,6 +506,10 @@ export interface ClientRuntimeFeatures {
   showBridgeIndication?: boolean;
   enableSmsAlerts?: boolean;
   enableEmailAlerts?: boolean;
+  enable3dScada?: boolean;
+  enableConnections?: boolean;
+  enableTopicManager?: boolean;
+  enableAlarmsHeader?: boolean;
 }
 
 export interface ClientSecuritySettings {
