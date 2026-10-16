@@ -16,6 +16,7 @@ import { PanelSymbolSection } from './editPanel/sections/PanelSymbolSection';
 import { PanelAppearanceSection } from './editPanel/sections/PanelAppearanceSection';
 import { PanelAlarmLogConfigSection } from './editPanel/sections/PanelAlarmLogConfigSection';
 import { PanelTASCGridConfigSection } from './editPanel/sections/PanelTASCGridConfigSection';
+import { PanelTextDisplaySection } from './editPanel/sections/PanelTextDisplaySection';
 
 interface EditPanelModalProps {
   panel: Partial<Panel>;
@@ -251,6 +252,7 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({
   const isRadioButtons = formData.type === PanelType.RADIO_BUTTONS;
   const isComboBox = formData.type === PanelType.COMBO_BOX;
   const isSetpointInput = isSlider || isTextInput;
+  const isTextOutput = formData.type === PanelType.TEXT_OUTPUT || (formData.type as string) === 'text_output' || (formData.type as string) === 'text_display' || formData.type === PanelType.LOG;
   const isStaticOrDecorative = isStaticText || isClock || isScreenJump || isPipe || isShape;
 
   return (
@@ -385,6 +387,15 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({
                   handleChange={handleChange}
                   isSlider={isSlider}
                   isTextInput={isTextInput}
+                />
+              )}
+
+              {/* 4b. Text Display Readout & Decimal Scaling */}
+              {isTextOutput && (
+                <PanelTextDisplaySection
+                  formData={formData}
+                  setFormData={setFormData}
+                  handleChange={handleChange}
                 />
               )}
 

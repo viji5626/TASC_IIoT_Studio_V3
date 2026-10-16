@@ -429,14 +429,99 @@ export const PanelAppearanceSection: React.FC<PanelAppearanceSectionProps> = ({
               </span>
             </div>
             <span className="text-xs font-mono font-bold text-sky-300 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/30">
-              {formData.decimalPrecision === 'none' || formData.decimalPrecision === 'None'
-                ? 'None (Raw Float)'
-                : `${formData.decimalPrecision !== undefined ? formData.decimalPrecision : 2} Digits`}
+              {formData.enableDecimalScaling
+                ? `÷ ${formData.scaleDivisor || Math.pow(10, formData.scaleFractionDigits ?? 2) || 100} (${formData.scaleFractionDigits ?? 2} Dec)`
+                : (formData.decimalPrecision === 'none' || formData.decimalPrecision === 'None'
+                  ? 'None (Raw Float)'
+                  : `${formData.decimalPrecision !== undefined ? formData.decimalPrecision : 2} Digits`)}
             </span>
           </div>
 
           {isDecimalExpanded && (
             <div className="p-4 pt-2 space-y-3 border-t border-sky-500/20">
+              {/* Decimal Scaling (PLC 16-bit Scaled Integer) Toggle in Appearance */}
+              <div className="p-3 rounded-xl bg-slate-950/90 border border-sky-500/30 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center space-x-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      name="enableDecimalScaling"
+                      checked={!!formData.enableDecimalScaling}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        const frac = formData.scaleFractionDigits ?? 2;
+                        setFormData((prev: any) => ({
+                          ...prev,
+                          enableDecimalScaling: checked,
+                          scaleIntegerDigits: prev.scaleIntegerDigits ?? 2,
+                          scaleFractionDigits: frac,
+                          scaleDivisor: Math.pow(10, frac),
+                          decimalPrecision: frac
+                        }));
+                      }}
+                      className="w-4 h-4 accent-sky-500 rounded cursor-pointer"
+                    />
+                    <span className="text-xs font-bold text-sky-300 flex items-center space-x-1.5">
+                      <i className="fas fa-divide text-[10px] text-sky-400"></i>
+                      <span>Enable Decimal Scaling (PLC 16-bit Scaled Integer)</span>
+                    </span>
+                  </label>
+                  {formData.enableDecimalScaling && (
+                    <span className="text-[10px] text-emerald-400 bg-emerald-950/80 border border-emerald-500/30 px-2 py-0.5 rounded font-mono font-semibold">
+                      ÷ {formData.scaleDivisor || Math.pow(10, formData.scaleFractionDigits ?? 2) || 100} Scaling Active
+                    </span>
+                  )}
+                </div>
+
+                {formData.enableDecimalScaling && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-800">
+                    <div>
+                      <label className="text-[10px] text-sky-400 font-semibold block mb-1">
+                        Digit Integer (Before Decimal):
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="8"
+                        value={formData.scaleIntegerDigits ?? 2}
+                        onChange={(e) => {
+                          const val = Math.max(1, Math.min(8, parseInt(e.target.value) || 2));
+                          setFormData((prev: any) => ({ ...prev, scaleIntegerDigits: val }));
+                        }}
+                        className="w-full bg-[#1e1e1e] border border-slate-700 rounded px-2 py-1.5 text-white font-mono text-xs outline-none"
+                      />
+                      <span className="text-[9px] text-slate-500">e.g. 2 digits = 0..99</span>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] text-sky-400 font-semibold block mb-1">
+                        Digit Fraction (Decimals / Scale):
+                      </label>
+                      <select
+                        value={formData.scaleFractionDigits ?? 2}
+                        onChange={(e) => {
+                          const frac = parseInt(e.target.value) || 0;
+                          const divisorVal = Math.pow(10, frac);
+                          setFormData((prev: any) => ({
+                            ...prev,
+                            scaleFractionDigits: frac,
+                            scaleDivisor: divisorVal,
+                            decimalPrecision: frac
+                          }));
+                        }}
+                        className="w-full bg-[#1e1e1e] border border-slate-700 rounded px-2 py-1.5 text-white font-mono text-xs outline-none cursor-pointer"
+                      >
+                        <option value="1">1 Decimal (÷ 10, e.g. 55.7)</option>
+                        <option value="2">2 Decimals (÷ 100, e.g. 55.73)</option>
+                        <option value="3">3 Decimals (÷ 1000, e.g. 55.730)</option>
+                        <option value="4">4 Decimals (÷ 10000, e.g. 55.7300)</option>
+                      </select>
+                      <span className="text-[9px] text-slate-500">Scale factor divisor</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <p className="text-[11px] text-slate-400 leading-relaxed">
                 Configure how many decimal places to display for process values (range: <strong className="text-sky-300">None</strong> to <strong className="text-sky-300">12</strong>, default <strong className="text-amber-400">2</strong>). Select <strong className="text-sky-300">None</strong> to show full raw floats.
               </p>

@@ -57,8 +57,16 @@ export function evaluateAlarms(
     if (!panelValObj) return;
 
     const rawVal = panelValObj.val;
-    const numVal = typeof rawVal === 'number' ? rawVal : parseFloat(rawVal);
+    let numVal = typeof rawVal === 'number' ? rawVal : parseFloat(rawVal);
     if (isNaN(numVal)) return;
+
+    if (panel.enableDecimalScaling) {
+      const frac = panel.scaleFractionDigits !== undefined ? Number(panel.scaleFractionDigits) : 2;
+      const divisor = panel.scaleDivisor ? Number(panel.scaleDivisor) : Math.pow(10, frac);
+      if (divisor > 0) {
+        numVal = numVal / divisor;
+      }
+    }
 
     const min = panel.payloadMin ?? 0;
     const max = panel.payloadMax ?? 100;
