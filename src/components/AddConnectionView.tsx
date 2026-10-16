@@ -14,11 +14,13 @@ const COLORS = ['#0ea5e9', '#10b981', '#f43f5e', '#f59e0b', '#8b5cf6', '#ec4899'
 const ICONS = ['fa-house', 'fa-fan', 'fa-house-signal', 'fa-lightbulb', 'fa-gear', 'fa-rss', 'fa-gauge-high', 'fa-microchip', 'fa-terminal'];
 
 const AddConnectionView: React.FC<AddConnectionViewProps> = ({ onCancel, onCreate, initialData, initialDashboards = [] }) => {
+  const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+
   const [formData, setFormData] = useState<any>({
     connectionName: '',
     brokerAddress: 'broker.emqx.io',
-    port: 8084,
-    protocol: 'WebSocket',
+    port: isHttps ? 8084 : 8083,
+    protocol: isHttps ? 'WebSocket-SSL' : 'WebSocket',
     clientId: '',
     username: '',
     password: '',
@@ -53,16 +55,16 @@ const AddConnectionView: React.FC<AddConnectionViewProps> = ({ onCancel, onCreat
     if (/^tcp$/i.test(s) || /^mqtt$/i.test(s)) return 'TCP';
     if (/^websocket-ssl$/i.test(s) || /^wss$/i.test(s)) return 'WebSocket-SSL';
     if (/^websocket$/i.test(s) || /^ws$/i.test(s)) return 'WebSocket';
-    return 'WebSocket'; // safe fallback
+    return isHttps ? 'WebSocket-SSL' : 'WebSocket'; // safe fallback
   };
 
   // Default port per protocol
   const defaultPortForProtocol = (proto: string): number => {
     switch (proto) {
-      case 'TCP': return 1883;
-      case 'TCP-SSL': return 8883;
+      case 'TCP': return isHttps ? 8084 : 1883;
+      case 'TCP-SSL': return isHttps ? 8084 : 8883;
       case 'WebSocket-SSL': return 8084;
-      default: return 8083; // WebSocket
+      default: return isHttps ? 8084 : 8083; // WebSocket
     }
   };
 
@@ -259,7 +261,7 @@ const AddConnectionView: React.FC<AddConnectionViewProps> = ({ onCancel, onCreat
               <div className="relative">
                 <select 
                   name="protocol" 
-                  value={formData.protocol ?? 'WebSocket'} 
+                  value={formData.protocol ?? (isHttps ? 'WebSocket-SSL' : 'WebSocket')} 
                   onChange={handleChange} 
                   className="w-full bg-slate-950 border border-slate-800 focus:border-sky-500 outline-none text-white px-3.5 py-2.5 rounded-xl font-mono text-xs appearance-none transition-colors"
                 >
@@ -272,6 +274,18 @@ const AddConnectionView: React.FC<AddConnectionViewProps> = ({ onCancel, onCreat
               </div>
             </div>
           </div>
+
+          {isHttps && (
+            <div className="p-3 bg-sky-500/10 border border-sky-500/20 rounded-2xl flex items-start space-x-2 text-[11px] text-sky-300">
+              <i className="fas fa-lock text-sky-400 mt-0.5 shrink-0"></i>
+              <div>
+                <p className="font-semibold text-white">Direct Internet Cloud Pub/Sub (HTTPS)</p>
+                <p className="text-slate-400 text-[10px] mt-0.5 leading-snug">
+                  Your browser connects directly to the MQTT broker over Secure WebSockets (WSS). Standard cloud ports: EMQX is <strong>8084</strong>, HiveMQ is <strong>8884</strong>, Mosquitto is <strong>8081</strong>.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Additional Option Section with Expand/Retract button at right */}

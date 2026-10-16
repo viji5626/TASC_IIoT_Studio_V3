@@ -1,4 +1,4 @@
-import { getBridgeWsUrl } from './bridgeConfig';
+import { getBridgeWsUrl, isHostedMode } from './bridgeConfig';
 
 export function mqttWildcardMatch(pattern: string, topic: string): boolean {
   if (!pattern || !topic) return false;
@@ -408,54 +408,125 @@ export function resolveTagValueWithBit(
 }
 
 export function formatBrokerWebSocketUrl(conn: { brokerAddress: string; port: number; protocol?: string; useBackendBridge?: boolean }): string {
-  let rawAddress = (conn.brokerAddress || 'test.mosquitto.org').trim();
+  let rawAddress = (conn.brokerAddress || 'broker.emqx.io').trim();
   const rawProtocol = (conn.protocol || '').toLowerCase();
-  
-  const isTcpProtocol = rawProtocol === 'mqtt' || rawProtocol === 'tcp' || rawAddress.startsWith('mqtt://') || rawAddress.startsWith('tcp://');
-  
-  let cleanAddress = rawAddress.replace(/^(wss?|https?|tcp|mqtt):\/\//i, '').replace(/\/+$/, '');
   const isSecure = typeof window !== 'undefined' && window.location.protocol === 'https:';
-  const userPort = Number(conn.port) || 1883;
+  const isHosted = isHostedMode();
+  const userPort = Number(conn.port) || 0;
 
-  let host = cleanAddress;
-  let port = userPort;
-  if (cleanAddress.includes(':')) {
-    const parts = cleanAddress.split(':');
-    host = parts[0];
-    port = parseInt(parts[1], 10) || userPort;
-  }
-
-  // If TCP protocol or backend bridge requested, route via backend WS-to-TCP proxy
-  if (isTcpProtocol || conn.useBackendBridge) {
+  // 1. Only route via local backend TCP bridge proxy if EXPLICITLY requested, NOT hosted in cloud, and NOT over HTTPS
+  if (conn.useBackendBridge && !isHosted && !isSecure) {
+    let cleanAddress = rawAddress.replace(/^(wss?|https?|tcp|mqtt):\/\//i, '').replace(/\/+$/, '');
+    let host = cleanAddress;
+    let port = userPort || 1883;
+    if (cleanAddress.includes(':')) {
+      const parts = cleanAddress.split(':');
+      host = parts[0];
+      port = parseInt(parts[1], 10) || port;
+    }
     if (typeof window !== 'undefined') {
       return getBridgeWsUrl(`/api/mqtt-bridge?target=mqtt://${host}:${port}`);
     }
   }
 
-  // Map known public brokers or fallback
-  let wsPort = port;
-  if (host.includes('test.mosquitto.org')) {
-    if (port === 1883 || port === 8883) {
-      wsPort = isSecure ? 8081 : 8080;
+  // 2. Parse raw address into host, port, and path cleanly
+  let parsedHost = rawAddress;
+  let parsedPort = userPort;
+  let parsedPath = '/mqtt';
+  const explicitWss = rawAddress.startsWith('wss://') || rawProtocol.includes('ssl') || rawProtocol.includes('wss');
+
+  try {
+    let urlStrToParse = rawAddress;
+    if (!/^[a-zA-Z]+:\/\//.test(urlStrToParse)) {
+      urlStrToParse = `http://${urlStrToParse}`;
+    } else {
+      urlStrToParse = urlStrToParse
+        .replace(/^wss:\/\//i, 'https://')
+        .replace(/^(ws|tcp|mqtt):\/\//i, 'http://');
     }
-  } else if (host.includes('emqx.io')) {
-    if (port === 1883 || port === 8883) {
-      wsPort = isSecure ? 8084 : 8083;
+
+    const parsed = new URL(urlStrToParse);
+    parsedHost = parsed.hostname;
+    if (parsed.port) {
+      parsedPort = parseInt(parsed.port, 10);
     }
-  } else if (host.includes('hivemq.com')) {
-    if (port === 1883 || port === 8883) {
-      wsPort = isSecure ? 8884 : 8000;
+    if (parsed.pathname && parsed.pathname !== '/') {
+      parsedPath = parsed.pathname;
     }
-  } else if (port === 1883) {
-    if (typeof window !== 'undefined' && (rawProtocol.includes('tcp') || rawProtocol.includes('mqtt') || !rawProtocol.includes('ws'))) {
-      return getBridgeWsUrl(`/api/mqtt-bridge?target=mqtt://${host}:${port}`);
+  } catch {
+    let clean = rawAddress.replace(/^(wss?|https?|tcp|mqtt):\/\//i, '').replace(/\/+$/, '');
+    if (clean.includes('/')) {
+      const slashIdx = clean.indexOf('/');
+      parsedPath = clean.substring(slashIdx);
+      clean = clean.substring(0, slashIdx);
     }
-    wsPort = isSecure ? 8081 : 8083;
+    if (clean.includes(':')) {
+      const parts = clean.split(':');
+      parsedHost = parts[0];
+      parsedPort = parseInt(parts[1], 10) || parsedPort;
+    } else {
+      parsedHost = clean;
+    }
   }
 
-  const scheme = isSecure ? 'wss://' : (rawProtocol.includes('ssl') || rawProtocol.includes('wss') ? 'wss://' : 'ws://');
-  
-  return `${scheme}${host}:${wsPort}/mqtt`;
+  if (!parsedHost) {
+    parsedHost = 'broker.emqx.io';
+  }
+
+  // 3. Resolve appropriate WebSocket port for direct internet broker pub/sub
+  let finalPort = parsedPort;
+  const isEmqx = parsedHost.includes('emqx.io');
+  const isHive = parsedHost.includes('hivemq.com');
+  const isMosq = parsedHost.includes('mosquitto.org');
+
+  if (isSecure) {
+    // Hosted on HTTPS (e.g. app.tascautomation.com):
+    // Browsers strictly forbid unencrypted ws:// (Mixed Content). All WebSockets MUST use wss://.
+    if (isEmqx) {
+      // EMQX WSS TLS port is 8084 (8083 is plaintext and fails TLS handshake)
+      if (!finalPort || finalPort === 1883 || finalPort === 8883 || finalPort === 8083) {
+        finalPort = 8084;
+      }
+    } else if (isHive) {
+      // HiveMQ WSS TLS port is 8884 (8000 is plaintext and fails TLS handshake)
+      if (!finalPort || finalPort === 1883 || finalPort === 8883 || finalPort === 8000) {
+        finalPort = 8884;
+      }
+    } else if (isMosq) {
+      // Mosquitto WSS TLS port is 8081 (8080 is plaintext and fails TLS handshake)
+      if (!finalPort || finalPort === 1883 || finalPort === 8883 || finalPort === 8080) {
+        finalPort = 8081;
+      }
+    } else {
+      // Custom / internet broker on HTTPS:
+      // Browsers cannot connect to raw TCP port 1883/8883; default to standard WSS port 8084 or 443
+      if (!finalPort || finalPort === 1883 || finalPort === 8883) {
+        finalPort = 8084;
+      } else if (finalPort === 8083) {
+        // Common configuration oversight: 8083 is plaintext WS; upgrade to 8084 for WSS
+        finalPort = 8084;
+      }
+    }
+  } else {
+    // Running on HTTP / local:
+    if (explicitWss) {
+      if (isEmqx && (!finalPort || finalPort === 1883 || finalPort === 8883 || finalPort === 8083)) finalPort = 8084;
+      else if (isHive && (!finalPort || finalPort === 1883 || finalPort === 8883 || finalPort === 8000)) finalPort = 8884;
+      else if (isMosq && (!finalPort || finalPort === 1883 || finalPort === 8883 || finalPort === 8080)) finalPort = 8081;
+      else if (!finalPort || finalPort === 1883 || finalPort === 8883) finalPort = 8084;
+    } else {
+      if (isEmqx && (!finalPort || finalPort === 1883 || finalPort === 8883)) finalPort = 8083;
+      else if (isHive && (!finalPort || finalPort === 1883 || finalPort === 8883)) finalPort = 8000;
+      else if (isMosq && (!finalPort || finalPort === 1883 || finalPort === 8883)) finalPort = 8080;
+      else if (!finalPort || finalPort === 1883 || finalPort === 8883) finalPort = 8083;
+    }
+  }
+
+  const scheme = (isSecure || explicitWss) ? 'wss://' : 'ws://';
+  const cleanPath = parsedPath.startsWith('/') ? parsedPath : `/${parsedPath}`;
+  const portStr = finalPort ? `:${finalPort}` : '';
+
+  return `${scheme}${parsedHost}${portStr}${cleanPath}`;
 }
 
 export function formatPublishPayload(

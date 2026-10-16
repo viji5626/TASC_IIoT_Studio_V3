@@ -25,8 +25,8 @@ export const INITIAL_STATE: AppState = {
     {
       connectionName: "broker1",
       brokerAddress: "broker.emqx.io",
-      port: 1883,
-      protocol: "Websocket",
+      port: 8084,
+      protocol: "WebSocket-SSL",
       clientId: "",
       username: "",
       password: "",

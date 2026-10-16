@@ -224,6 +224,19 @@ export function useDriverEngine({
 
   // Driver Bridge Lifecycle
   useEffect(() => {
+    // Only connect if there are actually driver connections configured and enabled,
+    // or driver tags, or active panels bound to a driver tag.
+    const hasDriverConnections = (appState.driverConnections || []).some(c => c.enabled !== false);
+    const hasDriverTags = (appState.driverTags || []).some(t => t.enabled !== false);
+    const hasDriverPanels = activePanels.some(p => p.dataSourceMode === 'driver');
+
+    if (!hasDriverConnections && !hasDriverTags && !hasDriverPanels) {
+      if (driverBridgeClientRef.current) {
+        driverBridgeClientRef.current.disconnect();
+      }
+      return;
+    }
+
     if (!driverBridgeClientRef.current) {
       driverBridgeClientRef.current = new DriverBridgeClient(
         processDriverTagValue,
@@ -236,7 +249,14 @@ export function useDriverEngine({
     return () => {
       driverBridgeClientRef.current?.disconnect();
     };
-  }, [processDriverTagValue, handleDriverConnectionHealth, handleDriverBridgeReconnect]);
+  }, [
+    processDriverTagValue, 
+    handleDriverConnectionHealth, 
+    handleDriverBridgeReconnect,
+    appState.driverConnections,
+    appState.driverTags,
+    activePanels
+  ]);
 
   // Sync driver-mode subscriptions to the bridge
   useEffect(() => {
