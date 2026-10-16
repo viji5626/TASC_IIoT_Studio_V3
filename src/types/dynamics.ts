@@ -1,4 +1,5 @@
 export type DynamicPropertyType = 
+  | 'enable_disable'       // Enable/Disable write rights & interactivity (grey out when disabled)
   | 'color_shift'          // Threshold / state-based fill/stroke/text color change
   | 'rotation'             // Continuous rotation speed by tag or angular deflection
   | 'discrete_motion'      // 2D linear or multi-node motion path translation
@@ -28,6 +29,7 @@ export interface DynamicBehaviorRule {
 
   // Digital State 1 Actions:
   state1Visibility?: 'show' | 'hide' | 'blink';
+  state1Interlock?: 'enable' | 'disable'; // For enable_disable dynamics (e.g. State 1 default 'disable')
   state1Fill?: string;
   state1Stroke?: string;
   state1Opacity?: number;
@@ -37,6 +39,7 @@ export interface DynamicBehaviorRule {
 
   // Digital State 2 Actions:
   state2Visibility?: 'show' | 'hide' | 'blink';
+  state2Interlock?: 'enable' | 'disable'; // For enable_disable dynamics (e.g. State 2 default 'enable')
   state2Fill?: string;
   state2Stroke?: string;
   state2Opacity?: number;
@@ -51,6 +54,8 @@ export interface DynamicBehaviorRule {
   conditionValueHigh?: number; // for range
   actionOnMatch?: 'show' | 'hide' | 'blink'; // For analog visibility
   actionOnElse?: 'show' | 'hide';            // For analog visibility
+  actionOnMatchInterlock?: 'enable' | 'disable'; // For analog enable_disable (e.g. default 'disable')
+  actionOnElseInterlock?: 'enable' | 'disable';  // For analog enable_disable (e.g. default 'enable')
 
   // Action / Visual targets
   targetFill?: string;

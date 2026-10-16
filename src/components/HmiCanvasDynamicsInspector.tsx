@@ -25,6 +25,13 @@ const DYNAMIC_LIBRARY_ITEMS: Array<{
   color: string;
 }> = [
   {
+    type: 'enable_disable',
+    label: 'Enable / Disable (Write Interlock)',
+    desc: 'Control write rights & interactability. Greys out and locks button or input when disabled.',
+    icon: 'fa-lock',
+    color: 'text-amber-400'
+  },
+  {
     type: 'visibility_blink',
     label: 'Visibility & Hide/Show',
     desc: 'Hide, Show, or Blink flashing strobe based on digital state or analog condition',
@@ -630,6 +637,24 @@ export const HmiCanvasDynamicsInspector: React.FC<HmiCanvasDynamicsInspectorProp
                       </div>
                     </div>
 
+                    {/* State 1 Action for Enable / Disable */}
+                    {activeRule.type === 'enable_disable' && (
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-amber-300 font-medium flex items-center space-x-1">
+                          <i className="fas fa-lock text-[9px]"></i>
+                          <span>State 1 Write Rights:</span>
+                        </label>
+                        <select
+                          value={activeRule.state1Interlock || 'disable'}
+                          onChange={(e) => handleUpdateActiveRule({ state1Interlock: e.target.value as any })}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white outline-none cursor-pointer"
+                        >
+                          <option value="disable">Disable / Grey Out (Write Locked)</option>
+                          <option value="enable">Enable (Interactive & Writable)</option>
+                        </select>
+                      </div>
+                    )}
+
                     {/* State 1 Action for Visibility */}
                     {activeRule.type === 'visibility_blink' && (
                       <div className="space-y-1">
@@ -737,6 +762,24 @@ export const HmiCanvasDynamicsInspector: React.FC<HmiCanvasDynamicsInspectorProp
                         />
                       </div>
                     </div>
+
+                    {/* State 2 Action for Enable / Disable */}
+                    {activeRule.type === 'enable_disable' && (
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-emerald-300 font-medium flex items-center space-x-1">
+                          <i className="fas fa-lock-open text-[9px]"></i>
+                          <span>State 2 Write Rights:</span>
+                        </label>
+                        <select
+                          value={activeRule.state2Interlock || 'enable'}
+                          onChange={(e) => handleUpdateActiveRule({ state2Interlock: e.target.value as any })}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white outline-none cursor-pointer"
+                        >
+                          <option value="enable">Enable (Interactive & Writable)</option>
+                          <option value="disable">Disable / Grey Out (Write Locked)</option>
+                        </select>
+                      </div>
+                    )}
 
                     {/* State 2 Action for Visibility */}
                     {activeRule.type === 'visibility_blink' && (
@@ -896,6 +939,42 @@ export const HmiCanvasDynamicsInspector: React.FC<HmiCanvasDynamicsInspectorProp
                           onChange={(e) => handleUpdateActiveRule({ maxTagValue: parseFloat(e.target.value) || 100 })}
                           className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white font-mono"
                         />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Analog Enable / Disable Actions */}
+                  {activeRule.type === 'enable_disable' && (
+                    <div className="pt-2 border-t border-slate-800 space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-amber-300 font-medium flex items-center space-x-1">
+                            <i className="fas fa-lock text-[9px]"></i>
+                            <span>When Match:</span>
+                          </label>
+                          <select
+                            value={activeRule.actionOnMatchInterlock || 'disable'}
+                            onChange={(e) => handleUpdateActiveRule({ actionOnMatchInterlock: e.target.value as any })}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white outline-none cursor-pointer"
+                          >
+                            <option value="disable">Disable / Grey Out (Locked)</option>
+                            <option value="enable">Enable (Writable)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-emerald-300 font-medium flex items-center space-x-1">
+                            <i className="fas fa-lock-open text-[9px]"></i>
+                            <span>When Not Match (Else):</span>
+                          </label>
+                          <select
+                            value={activeRule.actionOnElseInterlock || 'enable'}
+                            onChange={(e) => handleUpdateActiveRule({ actionOnElseInterlock: e.target.value as any })}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white outline-none cursor-pointer"
+                          >
+                            <option value="enable">Enable (Writable)</option>
+                            <option value="disable">Disable / Grey Out (Locked)</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
                   )}

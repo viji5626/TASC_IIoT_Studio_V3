@@ -1271,6 +1271,11 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   };
 
   const handleSendTextInput = (panel: Panel, rawVal: string) => {
+    const dynEval = evaluatePanelDynamics(panel, latestValues, panels);
+    if (dynEval.interlock?.isDisabled) {
+      return false;
+    }
+
     const trimmed = rawVal.trim();
     if (!trimmed) return false;
 
@@ -2828,7 +2833,19 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
     const newRule: DynamicBehaviorRule = {
       id: generateUniqueId('dyn'),
       type: ruleType,
-      name: ruleType === 'color_shift' ? 'Color Shift' : ruleType === 'rotation' ? 'Rotation Spin' : ruleType === 'level_fill' ? 'Level Fill' : ruleType === 'visibility_blink' ? 'Visibility & Hide/Show' : ruleType === 'opacity_fade' ? 'Opacity Fade' : 'Motion Path',
+      name: ruleType === 'color_shift'
+        ? 'Color Shift'
+        : ruleType === 'rotation'
+          ? 'Rotation Spin'
+          : ruleType === 'level_fill'
+            ? 'Level Fill'
+            : ruleType === 'visibility_blink'
+              ? 'Visibility & Hide/Show'
+              : ruleType === 'enable_disable'
+                ? 'Enable / Disable Write Interlock'
+                : ruleType === 'opacity_fade'
+                  ? 'Opacity Fade'
+                  : 'Motion Path',
       enabled: true,
       dataSourceMode: 'driver',
       driverTagId: '',
@@ -2840,6 +2857,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       state2Value: '1',
       state1Visibility: 'hide',
       state2Visibility: 'show',
+      state1Interlock: 'disable',
+      state2Interlock: 'enable',
       state1Fill: '#334155',
       state1Stroke: '#0f172a',
       state2Fill: '#10b981',
@@ -2856,6 +2875,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       conditionValue: 50,
       actionOnMatch: 'hide',
       actionOnElse: 'show',
+      actionOnMatchInterlock: 'disable',
+      actionOnElseInterlock: 'enable',
       targetFill: '#ef4444',
       targetStroke: '#f87171',
       rotationMode: 'continuous_spin',
@@ -3349,6 +3370,11 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
     if (effectiveEditMode) return;
 
+    const dynEval = evaluatePanelDynamics(panel, latestValues, panels);
+    if (dynEval.interlock?.isDisabled) {
+      return;
+    }
+
     if (panel.type === PanelType.TEXT_INPUT) {
       // Direct inline editing on element, no keypad modal popup
       return;
@@ -3409,6 +3435,11 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
   const handleConfirmKeypad = (newVal: number) => {
     if (!keypadConfig.panel) return;
     const panel = keypadConfig.panel;
+    const dynEval = evaluatePanelDynamics(panel, latestValues, panels);
+    if (dynEval.interlock?.isDisabled) {
+      setKeypadConfig({ isOpen: false });
+      return;
+    }
     const targetTopic = panel.publishTopic?.trim() || panel.topic?.trim();
     if (onPublish && targetTopic) {
       const formatted = formatPublishPayload(newVal, panel);
@@ -4774,12 +4805,26 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
               )
             ) : (
               panels.map((panel, idx) => {
-                const dynEval = evaluatePanelDynamics(panel, latestValues);
-                if (panel.isHidden || dynEval.visibility?.isHidden) return null;
+                const isSelected = selectedPanelIds.includes(panel.panelId);
+                const dynEval = evaluatePanelDynamics(panel, latestValues, panels);
+                const isDynHidden = !!dynEval.visibility?.isHidden;
+                const isInterlocked = !!dynEval.interlock?.isDisabled;
+
+                if (panel.isHidden) return null;
+                if (isDynHidden) {
+                  // In Run Mode, hide completely
+                  if (!effectiveEditMode) {
+                    return null;
+                  }
+                  // In Design Mode, if not actively selected by user, hide to reflect live dynamic state
+                  if (!isSelected) {
+                    return null;
+                  }
+                  // If selected in Design Mode, remain visible with dimmed styling so user can still edit and position it
+                }
 
                 const pos = getPanelPos(panel, idx);
                 const isOverCommunityLimit = isCommunityMode && idx >= 10;
-                const isSelected = selectedPanelIds.includes(panel.panelId);
                 const isMaster = masterPanelId === panel.panelId;
                 // Find any active dynamic rule tag/topic binding on this panel
                 const dynamicTag = panel.dynamics?.find(d => d.enabled && (d.driverTagId || d.topic))?.driverTagId
@@ -4788,13 +4833,15 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 let liveData = latestValues[panel.panelId]
                   || (panel.driverTagId ? latestValues[panel.driverTagId] : undefined)
                   || (panel.topic ? latestValues[panel.topic] : undefined)
+                  || (panel.jsonPath ? latestValues[panel.jsonPath] : undefined)
                   || (dynamicTag ? latestValues[dynamicTag] : undefined);
 
                 // Bit extraction fallback if panel or dynamic tag binds to a bit (e.g. Word.b3 or Word:3)
-                if (!liveData && (panel.driverTagId || panel.topic || dynamicTag)) {
-                  const bitVal = resolveTagValueWithBit(panel.driverTagId, latestValues)
-                    ?? resolveTagValueWithBit(panel.topic, latestValues)
-                    ?? resolveTagValueWithBit(dynamicTag, latestValues);
+                if (!liveData && (panel.driverTagId || panel.topic || dynamicTag || panel.jsonPath)) {
+                  const bitVal = resolveTagValueWithBit(panel.driverTagId, latestValues, panels)
+                    ?? resolveTagValueWithBit(panel.topic, latestValues, panels)
+                    ?? resolveTagValueWithBit(panel.jsonPath, latestValues, panels)
+                    ?? resolveTagValueWithBit(dynamicTag, latestValues, panels);
                   if (bitVal !== undefined) {
                     liveData = { val: bitVal };
                   }
@@ -4806,7 +4853,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 // Dynamic color shift, opacity, and blinking
                 const effectiveBg = dynEval.colorShift?.fill || panel.bgColor;
                 const effectiveBorder = dynEval.colorShift?.stroke || panel.borderColor;
-                const effectiveOpacity = dynEval.opacity !== null ? dynEval.opacity : (panel.opacity !== undefined ? panel.opacity : 1);
+                let effectiveOpacity = dynEval.opacity !== null ? dynEval.opacity : (panel.opacity !== undefined ? panel.opacity : 1);
+                if (effectiveEditMode && isSelected && isDynHidden) {
+                  effectiveOpacity = Math.min(effectiveOpacity, 0.4);
+                }
                 const isDynBlinking = dynEval.visibility?.isBlinking;
                 const dynBlinkClass = isDynBlinking ? (dynEval.visibility?.blinkSpeed === 'fast' ? 'animate-ping' : 'animate-pulse') : '';
 
@@ -4902,9 +4952,12 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         store.setCommunityLimitNotice?.("Community Edition Limit: Active HMI is limited to 10 widgets. Upgrade to Engineering Studio for unlimited widgets.");
                         return;
                       }
+                      if (isInterlocked) {
+                        return;
+                      }
                       handlePanelInteract(panel);
                     }}
-                    className={`absolute transition-all group select-none ${effectiveEditMode ? (panel.isLocked || isOverCommunityLimit ? 'cursor-not-allowed' : 'cursor-move') : (isOverCommunityLimit ? 'cursor-not-allowed' : 'cursor-pointer')
+                    className={`absolute transition-all group select-none ${effectiveEditMode ? (panel.isLocked || isOverCommunityLimit ? 'cursor-not-allowed' : 'cursor-move') : (isOverCommunityLimit || isInterlocked ? 'cursor-not-allowed' : 'cursor-pointer')
                       } ${isSelected && effectiveEditMode
                         ? isMaster
                           ? 'ring-2 ring-amber-400 shadow-2xl z-30'
@@ -4912,7 +4965,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         : effectiveEditMode
                           ? 'hover:ring-1 hover:ring-sky-400/80 z-10'
                           : 'z-10'
-                      } ${tripAnimClass} ${isOverCommunityLimit ? 'grayscale opacity-40 filter contrast-75 brightness-75' : ''}`}
+                      } ${tripAnimClass} ${isOverCommunityLimit ? 'grayscale opacity-40 filter contrast-75 brightness-75' : ''} ${isInterlocked ? 'grayscale opacity-50 cursor-not-allowed select-none filter contrast-75' : ''}`}
                     style={{
                       left: `${pos.x}px`,
                       top: `${pos.y}px`,
@@ -4931,6 +4984,16 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         : undefined
                     }}
                   >
+                    {/* Dynamic Enable/Disable Write Interlock Lock Badge */}
+                    {isInterlocked && !isDynHidden && !isOverCommunityLimit && (
+                      <div
+                        className="absolute top-1 right-1 z-40 text-[7.5px] font-bold font-mono uppercase px-1.5 py-0.5 rounded bg-slate-950/90 text-amber-400 border border-amber-500/50 shadow-md flex items-center space-x-1 pointer-events-none"
+                        title="Write Interlocked: Control disabled by dynamic tag"
+                      >
+                        <i className="fas fa-lock text-[7px] text-amber-400"></i>
+                        <span>LOCKED</span>
+                      </div>
+                    )}
                     {/* Community Edition 10+ Widget Gray-out Lock Overlay */}
                     {isOverCommunityLimit && (
                       <div
@@ -5115,7 +5178,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         const targetTopic = panel.publishTopic?.trim() || panel.topic?.trim() || panel.driverWriteTagId?.trim() || panel.driverTagId?.trim();
 
                         const handleTriggerPressDown = () => {
-                          if (effectiveEditMode || !onPublish || !targetTopic) return;
+                          if (effectiveEditMode || isInterlocked || !onPublish || !targetTopic) return;
                           if (isMomentary) {
                             setPressedButtonPanelId(panel.panelId);
                             onPublish(targetTopic, formatPublishPayload(onVal, panel));
@@ -5123,7 +5186,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         };
 
                         const handleTriggerRelease = () => {
-                          if (effectiveEditMode || !onPublish || !targetTopic) return;
+                          if (effectiveEditMode || isInterlocked || !onPublish || !targetTopic) return;
                           if (isMomentary && pressedButtonPanelId === panel.panelId) {
                             setPressedButtonPanelId(null);
                             onPublish(targetTopic, formatPublishPayload(offVal, panel));
@@ -5133,7 +5196,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         const handleTriggerClick = (e: React.MouseEvent) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          if (effectiveEditMode || !onPublish || !targetTopic) return;
+                          if (effectiveEditMode || isInterlocked || !onPublish || !targetTopic) return;
 
                           if (isToggle) {
                             const now = Date.now();
@@ -5153,7 +5216,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                           <div className="w-full h-full p-1.5 flex items-center justify-center select-none">
                             <button
                               type="button"
-                              disabled={effectiveEditMode}
+                              disabled={effectiveEditMode || isInterlocked}
                               onClick={handleTriggerClick}
                               onMouseDown={handleTriggerPressDown}
                               onMouseUp={handleTriggerRelease}
@@ -5161,8 +5224,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                               onTouchStart={handleTriggerPressDown}
                               onTouchEnd={handleTriggerRelease}
                               onTouchCancel={handleTriggerRelease}
-                              className={`w-full h-full border-2 transition-all flex items-center justify-center space-x-2 px-3 py-1 cursor-pointer group/btn ${isPressed ? 'scale-95 shadow-inner' : 'active:scale-95 shadow-md'
-                                } ${panel.buttonStyle === 'square'
+                              className={`w-full h-full border-2 transition-all flex items-center justify-center space-x-2 px-3 py-1 group/btn ${isPressed ? 'scale-95 shadow-inner' : 'active:scale-95 shadow-md'
+                                } ${isInterlocked ? 'cursor-not-allowed pointer-events-none opacity-50' : 'cursor-pointer'} ${panel.buttonStyle === 'square'
                                   ? 'rounded-none'
                                   : panel.buttonStyle === 'pill'
                                     ? 'rounded-full'
@@ -5263,7 +5326,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
                             <div
                               onClick={(e) => {
-                                if (effectiveEditMode) return;
+                                if (effectiveEditMode || isInterlocked) return;
                                 e.stopPropagation();
                                 const now = Date.now();
                                 if (now - (lastToggleClickTimeRef.current[panel.panelId] || 0) < 400) return;
@@ -5274,7 +5337,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                   onPublish(panel.publishTopic || panel.topic, formatPublishPayload(targetVal, panel));
                                 }
                               }}
-                              className={`border-2 transition-all cursor-pointer flex items-center shrink-0 ${isOn
+                              className={`border-2 transition-all flex items-center shrink-0 ${isInterlocked ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${isOn
                                 ? 'bg-emerald-500/20 border-emerald-500 justify-end'
                                 : 'bg-slate-900 border-slate-700 justify-start'
                                 }`}
@@ -5371,6 +5434,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         <div className="relative w-full my-1 flex flex-col justify-center">
                           <input
                             type="range"
+                            disabled={effectiveEditMode || isInterlocked}
                             min={panel.payloadMin ?? 0}
                             max={panel.payloadMax ?? 100}
                             step={panel.sliderStep || 1}
@@ -5380,6 +5444,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                 : (liveValue !== undefined ? Number(liveValue) : (panel.payloadMin ?? 0))
                             }
                             onChange={(e) => {
+                              if (isInterlocked) return;
                               const val = Number(e.target.value);
                               setSliderValues(prev => ({ ...prev, [panel.panelId]: val }));
                               const targetTopic = panel.publishTopic?.trim() || panel.topic?.trim();
@@ -5401,7 +5466,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                 e.stopPropagation();
                               }
                             }}
-                            className="w-full h-2 bg-slate-900 rounded-lg appearance-none cursor-pointer accent-sky-400 hover:accent-sky-300 transition-all border border-slate-700/80"
+                            className={`w-full h-2 bg-slate-900 rounded-lg appearance-none transition-all border border-slate-700/80 ${isInterlocked ? 'cursor-not-allowed opacity-50' : 'cursor-pointer accent-sky-400 hover:accent-sky-300'}`}
                           />
                         </div>
 
@@ -5492,7 +5557,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
                         const outFontSize = panel.fontSize ? Number(panel.fontSize) : 16;
                         const unitFontSize = Math.max(10, Math.round(outFontSize * 0.55));
-                        
+
                         let valToFormat: any = liveValue !== undefined && liveValue !== null ? liveValue : (rawStringValue !== '' ? rawStringValue : 0);
                         if (isScaled && scaleDivisor > 0) {
                           const n = Number(valToFormat);
@@ -5651,8 +5716,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                 <input
                                   type={panel.dataType === 'text' ? 'text' : 'number'}
                                   step="any"
+                                  disabled={effectiveEditMode || isInterlocked}
                                   value={displayValue}
                                   onFocus={() => {
+                                    if (isInterlocked) return;
                                     setFocusedInputPanelId(panel.panelId);
                                     setTextInputValues(prev => ({
                                       ...prev,
@@ -5671,6 +5738,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                     });
                                   }}
                                   onChange={(e) => {
+                                    if (isInterlocked) return;
                                     const val = e.target.value;
                                     setTextInputValues(prev => ({ ...prev, [panel.panelId]: val }));
                                     if (textInputErrors[panel.panelId]) {
@@ -5678,6 +5746,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                     }
                                   }}
                                   onKeyDown={(e) => {
+                                    if (isInterlocked) return;
                                     if (e.key === 'Enter') {
                                       e.stopPropagation();
                                       const val = textInputValues[panel.panelId] ?? (liveValue !== undefined && liveValue !== null ? formatVal(liveValue) : '');
@@ -5697,13 +5766,13 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                     }
                                   }}
                                   onMouseDown={(e) => {
-                                    if (!effectiveEditMode) e.stopPropagation();
+                                    if (!effectiveEditMode && !isInterlocked) e.stopPropagation();
                                   }}
                                   onTouchStart={(e) => {
-                                    if (!effectiveEditMode) e.stopPropagation();
+                                    if (!effectiveEditMode && !isInterlocked) e.stopPropagation();
                                   }}
                                   onClick={(e) => {
-                                    if (!effectiveEditMode) e.stopPropagation();
+                                    if (!effectiveEditMode && !isInterlocked) e.stopPropagation();
                                   }}
                                   placeholder={panel.dataType === 'text' ? 'Enter text...' : `Value (${panel.payloadMin ?? 0} - ${panel.payloadMax ?? 100})...`}
                                   style={{
@@ -5711,9 +5780,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                     fontSize: `${inFontSize}px`,
                                     paddingRight: `${inputPaddingRight}px`
                                   }}
-                                  className={`w-full bg-black/80 border text-amber-300 font-mono rounded-lg px-2.5 outline-none min-w-0 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${focusedInputPanelId === panel.panelId
-                                    ? 'border-amber-400 ring-1 ring-amber-400/50 shadow-[0_0_8px_rgba(245,158,11,0.25)]'
-                                    : 'border-slate-700 hover:border-slate-600'
+                                  className={`w-full bg-black/80 border text-amber-300 font-mono rounded-lg px-2.5 outline-none min-w-0 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isInterlocked ? 'cursor-not-allowed bg-slate-900/40 opacity-50' : ''
+                                    } ${focusedInputPanelId === panel.panelId
+                                      ? 'border-amber-400 ring-1 ring-amber-400/50 shadow-[0_0_8px_rgba(245,158,11,0.25)]'
+                                      : 'border-slate-700 hover:border-slate-600'
                                     }`}
                                 />
 
@@ -5751,16 +5821,18 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                               </div>
                               <button
                                 type="button"
+                                disabled={effectiveEditMode || isInterlocked}
                                 style={{
                                   height: `${inHeight}px`,
                                   fontSize: `${btnFontSize}px`
                                 }}
                                 onMouseDown={(e) => {
                                   e.preventDefault();
-                                  if (!effectiveEditMode) e.stopPropagation();
+                                  if (!effectiveEditMode && !isInterlocked) e.stopPropagation();
                                 }}
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  if (isInterlocked) return;
                                   const val = textInputValues[panel.panelId] ?? (liveValue !== undefined && liveValue !== null ? formatVal(liveValue) : '');
                                   const ok = handleSendTextInput(panel, val);
                                   if (ok) {
@@ -5769,7 +5841,8 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                     }
                                   }
                                 }}
-                                className="px-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg transition-transform active:scale-95 shrink-0 cursor-pointer flex items-center space-x-1.5"
+                                className={`px-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg transition-transform active:scale-95 shrink-0 flex items-center space-x-1.5 ${isInterlocked ? 'cursor-not-allowed opacity-50 pointer-events-none' : 'cursor-pointer'
+                                  }`}
                               >
                                 <span>Send</span>
                                 <i className="fas fa-paper-plane" style={{ fontSize: `${Math.max(9, Math.round(btnFontSize * 0.75))}px` }}></i>
@@ -5855,16 +5928,19 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                               {panel.panelName}
                             </span>
                             <select
+                              disabled={effectiveEditMode || isInterlocked}
                               value={rawStringValue}
                               onMouseDown={(e) => e.stopPropagation()}
                               onClick={(e) => e.stopPropagation()}
                               onChange={(e) => {
                                 e.stopPropagation();
+                                if (isInterlocked) return;
                                 const selectedVal = e.target.value;
                                 if (onPublish) onPublish(panel.publishTopic || panel.topic, formatPublishPayload(selectedVal, panel));
                               }}
                               style={{ color: panel.textColor || '#fcd34d', fontSize: `${selectFontSize}px` }}
-                              className="w-full bg-slate-950 border border-slate-700 font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer font-mono"
+                              className={`w-full bg-slate-950 border border-slate-700 font-bold rounded-lg px-2 py-1.5 outline-none font-mono ${isInterlocked ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                                }`}
                             >
                               <option value="" disabled className="text-slate-500">Select option...</option>
                               {getNormalizedOptions(panel).map((opt, i) => (
@@ -5892,16 +5968,19 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                   <button
                                     key={i}
                                     type="button"
+                                    disabled={effectiveEditMode || isInterlocked}
                                     onMouseDown={(e) => e.stopPropagation()}
                                     onClick={(e) => {
                                       e.preventDefault();
                                       e.stopPropagation();
+                                      if (effectiveEditMode || isInterlocked) return;
                                       if (onPublish) onPublish(panel.publishTopic || panel.topic, formatPublishPayload(opt.value, panel));
                                     }}
                                     style={{ fontSize: `${radioFontSize}px` }}
-                                    className={`px-2 py-1 rounded-lg font-semibold flex items-center space-x-1.5 border transition-colors cursor-pointer ${isActive
-                                      ? 'bg-amber-500/20 text-amber-300 border-amber-500 font-bold shadow-sm'
-                                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
+                                    className={`px-2 py-1 rounded-lg font-semibold flex items-center space-x-1.5 border transition-colors ${isInterlocked ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                                      } ${isActive
+                                        ? 'bg-amber-500/20 text-amber-300 border-amber-500 font-bold shadow-sm'
+                                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
                                       }`}
                                   >
                                     <div className={`w-3 h-3 rounded-full border flex items-center justify-center shrink-0 ${isActive ? 'border-amber-400 bg-amber-400/20' : 'border-slate-600'

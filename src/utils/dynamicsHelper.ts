@@ -30,6 +30,9 @@ export interface EvaluatedPanelDynamics {
     spinDuration: number;
     angle: number;
   } | null;
+  interlock: {
+    isDisabled: boolean;
+  } | null;
 }
 
 /**
@@ -37,14 +40,16 @@ export interface EvaluatedPanelDynamics {
  */
 export function evaluatePanelDynamics(
   panel: Panel,
-  latestValues: Record<string, any>
+  latestValues: Record<string, any>,
+  allPanels?: Panel[]
 ): EvaluatedPanelDynamics {
   const result: EvaluatedPanelDynamics = {
     levelFill: null,
     colorShift: null,
     visibility: null,
     opacity: null,
-    rotation: null
+    rotation: null,
+    interlock: null
   };
 
   const dynamicRules = panel.dynamics || [];
@@ -56,14 +61,15 @@ export function evaluatePanelDynamics(
     if (!rule.enabled) continue;
 
     // 1. Resolve live raw value for this rule
-    const tagKey = rule.dataSourceMode === 'driver' 
-      ? (rule.driverTagId || (rule as any).driverTagName || (rule as any).tagName) 
-      : (rule.topic || (rule as any).tagName);
+    // Support driverTagId, driverTagName, topic, or jsonPath
+    const primaryKey = rule.dataSourceMode === 'driver' 
+      ? (rule.driverTagId || (rule as any).driverTagName || (rule as any).tagName || rule.topic || rule.jsonPath) 
+      : (rule.topic || rule.jsonPath || rule.driverTagId || (rule as any).tagName);
     let rawVal: any = undefined;
 
-    if (tagKey) {
-      const cleanKey = String(tagKey).trim();
-      rawVal = resolveTagValueWithBit(cleanKey, latestValues);
+    if (primaryKey) {
+      const cleanKey = String(primaryKey).trim();
+      rawVal = resolveTagValueWithBit(cleanKey, latestValues, allPanels);
 
       // Check Static SCADA Local Tags (Memory/Setpoints)
       if (rawVal === undefined) {
@@ -96,26 +102,37 @@ export function evaluatePanelDynamics(
       }
     }
 
+    // Fallback: If rule has jsonPath, check that directly
+    if (rawVal === undefined && rule.jsonPath && rule.jsonPath.trim()) {
+      rawVal = resolveTagValueWithBit(rule.jsonPath.trim(), latestValues, allPanels);
+    }
+
     // Fallback to panel's own primary tag or panelId if not resolved
     if (rawVal === undefined) {
       if (panel.driverTagId) {
-        rawVal = resolveTagValueWithBit(panel.driverTagId, latestValues);
+        rawVal = resolveTagValueWithBit(panel.driverTagId, latestValues, allPanels);
       }
       if (rawVal === undefined && panel.topic) {
-        rawVal = resolveTagValueWithBit(panel.topic, latestValues);
+        rawVal = resolveTagValueWithBit(panel.topic, latestValues, allPanels);
+      }
+      if (rawVal === undefined && panel.jsonPath) {
+        rawVal = resolveTagValueWithBit(panel.jsonPath, latestValues, allPanels);
       }
       if (rawVal === undefined && panel.panelId && latestValues[panel.panelId] !== undefined) {
         rawVal = latestValues[panel.panelId]?.val !== undefined ? latestValues[panel.panelId].val : latestValues[panel.panelId];
       }
     }
 
-    // If MQTT mode and JSONPath query is specified, extract nested JSON value
-    if (rule.dataSourceMode === 'mqtt' && rule.jsonPath && rule.jsonPath.trim() && rawVal !== undefined) {
+    // If jsonPath query is specified, extract nested JSON value from rawVal
+    if (rule.jsonPath && rule.jsonPath.trim() && rawVal !== undefined) {
       try {
-        const parsed = typeof rawVal === 'string' && (rawVal.startsWith('{') || rawVal.startsWith('['))
-          ? JSON.parse(rawVal)
-          : rawVal;
-        const extracted = getJsonValue(parsed, rule.jsonPath);
+        const payloadToParse = typeof rawVal === 'object' && rawVal?.rawPayload !== undefined
+          ? rawVal.rawPayload
+          : (typeof rawVal === 'object' && rawVal?.val !== undefined ? rawVal.val : rawVal);
+        const parsed = typeof payloadToParse === 'string' && (payloadToParse.startsWith('{') || payloadToParse.startsWith('['))
+          ? JSON.parse(payloadToParse)
+          : payloadToParse;
+        const extracted = getJsonValue(parsed, rule.jsonPath.trim());
         if (extracted !== undefined) rawVal = extracted;
       } catch {
         // ignore parse error
@@ -132,11 +149,25 @@ export function evaluatePanelDynamics(
       const state1Val = String(rule.state1Value !== undefined ? rule.state1Value : '0').trim();
       const state2Val = String(rule.state2Value !== undefined ? rule.state2Value : '1').trim();
 
-      const isMatchState1 = str === state1Val || (!isNaN(num) && num === parseFloat(state1Val));
-      const isMatchState2 = str === state2Val || (!isNaN(num) && num === parseFloat(state2Val));
+      const numMatch1 = !isNaN(num) && num === parseFloat(state1Val);
+      const strMatch1 = str === state1Val;
+      const boolMatch1 = (rawVal === true && (state1Val === '1' || state1Val.toLowerCase() === 'true')) ||
+                         (rawVal === false && (state1Val === '0' || state1Val.toLowerCase() === 'false'));
+      const isMatchState1 = numMatch1 || strMatch1 || boolMatch1;
+
+      const numMatch2 = !isNaN(num) && num === parseFloat(state2Val);
+      const strMatch2 = str === state2Val;
+      const boolMatch2 = (rawVal === true && (state2Val === '1' || state2Val.toLowerCase() === 'true')) ||
+                         (rawVal === false && (state2Val === '0' || state2Val.toLowerCase() === 'false'));
+      const isMatchState2 = numMatch2 || strMatch2 || boolMatch2;
 
       if (isMatchState1) {
-        if (rule.type === 'visibility_blink') {
+        if (rule.type === 'enable_disable') {
+          const act = rule.state1Interlock || 'disable';
+          result.interlock = {
+            isDisabled: act === 'disable'
+          };
+        } else if (rule.type === 'visibility_blink') {
           const vis = rule.state1Visibility || 'hide';
           result.visibility = {
             isHidden: vis === 'hide',
@@ -159,7 +190,12 @@ export function evaluatePanelDynamics(
           };
         }
       } else if (isMatchState2) {
-        if (rule.type === 'visibility_blink') {
+        if (rule.type === 'enable_disable') {
+          const act = rule.state2Interlock || 'enable';
+          result.interlock = {
+            isDisabled: act === 'disable'
+          };
+        } else if (rule.type === 'visibility_blink') {
           const vis = rule.state2Visibility || 'show';
           result.visibility = {
             isHidden: vis === 'hide',
@@ -242,7 +278,12 @@ export function evaluatePanelDynamics(
           showPercentage: rule.showPercentage !== false
         };
       } else if (isMatch) {
-        if (rule.type === 'color_shift') {
+        if (rule.type === 'enable_disable') {
+          const act = rule.actionOnMatchInterlock || 'disable';
+          result.interlock = {
+            isDisabled: act === 'disable'
+          };
+        } else if (rule.type === 'color_shift') {
           result.colorShift = {
             fill: rule.targetFill || rule.state1Fill || (rule as any).color || (rule as any).fill,
             stroke: rule.targetStroke || rule.state1Stroke || (rule as any).stroke
@@ -279,7 +320,12 @@ export function evaluatePanelDynamics(
           }
         }
       } else {
-        if (rule.type === 'visibility_blink' && rule.actionOnElse === 'hide') {
+        if (rule.type === 'enable_disable') {
+          const act = rule.actionOnElseInterlock || 'enable';
+          result.interlock = {
+            isDisabled: act === 'disable'
+          };
+        } else if (rule.type === 'visibility_blink' && rule.actionOnElse === 'hide') {
           result.visibility = {
             isHidden: true,
             isBlinking: false,
@@ -296,25 +342,25 @@ export function evaluatePanelDynamics(
 /**
  * Extracts the raw live value for Motion Dynamics from the latest values map.
  */
-export function getMotionTagValue(panel: Panel, latestValues: Record<string, any>): any {
+export function getMotionTagValue(panel: Panel, latestValues: Record<string, any>, allPanels?: Panel[]): any {
   if (!panel.enableMotionDynamics) return undefined;
 
   // Custom tag mode vs element's own primary tag
   if (panel.motionTagMode === 'custom') {
     if (panel.motionDataSourceMode === 'driver' && panel.motionDriverTagId) {
-      return resolveTagValueWithBit(panel.motionDriverTagId, latestValues);
+      return resolveTagValueWithBit(panel.motionDriverTagId, latestValues, allPanels);
     }
     if (panel.motionTopic) {
-      return resolveTagValueWithBit(panel.motionTopic, latestValues);
+      return resolveTagValueWithBit(panel.motionTopic, latestValues, allPanels);
     }
   }
 
   // Fallback to panel's own primary tag / topic
   if (panel.dataSourceMode === 'driver' && panel.driverTagId) {
-    return resolveTagValueWithBit(panel.driverTagId, latestValues);
+    return resolveTagValueWithBit(panel.driverTagId, latestValues, allPanels);
   }
   if (panel.topic) {
-    return resolveTagValueWithBit(panel.topic, latestValues);
+    return resolveTagValueWithBit(panel.topic, latestValues, allPanels);
   }
   return latestValues[panel.panelId]?.val ?? latestValues[panel.panelId];
 }
@@ -322,25 +368,25 @@ export function getMotionTagValue(panel: Panel, latestValues: Record<string, any
 /**
  * Extracts the raw live value for Rotation Dynamics from the latest values map.
  */
-export function getRotationTagValue(panel: Panel, latestValues: Record<string, any>): any {
+export function getRotationTagValue(panel: Panel, latestValues: Record<string, any>, allPanels?: Panel[]): any {
   if (!panel.enableRotationDynamics) return undefined;
 
   // Custom tag mode vs element's own primary tag
   if (panel.rotationTagMode === 'custom') {
     if (panel.rotationDataSourceMode === 'driver' && panel.rotationDriverTagId) {
-      return resolveTagValueWithBit(panel.rotationDriverTagId, latestValues);
+      return resolveTagValueWithBit(panel.rotationDriverTagId, latestValues, allPanels);
     }
     if (panel.rotationTopic) {
-      return resolveTagValueWithBit(panel.rotationTopic, latestValues);
+      return resolveTagValueWithBit(panel.rotationTopic, latestValues, allPanels);
     }
   }
 
   // Fallback to panel's own primary tag / topic
   if (panel.dataSourceMode === 'driver' && panel.driverTagId) {
-    return resolveTagValueWithBit(panel.driverTagId, latestValues);
+    return resolveTagValueWithBit(panel.driverTagId, latestValues, allPanels);
   }
   if (panel.topic) {
-    return resolveTagValueWithBit(panel.topic, latestValues);
+    return resolveTagValueWithBit(panel.topic, latestValues, allPanels);
   }
   return latestValues[panel.panelId]?.val ?? latestValues[panel.panelId];
 }

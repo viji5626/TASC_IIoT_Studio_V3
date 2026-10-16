@@ -282,13 +282,14 @@ export function getJsonValue(payload: any, path: string): any {
 }
 
 /**
- * Resolves a live tag value from latestValues map with bit extraction support.
- * If tagKey contains a bit suffix (e.g. "Word1.b3", "Tag:3") and is not found directly,
- * looks up the base tag in latestValues and extracts the designated bit.
+ * Resolves a live tag value from latestValues map with bit extraction and JSONPath support.
+ * If tagKey contains a bit suffix (e.g. "Word1.b3", "Tag:3", "$.d.VFD_START_STOP.b1") and is not found directly,
+ * looks up the base tag in latestValues, checks matching panels, or extracts directly from rawPayload JSON.
  */
 export function resolveTagValueWithBit(
   tagKey: string | undefined,
-  latestValues: Record<string, any>
+  latestValues: Record<string, any>,
+  allPanels?: Array<{ panelId: string; jsonPath?: string; topic?: string; driverTagId?: string; panelName?: string }>
 ): any {
   if (!tagKey || !latestValues) return undefined;
   const cleanKey = String(tagKey).trim();
@@ -311,7 +312,25 @@ export function resolveTagValueWithBit(
     }
   }
 
-  // 3. Bit extraction fallback if tagKey has .b<N>, :<N>, or .bit(<N>)
+  // 3. Match against other panels that bind to this tagKey / jsonPath
+  if (allPanels && Array.isArray(allPanels)) {
+    const matchingPanel = allPanels.find(p => 
+      (p.jsonPath && p.jsonPath.trim() === cleanKey) ||
+      (p.driverTagId && p.driverTagId.trim() === cleanKey) ||
+      (p.topic && p.topic.trim() === cleanKey) ||
+      (p.panelName && p.panelName.trim().toLowerCase() === cleanKey.toLowerCase())
+    );
+    if (matchingPanel && latestValues[matchingPanel.panelId] !== undefined) {
+      const pVal = latestValues[matchingPanel.panelId]?.val !== undefined 
+        ? latestValues[matchingPanel.panelId].val 
+        : latestValues[matchingPanel.panelId];
+      if (pVal !== undefined && pVal !== null) {
+        return pVal;
+      }
+    }
+  }
+
+  // 4. Bit extraction fallback if tagKey has .b<N>, :<N>, or .bit(<N>)
   const bitInfo = parseBitExtractionPath(cleanKey);
   if (bitInfo.bitIndex !== undefined && bitInfo.basePath) {
     const baseClean = bitInfo.basePath.trim();
@@ -333,8 +352,55 @@ export function resolveTagValueWithBit(
       }
     }
 
+    // Check allPanels for matching basePath if not found
+    if (baseRaw === undefined && allPanels && Array.isArray(allPanels)) {
+      const matchingPanel = allPanels.find(p => 
+        (p.jsonPath && p.jsonPath.trim() === baseClean) ||
+        (p.driverTagId && p.driverTagId.trim() === baseClean) ||
+        (p.topic && p.topic.trim() === baseClean)
+      );
+      if (matchingPanel && latestValues[matchingPanel.panelId] !== undefined) {
+        baseRaw = latestValues[matchingPanel.panelId]?.val !== undefined 
+          ? latestValues[matchingPanel.panelId].val 
+          : latestValues[matchingPanel.panelId];
+      }
+    }
+
     if (baseRaw !== undefined) {
       return extractBitValue(baseRaw, bitInfo.bitIndex);
+    }
+  }
+
+  // 5. Universal JSON / Bit extraction from rawPayload across latestValues
+  if (cleanKey.startsWith('$') || cleanKey.includes('.') || cleanKey.includes('/') || cleanKey.includes('[')) {
+    for (const entry of Object.values(latestValues)) {
+      if (entry && typeof entry === 'object' && entry.rawPayload) {
+        try {
+          const extracted = getJsonValue(entry.rawPayload, cleanKey);
+          if (extracted !== undefined && extracted !== null) {
+            return extracted;
+          }
+        } catch {
+          // continue
+        }
+      }
+    }
+  }
+
+  // 6. If bit extraction path against rawPayload (e.g. $.d.VFD_START_STOP.b1)
+  if (bitInfo.bitIndex !== undefined && bitInfo.basePath) {
+    for (const entry of Object.values(latestValues)) {
+      if (entry && typeof entry === 'object' && entry.rawPayload) {
+        try {
+          const baseExtracted = getJsonValue(entry.rawPayload, bitInfo.basePath);
+          if (baseExtracted !== undefined && baseExtracted !== null) {
+            const bit = extractBitValue(baseExtracted, bitInfo.bitIndex);
+            if (bit !== undefined) return bit;
+          }
+        } catch {
+          // continue
+        }
+      }
     }
   }
 

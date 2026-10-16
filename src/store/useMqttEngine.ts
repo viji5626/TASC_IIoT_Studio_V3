@@ -91,16 +91,31 @@ export function useMqttEngine({
 
         setLatestValues(prev => {
           const existing = prev[panel.panelId];
+          const newEntry = {
+            val: extracted,
+            rawPayload: payloadStr,
+            time: timeStr,
+            timestampMs: Date.now(),
+            quality: 'good',
+            sentTime: existing?.sentTime
+          };
+
+          const updates: Record<string, any> = {
+            [panel.panelId]: newEntry
+          };
+          if (panel.jsonPath && panel.jsonPath.trim()) {
+            updates[panel.jsonPath.trim()] = newEntry;
+          }
+          if (panel.driverTagId && panel.driverTagId.trim()) {
+            updates[panel.driverTagId.trim()] = newEntry;
+          }
+          if (panel.topic && panel.topic.trim()) {
+            updates[panel.topic.trim()] = newEntry;
+          }
+
           return {
             ...prev,
-            [panel.panelId]: {
-              val: extracted,
-              rawPayload: payloadStr,
-              time: timeStr,
-              timestampMs: Date.now(),
-              quality: 'good',
-              sentTime: existing?.sentTime
-            }
+            ...updates
           };
         });
 
@@ -504,14 +519,28 @@ export function useMqttEngine({
 
         setLatestValues(prev => {
           const existing = prev[p.panelId];
+          const nextVal = hasDedicatedReadTag ? (existing?.val ?? extractedVal) : extractedVal;
+          const newEntry = {
+            ...(existing || {}),
+            val: nextVal,
+            time: existing?.time || '',
+            sentTime: timeStr
+          };
+          const updates: Record<string, any> = {
+            [p.panelId]: newEntry
+          };
+          if (p.jsonPath && p.jsonPath.trim()) {
+            updates[p.jsonPath.trim()] = newEntry;
+          }
+          if (p.driverTagId && p.driverTagId.trim()) {
+            updates[p.driverTagId.trim()] = newEntry;
+          }
+          if (p.topic && p.topic.trim()) {
+            updates[p.topic.trim()] = newEntry;
+          }
           return {
             ...prev,
-            [p.panelId]: {
-              ...(existing || {}),
-              val: hasDedicatedReadTag ? (existing?.val ?? extractedVal) : extractedVal,
-              time: existing?.time || '',
-              sentTime: timeStr
-            }
+            ...updates
           };
         });
       }
