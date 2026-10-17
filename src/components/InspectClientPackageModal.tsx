@@ -113,7 +113,7 @@ export const InspectClientPackageModal: React.FC<InspectClientPackageModalProps>
             type="file" 
             ref={fileInputRef} 
             onChange={handleFileChange} 
-            accept=".tasc,.json" 
+            accept=".tasc,.json,application/json,application/octet-stream,text/plain,*/*" 
             className="hidden" 
           />
         </div>

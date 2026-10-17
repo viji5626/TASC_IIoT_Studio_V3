@@ -65,7 +65,7 @@ const ClientGateView: React.FC<ClientGateViewProps> = ({
       }
 
       if (verification.packageData) {
-        const clientName = verification.clientName || file.name.replace(/\.json$/i, '');
+        const clientName = verification.clientName || file.name.replace(/\.(json|tasc)$/i, '');
         const newAppState: AppState = {
           ...appState,
           connections: verification.packageData.connections,
@@ -228,7 +228,7 @@ const ClientGateView: React.FC<ClientGateViewProps> = ({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".json"
+                accept=".tasc,.json,application/json,application/octet-stream,text/plain,*/*"
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -242,10 +242,10 @@ const ClientGateView: React.FC<ClientGateViewProps> = ({
 
               <div>
                 <span className="text-sm font-bold text-white block">
-                  {isVerifying ? 'Verifying HMAC Signature...' : 'Click or Drag Client JSON Package Here'}
+                  {isVerifying ? 'Verifying HMAC Signature...' : 'Click or Drag Client Package Here (.tasc / .json)'}
                 </span>
                 <span className="text-[11px] text-slate-400 block mt-1">
-                  Supports signed <code className="text-sky-400 font-mono">client_package.json</code> files
+                  Supports signed <code className="text-sky-400 font-mono">.tasc</code> and <code className="text-sky-400 font-mono">.json</code> package files
                 </span>
               </div>
 

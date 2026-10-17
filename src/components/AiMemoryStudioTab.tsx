@@ -548,7 +548,7 @@ export const AiMemoryStudioTab: React.FC<Props> = ({ appState }) => {
                 <label className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors flex items-center space-x-1.5 cursor-pointer">
                   <i className="fas fa-upload text-xs" />
                   <span>Import Memory Backup</span>
-                  <input type="file" accept=".json" onChange={handleImportBackup} className="hidden" />
+                  <input type="file" accept=".json,application/json,text/plain,*/*" onChange={handleImportBackup} className="hidden" />
                 </label>
               </div>
             </div>

@@ -1,0 +1,8 @@
+/webfonts/*
+  Access-Control-Allow-Origin: *
+  Content-Type: font/woff2
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=31536000, immutable

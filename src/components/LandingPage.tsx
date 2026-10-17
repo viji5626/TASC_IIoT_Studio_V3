@@ -630,7 +630,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".tasc,.json"
+                accept=".tasc,.json,application/json,application/octet-stream,text/plain,*/*"
                 onChange={handleFileChange}
                 className="hidden"
               />

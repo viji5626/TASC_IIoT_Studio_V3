@@ -3891,7 +3891,19 @@ async function startServer() {
       : fs.existsSync(path.join(appDir, 'index.html'))
       ? appDir
       : path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.woff2')) {
+          res.setHeader('Content-Type', 'font/woff2');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        } else if (filePath.endsWith('.woff')) {
+          res.setHeader('Content-Type', 'font/woff');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      }
+    }));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });

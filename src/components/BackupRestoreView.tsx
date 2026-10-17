@@ -241,7 +241,7 @@ const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
             type="file" 
             ref={fileInputRef} 
             onChange={handleFileRestore} 
-            accept=".json" 
+            accept=".json,.tasc,application/json,application/octet-stream,text/plain,*/*" 
             className="hidden" 
           />
         </div>
