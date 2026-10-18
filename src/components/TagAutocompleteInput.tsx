@@ -64,9 +64,9 @@ export const TagAutocompleteInput: React.FC<TagAutocompleteInputProps> = ({
     if (!query) return allSuggestions.slice(0, 30); // Top 30 when empty
     return allSuggestions.filter(
       s => s.tagName.toLowerCase().includes(query) ||
-           s.parsingDefinition.toLowerCase().includes(query) ||
-           (s.category && s.category.toLowerCase().includes(query)) ||
-           (s.description && s.description.toLowerCase().includes(query))
+        s.parsingDefinition.toLowerCase().includes(query) ||
+        (s.category && s.category.toLowerCase().includes(query)) ||
+        (s.description && s.description.toLowerCase().includes(query))
     );
   }, [allSuggestions, value]);
 
@@ -93,9 +93,9 @@ export const TagAutocompleteInput: React.FC<TagAutocompleteInputProps> = ({
     if (q) {
       list = list.filter(
         t => t.tagName.toLowerCase().includes(q) ||
-             t.parsingDefinition.toLowerCase().includes(q) ||
-             (t.description && t.description.toLowerCase().includes(q)) ||
-             (t.category && t.category.toLowerCase().includes(q))
+          t.parsingDefinition.toLowerCase().includes(q) ||
+          (t.description && t.description.toLowerCase().includes(q)) ||
+          (t.category && t.category.toLowerCase().includes(q))
       );
     }
 
@@ -108,8 +108,8 @@ export const TagAutocompleteInput: React.FC<TagAutocompleteInputProps> = ({
     const summary = scanAppTags(appState);
     return summary.tags.find(
       t => (!tagType || t.tagType === tagType) &&
-           (t.parsingDefinition.trim().toLowerCase() === value.trim().toLowerCase() ||
-            t.tagName.trim().toLowerCase() === value.trim().toLowerCase())
+        (t.parsingDefinition.trim().toLowerCase() === value.trim().toLowerCase() ||
+          t.tagName.trim().toLowerCase() === value.trim().toLowerCase())
     ) || null;
   }, [appState, value, tagType]);
 
@@ -263,7 +263,7 @@ export const TagAutocompleteInput: React.FC<TagAutocompleteInputProps> = ({
       {/* ─── INLINE TYPEAHEAD DROPDOWN ─────────────────────────────────── */}
       {isOpen && (
         <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-[#161b22] border border-slate-700 rounded-xl shadow-2xl overflow-hidden max-h-64 overflow-y-auto divide-y divide-slate-800/80 animate-in fade-in duration-150">
-          
+
           {/* Header Bar */}
           <div className="px-3 py-1.5 bg-slate-900/90 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between sticky top-0 backdrop-blur z-10 border-b border-slate-800">
             <span className="flex items-center space-x-1.5">
@@ -303,13 +303,12 @@ export const TagAutocompleteInput: React.FC<TagAutocompleteInputProps> = ({
                       type="button"
                       onClick={() => handleSelectOption(item.parsingDefinition)}
                       onMouseEnter={() => setHighlightIndex(idx)}
-                      className={`w-full text-left px-3 py-2 flex items-center justify-between space-x-2 text-xs transition-colors cursor-pointer ${
-                        isCurrentSelected
-                          ? 'bg-emerald-500/20 text-emerald-200 font-bold border-l-2 border-emerald-400'
-                          : isHighlighted
+                      className={`w-full text-left px-3 py-2 flex items-center justify-between space-x-2 text-xs transition-colors cursor-pointer ${isCurrentSelected
+                        ? 'bg-emerald-500/20 text-emerald-200 font-bold border-l-2 border-emerald-400'
+                        : isHighlighted
                           ? 'bg-slate-800/90 text-white border-l-2 border-sky-400'
                           : 'hover:bg-slate-800/50 text-slate-200'
-                      }`}
+                        }`}
                     >
                       <div className="flex flex-col min-w-0 flex-grow pr-2">
                         <div className="flex items-center space-x-2">
@@ -354,11 +353,10 @@ export const TagAutocompleteInput: React.FC<TagAutocompleteInputProps> = ({
                     type="button"
                     onClick={() => handleSelectOption(value.trim())}
                     onMouseEnter={() => setHighlightIndex(filteredSuggestions.length)}
-                    className={`w-full text-left px-3 py-2 flex items-center justify-between text-xs transition-colors cursor-pointer border-t border-slate-800/80 ${
-                      highlightIndex === filteredSuggestions.length
-                        ? 'bg-emerald-500/20 text-emerald-200 font-bold border-l-2 border-emerald-400'
-                        : 'bg-slate-900/40 hover:bg-slate-800/60 text-emerald-300'
-                    }`}
+                    className={`w-full text-left px-3 py-2 flex items-center justify-between text-xs transition-colors cursor-pointer border-t border-slate-800/80 ${highlightIndex === filteredSuggestions.length
+                      ? 'bg-emerald-500/20 text-emerald-200 font-bold border-l-2 border-emerald-400'
+                      : 'bg-slate-900/40 hover:bg-slate-800/60 text-emerald-300'
+                      }`}
                   >
                     <div className="flex items-center space-x-2 truncate">
                       <i className="fas fa-plus-circle text-emerald-400 text-xs shrink-0"></i>
@@ -379,7 +377,7 @@ export const TagAutocompleteInput: React.FC<TagAutocompleteInputProps> = ({
       {isModalBrowserOpen && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
           <div className="bg-slate-900 border border-slate-700 w-full max-w-4xl max-h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden text-slate-200">
-            
+
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -437,36 +435,32 @@ export const TagAutocompleteInput: React.FC<TagAutocompleteInputProps> = ({
                   <button
                     type="button"
                     onClick={() => setSelectedTypeFilter('all')}
-                    className={`px-3 py-1 text-xs font-bold rounded-lg cursor-pointer transition-all ${
-                      selectedTypeFilter === 'all' ? 'bg-emerald-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
-                    }`}
+                    className={`px-3 py-1 text-xs font-bold rounded-lg cursor-pointer transition-all ${selectedTypeFilter === 'all' ? 'bg-emerald-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+                      }`}
                   >
                     All ({allSuggestions.length})
                   </button>
                   <button
                     type="button"
                     onClick={() => setSelectedTypeFilter('driver')}
-                    className={`px-3 py-1 text-xs font-bold rounded-lg cursor-pointer transition-all ${
-                      selectedTypeFilter === 'driver' ? 'bg-purple-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
-                    }`}
+                    className={`px-3 py-1 text-xs font-bold rounded-lg cursor-pointer transition-all ${selectedTypeFilter === 'driver' ? 'bg-purple-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+                      }`}
                   >
                     <i className="fas fa-microchip mr-1"></i>Driver Tags
                   </button>
                   <button
                     type="button"
                     onClick={() => setSelectedTypeFilter('read')}
-                    className={`px-3 py-1 text-xs font-bold rounded-lg cursor-pointer transition-all ${
-                      selectedTypeFilter === 'read' ? 'bg-sky-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
-                    }`}
+                    className={`px-3 py-1 text-xs font-bold rounded-lg cursor-pointer transition-all ${selectedTypeFilter === 'read' ? 'bg-sky-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+                      }`}
                   >
                     Read
                   </button>
                   <button
                     type="button"
                     onClick={() => setSelectedTypeFilter('write')}
-                    className={`px-3 py-1 text-xs font-bold rounded-lg cursor-pointer transition-all ${
-                      selectedTypeFilter === 'write' ? 'bg-indigo-500 text-white shadow-sm' : 'text-slate-400 hover:text-white'
-                    }`}
+                    className={`px-3 py-1 text-xs font-bold rounded-lg cursor-pointer transition-all ${selectedTypeFilter === 'write' ? 'bg-indigo-500 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                      }`}
                   >
                     Write
                   </button>
@@ -480,11 +474,10 @@ export const TagAutocompleteInput: React.FC<TagAutocompleteInputProps> = ({
                   <button
                     type="button"
                     onClick={() => setSelectedCategoryFilter('all')}
-                    className={`px-2.5 py-0.5 rounded-full font-medium transition-all shrink-0 cursor-pointer ${
-                      selectedCategoryFilter === 'all'
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold'
-                        : 'bg-slate-800 text-slate-400 hover:text-white'
-                    }`}
+                    className={`px-2.5 py-0.5 rounded-full font-medium transition-all shrink-0 cursor-pointer ${selectedCategoryFilter === 'all'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold'
+                      : 'bg-slate-800 text-slate-400 hover:text-white'
+                      }`}
                   >
                     All Categories
                   </button>
@@ -493,11 +486,10 @@ export const TagAutocompleteInput: React.FC<TagAutocompleteInputProps> = ({
                       key={cat}
                       type="button"
                       onClick={() => setSelectedCategoryFilter(cat)}
-                      className={`px-2.5 py-0.5 rounded-full font-medium transition-all shrink-0 cursor-pointer ${
-                        selectedCategoryFilter === cat
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold'
-                          : 'bg-slate-800 text-slate-400 hover:text-white'
-                      }`}
+                      className={`px-2.5 py-0.5 rounded-full font-medium transition-all shrink-0 cursor-pointer ${selectedCategoryFilter === cat
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold'
+                        : 'bg-slate-800 text-slate-400 hover:text-white'
+                        }`}
                     >
                       {cat}
                     </button>
@@ -522,23 +514,20 @@ export const TagAutocompleteInput: React.FC<TagAutocompleteInputProps> = ({
                     <div
                       key={tag.tagId}
                       onClick={() => handleSelectOption(tag.parsingDefinition)}
-                      className={`py-3 px-4 rounded-xl flex items-center justify-between transition-all cursor-pointer group ${
-                        isSelected
-                          ? 'bg-emerald-500/15 border border-emerald-500/30'
-                          : 'hover:bg-slate-800/70 border border-transparent'
-                      }`}
+                      className={`py-3 px-4 rounded-xl flex items-center justify-between transition-all cursor-pointer group ${isSelected
+                        ? 'bg-emerald-500/15 border border-emerald-500/30'
+                        : 'hover:bg-slate-800/70 border border-transparent'
+                        }`}
                     >
                       <div className="flex items-start space-x-3 min-w-0 pr-4">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
-                          tag.sourceType === 'imported'
-                            ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
-                            : tag.tagType === 'write'
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${tag.sourceType === 'imported'
+                          ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                          : tag.tagType === 'write'
                             ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
                             : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                        }`}>
-                          <i className={`fas ${
-                            tag.sourceType === 'imported' ? 'fa-microchip' : tag.tagType === 'write' ? 'fa-code-branch' : 'fa-tag'
-                          } text-xs`}></i>
+                          }`}>
+                          <i className={`fas ${tag.sourceType === 'imported' ? 'fa-microchip' : tag.tagType === 'write' ? 'fa-code-branch' : 'fa-tag'
+                            } text-xs`}></i>
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center space-x-2">
@@ -548,9 +537,8 @@ export const TagAutocompleteInput: React.FC<TagAutocompleteInputProps> = ({
                             <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">
                               {tag.category || 'General'}
                             </span>
-                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${
-                              tag.tagType === 'write' ? 'bg-indigo-500/20 text-indigo-300' : 'bg-emerald-500/20 text-emerald-300'
-                            }`}>
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${tag.tagType === 'write' ? 'bg-indigo-500/20 text-indigo-300' : 'bg-emerald-500/20 text-emerald-300'
+                              }`}>
                               {tag.tagType.toUpperCase()}
                             </span>
                           </div>
@@ -572,11 +560,10 @@ export const TagAutocompleteInput: React.FC<TagAutocompleteInputProps> = ({
                           e.stopPropagation();
                           handleSelectOption(tag.parsingDefinition);
                         }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
-                          isSelected
-                            ? 'bg-emerald-500 text-slate-950 shadow-md'
-                            : 'bg-slate-800 group-hover:bg-emerald-600 text-slate-300 group-hover:text-white'
-                        }`}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${isSelected
+                          ? 'bg-emerald-500 text-slate-950 shadow-md'
+                          : 'bg-slate-800 group-hover:bg-emerald-600 text-slate-300 group-hover:text-white'
+                          }`}
                       >
                         {isSelected ? (
                           <span><i className="fas fa-check mr-1.5"></i>Selected</span>

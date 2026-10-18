@@ -5766,6 +5766,12 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         const align = panel.textAlign || 'left';
                         const alignClass = align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left';
 
+                        const isHorizontallyLong = pos.w >= 260;
+                        const isSlim = pos.h < 65;
+                        // Auto-adjust telemetry badges: stack Tx just below Rx when width is constrained and element is not slim,
+                        // so that the element title does not wrap excessively and push out of bounds.
+                        const shouldStackBadges = showTx && showRx && !isHorizontallyLong && !isSlim;
+
                         let inputPaddingRight = 10;
                         if (panel.unit && showLimitBadge) {
                           const badgeWidth = limitsStr.length * 5.2 + 10;
@@ -5787,11 +5793,11 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                             }}
                           >
                             {/* Header: Title on Left, Rx/Tx on Right */}
-                            <div className={`flex ${isWrap ? 'items-start' : 'items-center'} justify-between mb-0.5 gap-1.5 min-w-0 w-full`}>
+                            <div className={`flex ${isWrap || shouldStackBadges ? 'items-start' : 'items-center'} justify-between mb-0.5 gap-1.5 min-w-0 w-full`}>
                               <div className="flex-1 min-w-0 pr-1 flex items-center space-x-1.5">
                                 <span
                                   className={`font-bold uppercase tracking-wider block ${alignClass} ${isWrap
-                                    ? 'break-words whitespace-normal leading-tight min-w-0 flex-1'
+                                    ? 'break-words whitespace-normal leading-tight line-clamp-2 min-w-0 flex-1'
                                     : 'truncate'
                                     }`}
                                   style={{
@@ -5826,26 +5832,58 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                 })()}
                               </div>
 
-                              {/* Rx & Tx Badges moved UP to header row */}
+                              {/* Rx & Tx Badges in header row with intelligent auto-adjust */}
                               {(showTx || showRx) && pos.w >= 85 && (
-                                <div className="flex items-center gap-1 shrink-0 select-none">
-                                  {showTx && (
-                                    <span
-                                      className="text-[7.5px] font-mono text-amber-300 font-semibold flex items-center space-x-1 bg-slate-950/90 px-1.5 py-0.5 rounded border border-amber-500/40 shadow-sm backdrop-blur-md whitespace-nowrap"
-                                      title={`Last transmitted: ${lastTxTime}`}
-                                    >
-                                      <i className="fas fa-arrow-up text-[6px] text-amber-400"></i>
-                                      <span>Tx {format24HourTime(lastTxTime)}</span>
-                                    </span>
-                                  )}
-                                  {showRx && (
-                                    <span
-                                      className="text-[7.5px] font-mono text-emerald-300 font-semibold flex items-center space-x-1 bg-slate-950/90 px-1.5 py-0.5 rounded border border-emerald-500/40 shadow-sm backdrop-blur-md whitespace-nowrap"
-                                      title={`Last received: ${lastRxTime}`}
-                                    >
-                                      <i className="fas fa-arrow-down text-[6px] text-emerald-400"></i>
-                                      <span>Rx {format24HourTime(lastRxTime)}</span>
-                                    </span>
+                                <div
+                                  className={`shrink-0 select-none ${
+                                    shouldStackBadges
+                                      ? 'flex flex-col items-end gap-0.5'
+                                      : 'flex items-center gap-1'
+                                  }`}
+                                >
+                                  {shouldStackBadges ? (
+                                    <>
+                                      {/* Rx on top, Tx directly below Rx */}
+                                      {showRx && (
+                                        <span
+                                          className="text-[7.5px] font-mono text-emerald-300 font-semibold flex items-center space-x-1 bg-slate-950/90 px-1.5 py-0.5 rounded border border-emerald-500/40 shadow-sm backdrop-blur-md whitespace-nowrap"
+                                          title={`Last received: ${lastRxTime}`}
+                                        >
+                                          <i className="fas fa-arrow-down text-[6px] text-emerald-400"></i>
+                                          <span>Rx {format24HourTime(lastRxTime)}</span>
+                                        </span>
+                                      )}
+                                      {showTx && (
+                                        <span
+                                          className="text-[7.5px] font-mono text-amber-300 font-semibold flex items-center space-x-1 bg-slate-950/90 px-1.5 py-0.5 rounded border border-amber-500/40 shadow-sm backdrop-blur-md whitespace-nowrap"
+                                          title={`Last transmitted: ${lastTxTime}`}
+                                        >
+                                          <i className="fas fa-arrow-up text-[6px] text-amber-400"></i>
+                                          <span>Tx {format24HourTime(lastTxTime)}</span>
+                                        </span>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <>
+                                      {showTx && (
+                                        <span
+                                          className="text-[7.5px] font-mono text-amber-300 font-semibold flex items-center space-x-1 bg-slate-950/90 px-1.5 py-0.5 rounded border border-amber-500/40 shadow-sm backdrop-blur-md whitespace-nowrap"
+                                          title={`Last transmitted: ${lastTxTime}`}
+                                        >
+                                          <i className="fas fa-arrow-up text-[6px] text-amber-400"></i>
+                                          <span>Tx {format24HourTime(lastTxTime)}</span>
+                                        </span>
+                                      )}
+                                      {showRx && (
+                                        <span
+                                          className="text-[7.5px] font-mono text-emerald-300 font-semibold flex items-center space-x-1 bg-slate-950/90 px-1.5 py-0.5 rounded border border-emerald-500/40 shadow-sm backdrop-blur-md whitespace-nowrap"
+                                          title={`Last received: ${lastRxTime}`}
+                                        >
+                                          <i className="fas fa-arrow-down text-[6px] text-emerald-400"></i>
+                                          <span>Rx {format24HourTime(lastRxTime)}</span>
+                                        </span>
+                                      )}
+                                    </>
                                   )}
                                 </div>
                               )}
