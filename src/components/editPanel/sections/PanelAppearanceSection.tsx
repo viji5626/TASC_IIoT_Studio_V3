@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AppState, PanelType } from '../../../types';
 import TagAutocompleteInput from '../../TagAutocompleteInput';
+import { SmartIcon, parseSpeedToSeconds } from '../../../utils/iconAnimator';
 
 interface PanelAppearanceSectionProps {
   formData: any;
@@ -154,6 +155,127 @@ export const PanelAppearanceSection: React.FC<PanelAppearanceSectionProps> = ({
                   {size}px
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── LED INDICATOR: DEDICATED INDICATION ICON ANIMATION & SPEED BAR ─── */}
+      {isActuallyLED && (
+        <div className="bg-[#0f172a] p-3.5 rounded-xl border border-sky-500/30 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-sky-400 font-bold uppercase tracking-wider flex items-center space-x-2">
+              <i className="fas fa-rotate text-sky-400"></i>
+              <span>Icon Animation & Rotation Speed</span>
+            </span>
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-mono font-bold text-sky-300 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/30">
+                {parseSpeedToSeconds(formData.animSpeedOn ?? formData.iconAnimSpeed ?? 1.5).toFixed(1)}s / cycle
+              </span>
+              <div 
+                className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center text-emerald-400 overflow-hidden shrink-0 shadow-inner"
+                title="Live Rotating Icon Preview"
+              >
+                <SmartIcon 
+                  icon={formData.iconOn || 'fa-fan'} 
+                  isAnimate={formData.rotateOn !== false} 
+                  speed={formData.animSpeedOn ?? formData.iconAnimSpeed ?? 1.5} 
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Rotation Toggle Options */}
+          <div className="flex items-center space-x-4 pt-0.5 text-xs">
+            <label className="flex items-center space-x-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={formData.rotateOn !== false}
+                onChange={(e) => setFormData((prev: any) => ({ ...prev, rotateOn: e.target.checked }))}
+                className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-sky-500 accent-sky-500 cursor-pointer"
+              />
+              <span className="text-slate-200 font-medium">Rotate on RUN (ON)</span>
+            </label>
+
+            <label className="flex items-center space-x-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={!!formData.rotateOff}
+                onChange={(e) => setFormData((prev: any) => ({ ...prev, rotateOff: e.target.checked }))}
+                className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-sky-500 accent-sky-500 cursor-pointer"
+              />
+              <span className="text-slate-400 font-medium">Rotate on STOP (OFF)</span>
+            </label>
+          </div>
+
+          {/* Interactive Speed Range Slider */}
+          <div className="space-y-1.5 pt-1">
+            <div className="flex items-center justify-between text-[11px] text-slate-400">
+              <span className="flex items-center space-x-1">
+                <i className="fas fa-gauge-high text-sky-400 text-[10px]"></i>
+                <span>Speed Duration Bar (Faster ← → Slower):</span>
+              </span>
+              <span className="font-mono text-xs text-sky-300 font-bold">
+                {parseSpeedToSeconds(formData.animSpeedOn ?? formData.iconAnimSpeed ?? 1.5).toFixed(1)}s
+              </span>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <span className="text-[10px] font-mono text-slate-500 shrink-0">0.2s</span>
+              <input
+                type="range"
+                min="0.2"
+                max="6.0"
+                step="0.1"
+                value={parseSpeedToSeconds(formData.animSpeedOn ?? formData.iconAnimSpeed ?? 1.5)}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value) || 1.5;
+                  setFormData((prev: any) => ({
+                    ...prev,
+                    animSpeedOn: val,
+                    iconAnimSpeed: val,
+                    ...(prev.rotateOff ? { animSpeedOff: val } : {})
+                  }));
+                }}
+                className="w-full accent-sky-400 hover:accent-sky-300 cursor-pointer h-2 bg-slate-800 rounded-lg appearance-none"
+              />
+              <span className="text-[10px] font-mono text-slate-500 shrink-0">6.0s</span>
+            </div>
+
+            {/* Quick Speed Preset Buttons */}
+            <div className="flex items-center space-x-1.5 flex-wrap gap-y-1 pt-1">
+              {[
+                { label: '0.4s Fast', sec: 0.4 },
+                { label: '0.8s Brisk', sec: 0.8 },
+                { label: '1.2s Normal', sec: 1.2 },
+                { label: '2.0s Moderate', sec: 2.0 },
+                { label: '3.5s Slow', sec: 3.5 },
+                { label: '5.0s Crawl', sec: 5.0 }
+              ].map(preset => {
+                const currentSec = parseSpeedToSeconds(formData.animSpeedOn ?? formData.iconAnimSpeed ?? 1.5);
+                const isActive = Math.abs(currentSec - preset.sec) < 0.05;
+                return (
+                  <button
+                    key={preset.sec}
+                    type="button"
+                    onClick={() => {
+                      setFormData((prev: any) => ({
+                        ...prev,
+                        animSpeedOn: preset.sec,
+                        iconAnimSpeed: preset.sec,
+                        ...(prev.rotateOff ? { animSpeedOff: preset.sec } : {})
+                      }));
+                    }}
+                    className={`px-2 py-0.5 rounded text-[11px] font-mono transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-sky-500/30 text-sky-200 border border-sky-400 font-bold shadow'
+                        : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-slate-200 hover:border-slate-700'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>

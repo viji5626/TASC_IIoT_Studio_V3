@@ -1,5 +1,6 @@
 import React from 'react';
 import { PanelType } from '../../../types';
+import { SegmentThresholdsEditor } from './SegmentThresholdsEditor';
 
 interface PanelSymbolSectionProps {
   formData: any;
@@ -7,7 +8,7 @@ interface PanelSymbolSectionProps {
   handleChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void;
   handleLowThresholdChange: (newLow: number) => void;
   handleHighThresholdChange: (newHigh: number) => void;
-  setPickingColorFor: (target: 'first' | 'second' | 'third' | null) => void;
+  setPickingColorFor: (target: string | null) => void;
 }
 
 export const PanelSymbolSection: React.FC<PanelSymbolSectionProps> = ({
@@ -113,139 +114,13 @@ export const PanelSymbolSection: React.FC<PanelSymbolSectionProps> = ({
       {/* Analog Level & Alarm Config with Interlocked Limits */}
       {formData.symbolAnimType === 'analog_level' && (
         <div className="space-y-4 pt-3 border-t border-slate-800">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[11px] text-sky-400 font-bold block mb-1">Payload Min Limit (0%)</label>
-              <input
-                type="number"
-                name="payloadMin"
-                value={formData.payloadMin ?? 0}
-                onChange={handleChange}
-                className="w-full bg-slate-950 border border-slate-800 text-white font-mono text-xs px-2.5 py-1.5 rounded-lg outline-none focus:border-sky-500"
-              />
-            </div>
-            <div>
-              <label className="text-[11px] text-sky-400 font-bold block mb-1">Payload Max Limit (100%)</label>
-              <input
-                type="number"
-                name="payloadMax"
-                value={formData.payloadMax ?? 100}
-                onChange={handleChange}
-                className="w-full bg-slate-950 border border-slate-800 text-white font-mono text-xs px-2.5 py-1.5 rounded-lg outline-none focus:border-sky-500"
-              />
-            </div>
-          </div>
-
-          {/* Symbol Segment Thresholds & Colors Card */}
-          <div className="space-y-4 bg-black/40 p-4 rounded-xl border border-white/10">
-            <div className="flex items-center justify-between">
-              <label className="text-xs text-amber-400 font-bold uppercase tracking-wider flex items-center space-x-1.5">
-                <i className="fas fa-palette text-xs"></i>
-                <span>Symbol Segment Thresholds & Colors</span>
-              </label>
-              <span className="text-[10px] text-gray-400 font-mono">Interlocked Limits</span>
-            </div>
-
-            {/* Color Pickers & Zone Status Cards */}
-            <div className="grid grid-cols-3 gap-3">
-              <div 
-                onClick={() => setPickingColorFor('first')} 
-                className="flex flex-col items-center p-2.5 rounded-lg bg-gray-900/80 border border-gray-800 cursor-pointer hover:border-amber-500/50 transition-all"
-              >
-                <div className="w-7 h-7 rounded-full border-2 border-white/20 shadow-md mb-1" style={{ backgroundColor: formData.firstColor || '#10b981' }}></div>
-                <span className="text-xs font-bold text-gray-200">Low Zone</span>
-                <span className="text-[10px] text-gray-400 font-mono">{formData.payloadMin ?? 0} → {formData.lowThreshold ?? 33}</span>
-              </div>
-
-              <div 
-                onClick={() => setPickingColorFor('second')} 
-                className="flex flex-col items-center p-2.5 rounded-lg bg-gray-900/80 border border-gray-800 cursor-pointer hover:border-amber-500/50 transition-all"
-              >
-                <div className="w-7 h-7 rounded-full border-2 border-white/20 shadow-md mb-1" style={{ backgroundColor: formData.secondColor || '#f59e0b' }}></div>
-                <span className="text-xs font-bold text-gray-200">Mid Zone</span>
-                <span className="text-[10px] text-gray-400 font-mono">{formData.lowThreshold ?? 33} → {formData.highThreshold ?? 66}</span>
-              </div>
-
-              <div 
-                onClick={() => setPickingColorFor('third')} 
-                className="flex flex-col items-center p-2.5 rounded-lg bg-gray-900/80 border border-gray-800 cursor-pointer hover:border-amber-500/50 transition-all"
-              >
-                <div className="w-7 h-7 rounded-full border-2 border-white/20 shadow-md mb-1" style={{ backgroundColor: formData.thirdColor || '#ef4444' }}></div>
-                <span className="text-xs font-bold text-gray-200">High Zone</span>
-                <span className="text-[10px] text-gray-400 font-mono">{formData.highThreshold ?? 66} → {formData.payloadMax ?? 100}</span>
-              </div>
-            </div>
-
-            {/* Visual Color Bar Preview */}
-            <div className="w-full h-3 rounded-full overflow-hidden flex bg-gray-950 border border-gray-800">
-              <div 
-                style={{ 
-                  width: `${Math.max(2, Math.min(100, (((formData.lowThreshold - (formData.payloadMin ?? 0)) / ((formData.payloadMax ?? 100) - (formData.payloadMin ?? 0) || 1)) * 100)))}%`, 
-                  backgroundColor: formData.firstColor || '#10b981' 
-                }} 
-                title="Low Zone"
-              ></div>
-              <div 
-                style={{ 
-                  width: `${Math.max(2, Math.min(100, (((formData.highThreshold - formData.lowThreshold) / ((formData.payloadMax ?? 100) - (formData.payloadMin ?? 0) || 1)) * 100)))}%`, 
-                  backgroundColor: formData.secondColor || '#f59e0b' 
-                }} 
-                title="Mid Zone"
-              ></div>
-              <div 
-                style={{ flex: 1, backgroundColor: formData.thirdColor || '#ef4444' }} 
-                title="High Zone"
-              ></div>
-            </div>
-
-            {/* Interlocked Sliders & Inputs */}
-            <div className="space-y-3 pt-2">
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-300 font-semibold flex items-center space-x-1">
-                    <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: formData.firstColor || '#10b981' }}></span>
-                    <span>Low Cut-off (Low → Mid)</span>
-                  </span>
-                  <input 
-                    type="number" 
-                    value={formData.lowThreshold ?? 33}
-                    onChange={(e) => handleLowThresholdChange(Number(e.target.value))}
-                    className="w-16 bg-gray-950 text-white font-mono text-xs px-2 py-0.5 rounded border border-gray-700 text-right outline-none focus:border-amber-500"
-                  />
-                </div>
-                <input 
-                  type="range"
-                  min={formData.payloadMin ?? 0}
-                  max={formData.payloadMax ?? 100}
-                  value={formData.lowThreshold ?? 33}
-                  onChange={(e) => handleLowThresholdChange(Number(e.target.value))}
-                  className="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-300 font-semibold flex items-center space-x-1">
-                    <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: formData.secondColor || '#f59e0b' }}></span>
-                    <span>High Cut-off (Mid → High)</span>
-                  </span>
-                  <input 
-                    type="number" 
-                    value={formData.highThreshold ?? 66}
-                    onChange={(e) => handleHighThresholdChange(Number(e.target.value))}
-                    className="w-16 bg-gray-950 text-white font-mono text-xs px-2 py-0.5 rounded border border-gray-700 text-right outline-none focus:border-amber-500"
-                  />
-                </div>
-                <input 
-                  type="range"
-                  min={formData.payloadMin ?? 0}
-                  max={formData.payloadMax ?? 100}
-                  value={formData.highThreshold ?? 66}
-                  onChange={(e) => handleHighThresholdChange(Number(e.target.value))}
-                  className="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
-                />
-              </div>
-            </div>
+          <SegmentThresholdsEditor
+            formData={formData}
+            setFormData={setFormData}
+            setPickingColorFor={setPickingColorFor}
+            title="Symbol Segment Thresholds & Colors"
+            allowMinMax={true}
+          />
 
             {/* Inbuilt Alarm Triggers */}
             <div className="space-y-3 bg-[#161616] p-4 rounded-xl border border-amber-500/30 mt-4">
@@ -353,8 +228,7 @@ export const PanelSymbolSection: React.FC<PanelSymbolSectionProps> = ({
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
-  );
+        )}
+      </div>
+    );
 };

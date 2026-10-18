@@ -82,8 +82,17 @@ export interface DynamicBehaviorRule {
   fillMax?: number;
   showPercentage?: boolean;
 
-  // Motion Translation
+  // Motion Translation & Path Dynamics
   motionPathPoints?: Array<{ x: number; y: number }>;
+  motionSpeed?: number;           // Motion transition duration in seconds
+  motionDurationSeconds?: number; // Motion duration in seconds
+  state1MotionProgress?: number;  // State 1 path progress (0% - 100%)
+  state2MotionProgress?: number;  // State 2 path progress (0% - 100%)
+  motionOrientToPath?: boolean;   // Turn/orient element along heading of path
+  motionStartX?: number;
+  motionStartY?: number;
+  motionEndX?: number;
+  motionEndY?: number;
 }
 
 export interface SvgSubPartConfig {

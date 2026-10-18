@@ -128,10 +128,11 @@ export interface Panel {
   iconColorOff?: string;
   flashOn?: boolean;
   rotateOn?: boolean;
-  animSpeedOn?: 'slow' | 'medium' | 'fast';
+  animSpeedOn?: 'slow' | 'medium' | 'fast' | number | string;
   flashOff?: boolean;
   rotateOff?: boolean;
-  animSpeedOff?: 'slow' | 'medium' | 'fast';
+  animSpeedOff?: 'slow' | 'medium' | 'fast' | number | string;
+  iconAnimSpeed?: number | string;
   fontSize?: number | string;
   inputFontSize?: number | string;
   inputAreaHeight?: number | string;
@@ -152,6 +153,9 @@ export interface Panel {
   rowSpan?: number;
   lowThreshold?: number;
   highThreshold?: number;
+  colorZones?: Array<{ color: string; label?: string }>;
+  thresholds?: number[];
+  showActiveZoneName?: boolean;
   enableLowAlarm?: boolean;
   enableMidAlarm?: boolean;
   enableHighAlarm?: boolean;
@@ -299,6 +303,8 @@ export interface Panel {
   motionEndY?: number;
   motionPathPoints?: { x: number; y: number }[]; // Multi-node bending motion path points
   motionOrientToPath?: boolean; // Turn / orient object along path heading direction
+  motionSpeed?: number; // Motion duration / speed in seconds
+  motionDurationSeconds?: number; // Motion duration in seconds
 
   // --- Tag-Based Rotation Dynamics ---
   enableRotationDynamics?: boolean;

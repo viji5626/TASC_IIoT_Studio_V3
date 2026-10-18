@@ -1,5 +1,6 @@
 import { Panel, PanelType, ActiveAlarm } from '../types';
 import { isPanelTripped } from '../utils/tripHelper';
+import { getResolvedZones } from '../utils/gaugeThresholds';
 
 /**
  * Pure evaluation function for live alarms across all panels.
@@ -68,12 +69,9 @@ export function evaluateAlarms(
       }
     }
 
-    const min = panel.payloadMin ?? 0;
-    const max = panel.payloadMax ?? 100;
-    const range = max - min || 1;
-
-    const lowLimit = panel.lowThreshold !== undefined ? panel.lowThreshold : (min + range * 0.25);
-    const highLimit = panel.highThreshold !== undefined ? panel.highThreshold : (min + range * 0.75);
+    const resolved = getResolvedZones(panel);
+    const lowLimit = resolved.thresholds[0];
+    const highLimit = resolved.thresholds[resolved.thresholds.length - 1];
 
     let matchedZone: 'LOW' | 'MID' | 'HIGH' | null = null;
     let alarmMsg = '';
@@ -83,17 +81,17 @@ export function evaluateAlarms(
     if (numVal <= lowLimit && panel.enableLowAlarm) {
       matchedZone = 'LOW';
       alarmMsg = panel.lowAlarmMsg || 'Low Zone Warning';
-      alarmColor = panel.firstColor || '#f59e0b';
+      alarmColor = resolved.zones[0]?.color || panel.firstColor || '#f59e0b';
       thresholdVal = lowLimit;
     } else if (numVal > lowLimit && numVal <= highLimit && panel.enableMidAlarm) {
       matchedZone = 'MID';
       alarmMsg = panel.midAlarmMsg || 'Mid Zone Warning';
-      alarmColor = panel.secondColor || '#10b981';
+      alarmColor = resolved.zones[1]?.color || panel.secondColor || '#10b981';
       thresholdVal = highLimit;
     } else if (numVal > highLimit && panel.enableHighAlarm) {
       matchedZone = 'HIGH';
       alarmMsg = panel.highAlarmMsg || 'High Critical Alarm';
-      alarmColor = panel.thirdColor || '#f43f5e';
+      alarmColor = resolved.zones[resolved.zones.length - 1]?.color || panel.thirdColor || '#f43f5e';
       thresholdVal = highLimit;
     }
 

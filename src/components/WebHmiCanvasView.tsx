@@ -10,6 +10,7 @@ import { getSampleProject } from '../utils/sampleProjectPreset';
 import { getSmartIconAnimationClass, SmartIcon } from '../utils/iconAnimator';
 import { isPanelTripped } from '../utils/tripHelper';
 import { getPanelTelemetryStatus } from '../utils/staleHelper';
+import { getResolvedZones, getZoneForValue } from '../utils/gaugeThresholds';
 import { AlarmHistorianWidget } from './AlarmHistorianWidget';
 import { TASCGrid } from './sql';
 import { EditionManager } from '../utils/EditionManager';
@@ -1823,12 +1824,15 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
         flashOff: targetPanel.flashOff ?? false,
         animSpeedOn: targetPanel.animSpeedOn || 'medium',
         animSpeedOff: targetPanel.animSpeedOff || 'medium',
+        iconAnimSpeed: targetPanel.iconAnimSpeed,
       } : {}),
 
       // 5. Palettes & Multi-Color Accents (Gauges, Lines, Indicators, Lamps)
       firstColor: targetPanel.firstColor,
       secondColor: targetPanel.secondColor,
       thirdColor: targetPanel.thirdColor,
+      colorZones: targetPanel.colorZones,
+      thresholds: targetPanel.thresholds,
 
       // 6. Action Button / Switch Styles
       buttonStyle: targetPanel.buttonStyle,
@@ -1907,11 +1911,14 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
       if (copiedProperties.flashOff !== undefined) updated.flashOff = copiedProperties.flashOff;
       if (copiedProperties.animSpeedOn !== undefined) updated.animSpeedOn = copiedProperties.animSpeedOn;
       if (copiedProperties.animSpeedOff !== undefined) updated.animSpeedOff = copiedProperties.animSpeedOff;
+      if (copiedProperties.iconAnimSpeed !== undefined) updated.iconAnimSpeed = copiedProperties.iconAnimSpeed;
 
       // 5. Palettes & Multi-Color Accents
       if (copiedProperties.firstColor !== undefined) updated.firstColor = copiedProperties.firstColor;
       if (copiedProperties.secondColor !== undefined) updated.secondColor = copiedProperties.secondColor;
       if (copiedProperties.thirdColor !== undefined) updated.thirdColor = copiedProperties.thirdColor;
+      if (copiedProperties.colorZones !== undefined) updated.colorZones = deepClone(copiedProperties.colorZones);
+      if (copiedProperties.thresholds !== undefined) updated.thresholds = deepClone(copiedProperties.thresholds);
 
       // 6. Action Button / Switch Styles
       if (copiedProperties.buttonStyle !== undefined) updated.buttonStyle = copiedProperties.buttonStyle;
@@ -4950,11 +4957,28 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                 if (dynEval.rotation?.angle && !effectiveEditMode) {
                   combinedTransform = combinedTransform ? `${combinedTransform} rotate(${dynEval.rotation.angle}deg)` : `rotate(${dynEval.rotation.angle}deg)`;
                 }
+                if (dynEval.motion?.isMoving && !effectiveEditMode) {
+                  const motionTranslate = `translate3d(${dynEval.motion.dx}px, ${dynEval.motion.dy}px, 0px)`;
+                  const motionRotate = dynEval.motion.orientToPath ? `rotate(${dynEval.motion.pathAngle}deg)` : '';
+                  const motionCombined = motionRotate ? `${motionTranslate} ${motionRotate}` : motionTranslate;
+                  combinedTransform = combinedTransform ? `${motionCombined} ${combinedTransform}` : motionCombined;
+                }
 
                 let combinedAnimation = dynTransform.animation;
                 if (dynEval.rotation?.isSpinning && !effectiveEditMode && !combinedAnimation) {
                   const animName = dynEval.rotation.spinDirection === 'ccw' ? 'hmi-spin-ccw' : 'hmi-spin-cw';
                   combinedAnimation = `${animName} ${dynEval.rotation.spinDuration}s linear infinite`;
+                }
+
+                let motionTransition: string | undefined = undefined;
+                if (!effectiveEditMode) {
+                  if (dynEval.motion?.isMoving) {
+                    const duration = dynEval.motion.durationSeconds || 2;
+                    motionTransition = `transform ${duration}s cubic-bezier(0.25, 1, 0.5, 1)`;
+                  } else if (dynTransform.isMoving) {
+                    const duration = panel.motionSpeed ?? panel.motionDurationSeconds ?? 2;
+                    motionTransition = `transform ${duration}s cubic-bezier(0.25, 1, 0.5, 1)`;
+                  }
                 }
 
                 return (
@@ -5027,6 +5051,7 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       opacity: isOverCommunityLimit ? Math.min(effectiveOpacity, 0.4) : effectiveOpacity,
                       transform: combinedTransform,
                       animation: combinedAnimation,
+                      transition: motionTransition,
                       boxShadow: !isPureShapeWithoutBox && !isTascGrid && panel.shadowEnabled && !isOverCommunityLimit
                         ? `0 0 ${panel.shadowIntensity ?? 15}px ${panel.shadowColor || '#38bdf8'}, 0 4px 12px rgba(0, 0, 0, 0.5)`
                         : undefined
@@ -5455,13 +5480,37 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       /* Interactive Range Slider Element */
                       <div className="w-full h-full p-2 flex flex-col justify-between overflow-hidden">
                         <div className={`flex ${panel.textWrap ? 'items-start' : 'items-center'} justify-between mb-0.5 gap-1`}>
-                          <span
-                            className={`text-[10px] font-bold uppercase tracking-wider ${panel.textWrap ? 'break-words whitespace-normal leading-tight min-w-0 flex-1' : 'truncate'
-                              }`}
-                            style={{ color: panel.textColor || '#cbd5e1' }}
-                          >
-                            {panel.panelName || 'SLIDER'}
-                          </span>
+                          <div className="flex items-center space-x-1.5 min-w-0 flex-1">
+                            <span
+                              className={`text-[10px] font-bold uppercase tracking-wider ${panel.textWrap ? 'break-words whitespace-normal leading-tight min-w-0 flex-1' : 'truncate'
+                                }`}
+                              style={{ color: panel.textColor || '#cbd5e1' }}
+                            >
+                              {panel.panelName || 'SLIDER'}
+                            </span>
+                            {panel.showActiveZoneName && (() => {
+                              const currentSliderVal = sliderValues[panel.panelId] !== undefined
+                                ? sliderValues[panel.panelId]
+                                : (liveValue !== undefined ? Number(liveValue) : (panel.payloadMin ?? 0));
+                              const resolvedSlider = getResolvedZones(panel);
+                              const matchedSlider = getZoneForValue(currentSliderVal, resolvedSlider);
+                              if (matchedSlider?.zone?.label) {
+                                return (
+                                  <span
+                                    className="px-1.5 py-0.2 rounded text-[8px] font-mono font-bold uppercase tracking-wider border shrink-0 transition-all shadow-sm"
+                                    style={{
+                                      backgroundColor: `${matchedSlider.zone.color}18`,
+                                      borderColor: `${matchedSlider.zone.color}60`,
+                                      color: matchedSlider.zone.color
+                                    }}
+                                  >
+                                    {matchedSlider.zone.label}
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
                           {(() => {
                             const sliderValueFontSize = panel.fontSize ? Number(panel.fontSize) : 12;
                             const sliderDisplayVal = sliderValues[panel.panelId] !== undefined
@@ -5535,23 +5584,35 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         const numVal = rawNum;
                         const range = (max - min) || 1;
                         const pct = Math.max(0, Math.min(100, ((numVal - min) / range) * 100));
-                        const barColor = pct > 75
-                          ? (panel.firstColor || '#0ea5e9')
-                          : pct > 35
-                            ? (panel.secondColor || '#10b981')
-                            : (panel.thirdColor || '#f43f5e');
+                        const resolvedProgress = getResolvedZones(panel);
+                        const matchedProgress = getZoneForValue(numVal, resolvedProgress);
+                        const barColor = matchedProgress.zone.color;
                         const progressFontSize = panel.fontSize ? Number(panel.fontSize) : 12;
 
                         return (
                           <div className="w-full h-full p-2 flex flex-col justify-between overflow-hidden">
                             <div className={`flex ${panel.textWrap ? 'items-start' : 'items-center'} justify-between mb-0.5 gap-1`}>
-                              <span
-                                className={`text-[10px] font-bold uppercase tracking-wider ${panel.textWrap ? 'break-words whitespace-normal leading-tight min-w-0 flex-1' : 'truncate'
-                                  }`}
-                                style={{ color: panel.textColor || '#cbd5e1' }}
-                              >
-                                {panel.panelName || 'PROGRESS'}
-                              </span>
+                              <div className="flex items-center space-x-1.5 min-w-0 flex-1">
+                                <span
+                                  className={`text-[10px] font-bold uppercase tracking-wider ${panel.textWrap ? 'break-words whitespace-normal leading-tight' : 'truncate'
+                                    }`}
+                                  style={{ color: panel.textColor || '#cbd5e1' }}
+                                >
+                                  {panel.panelName || 'PROGRESS'}
+                                </span>
+                                {panel.showActiveZoneName && matchedProgress?.zone?.label && (
+                                  <span
+                                    className="px-1.5 py-0.2 rounded text-[8px] font-mono font-bold uppercase tracking-wider border shrink-0 transition-all shadow-sm"
+                                    style={{
+                                      backgroundColor: `${barColor}18`,
+                                      borderColor: `${barColor}60`,
+                                      color: barColor
+                                    }}
+                                  >
+                                    {matchedProgress.zone.label}
+                                  </span>
+                                )}
+                              </div>
                               <span
                                 className="font-extrabold font-mono text-sky-400 bg-sky-500/10 border border-sky-500/20 px-1.5 py-0.5 rounded-md shrink-0"
                                 style={{ fontSize: `${progressFontSize}px` }}
@@ -5577,11 +5638,9 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                     ) : panel.type === PanelType.TEXT_OUTPUT || (panel.type as string) === 'text_display' || panel.type === PanelType.LOG ? (
                       /* Text Output / Sensor Readout Display Element */
                       (() => {
-                        const min = panel.payloadMin ?? 0;
-                        const max = panel.payloadMax ?? 100;
-                        const range = max - min || 1;
-                        const lowVal = panel.lowThreshold !== undefined ? panel.lowThreshold : min + range * 0.333;
-                        const highVal = panel.highThreshold !== undefined ? panel.highThreshold : min + range * 0.666;
+                        const resolvedText = getResolvedZones(panel);
+                        const min = resolvedText.min;
+                        const max = resolvedText.max;
                         const isScaled = !!panel.enableDecimalScaling;
                         const fractionDigits = panel.scaleFractionDigits !== undefined ? Number(panel.scaleFractionDigits) : 2;
                         const scaleDivisor = panel.scaleDivisor ? Number(panel.scaleDivisor) : Math.pow(10, fractionDigits);
@@ -5593,14 +5652,11 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                         const numVal = !isNaN(rawNum) && isScaled && scaleDivisor > 0 ? (rawNum / scaleDivisor) : rawNum;
 
                         let dynamicColor = panel.textColor || '#38bdf8';
+                        let matchedTextZone: any = null;
                         if (!isNaN(numVal)) {
-                          if (numVal <= lowVal) {
-                            dynamicColor = panel.firstColor || '#38bdf8';
-                          } else if (numVal <= highVal) {
-                            dynamicColor = panel.secondColor || '#10b981';
-                          } else {
-                            dynamicColor = panel.thirdColor || '#f43f5e';
-                          }
+                          const matchedText = getZoneForValue(numVal, resolvedText);
+                          dynamicColor = matchedText.zone.color;
+                          matchedTextZone = matchedText.zone;
                         }
 
                         const outFontSize = panel.fontSize ? Number(panel.fontSize) : 16;
@@ -5621,16 +5677,30 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
 
                         return (
                           <div className="w-full h-full p-2 flex flex-col justify-between overflow-hidden">
-                            <span
-                              className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 w-full block ${panel.textWrap ? 'break-words whitespace-normal leading-tight' : 'truncate'
-                                }`}
-                              style={{
-                                color: panel.textColor || '#94a3b8',
-                                textAlign: panel.textAlign || 'left'
-                              }}
-                            >
-                              {panel.panelName || 'TEXT DISPLAY'}
-                            </span>
+                            <div className="flex items-center justify-between mb-0.5 w-full gap-1">
+                              <span
+                                className={`text-[10px] font-bold uppercase tracking-wider ${panel.textWrap ? 'break-words whitespace-normal leading-tight min-w-0 flex-1' : 'truncate'
+                                  }`}
+                                style={{
+                                  color: panel.textColor || '#94a3b8',
+                                  textAlign: panel.textAlign || 'left'
+                                }}
+                              >
+                                {panel.panelName || 'TEXT DISPLAY'}
+                              </span>
+                              {panel.showActiveZoneName && matchedTextZone?.label && (
+                                <span
+                                  className="px-1.5 py-0.2 rounded text-[8px] font-mono font-bold uppercase tracking-wider border shrink-0 transition-all shadow-sm"
+                                  style={{
+                                    backgroundColor: `${dynamicColor}18`,
+                                    borderColor: `${dynamicColor}60`,
+                                    color: dynamicColor
+                                  }}
+                                >
+                                  {matchedTextZone.label}
+                                </span>
+                              )}
+                            </div>
                             <div
                               className="flex items-baseline justify-between px-2.5 py-1.5 rounded-lg my-auto transition-all duration-300 relative"
                               style={{
@@ -5718,10 +5788,10 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                           >
                             {/* Header: Title on Left, Rx/Tx on Right */}
                             <div className={`flex ${isWrap ? 'items-start' : 'items-center'} justify-between mb-0.5 gap-1.5 min-w-0 w-full`}>
-                              <div className="flex-1 min-w-0 pr-1">
+                              <div className="flex-1 min-w-0 pr-1 flex items-center space-x-1.5">
                                 <span
                                   className={`font-bold uppercase tracking-wider block ${alignClass} ${isWrap
-                                    ? 'break-words whitespace-normal leading-tight'
+                                    ? 'break-words whitespace-normal leading-tight min-w-0 flex-1'
                                     : 'truncate'
                                     }`}
                                   style={{
@@ -5732,6 +5802,28 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                                 >
                                   {panel.panelName || 'TEXT INPUT'}
                                 </span>
+                                {panel.showActiveZoneName && (() => {
+                                  const rawN = liveValue !== undefined && liveValue !== null ? Number(liveValue) : NaN;
+                                  if (!isNaN(rawN)) {
+                                    const resolvedInput = getResolvedZones(panel);
+                                    const matchedInput = getZoneForValue(rawN, resolvedInput);
+                                    if (matchedInput?.zone?.label) {
+                                      return (
+                                        <span
+                                          className="px-1.5 py-0.2 rounded text-[7.5px] font-mono font-bold uppercase tracking-wider border shrink-0 transition-all shadow-sm"
+                                          style={{
+                                            backgroundColor: `${matchedInput.zone.color}18`,
+                                            borderColor: `${matchedInput.zone.color}60`,
+                                            color: matchedInput.zone.color
+                                          }}
+                                        >
+                                          {matchedInput.zone.label}
+                                        </span>
+                                      );
+                                    }
+                                  }
+                                  return null;
+                                })()}
                               </div>
 
                               {/* Rx & Tx Badges moved UP to header row */}
@@ -5910,9 +6002,13 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                       ((isOn: boolean) => {
                         const activeIcon = isOn ? (panel.iconOn || 'fa-fan') : (panel.iconOff || 'fa-fan');
                         const activeColor = isOn ? (panel.iconColorOn || '#10b981') : (panel.iconColorOff || '#64748b');
-                        const isAnimate = isOn ? !!panel.rotateOn : !!panel.rotateOff;
+                        const isAnimate = isOn 
+                          ? (panel.rotateOn !== undefined ? !!panel.rotateOn : (panel.iconOn ? ['fan', 'gears', 'gear', 'pump', 'spinner', 'cog'].some(w => panel.iconOn?.includes(w)) : true)) 
+                          : !!panel.rotateOff;
                         const isFlash = isOn ? !!panel.flashOn : !!panel.flashOff;
-                        const animSpeed = isOn ? (panel.animSpeedOn || 'medium') : (panel.animSpeedOff || 'medium');
+                        const animSpeed = isOn 
+                          ? (panel.animSpeedOn ?? panel.iconAnimSpeed ?? 'medium') 
+                          : (panel.animSpeedOff ?? panel.iconAnimSpeed ?? 'medium');
 
                         const labelFontSize = panel.fontSize ? Number(panel.fontSize) : 12;
                         const statusFontSize = Math.max(9, Math.round(labelFontSize * 0.8));
@@ -6086,10 +6182,13 @@ export const WebHmiCanvasView: React.FC<WebHmiCanvasViewProps> = ({
                             color1={panel.firstColor || '#38bdf8'}
                             color2={panel.secondColor || '#10b981'}
                             color3={panel.thirdColor || '#f43f5e'}
+                            colorZones={panel.colorZones}
+                            thresholds={panel.thresholds}
                             precision={panel.enableDecimalScaling ? (panel.scaleFractionDigits ?? 2) : (panel.decimalPrecision !== undefined ? panel.decimalPrecision : 2)}
                             lowThreshold={panel.lowThreshold}
                             highThreshold={panel.highThreshold}
                             fontSize={panel.fontSize}
+                            showActiveZoneName={panel.showActiveZoneName}
                           />
                         </div>
                       </div>

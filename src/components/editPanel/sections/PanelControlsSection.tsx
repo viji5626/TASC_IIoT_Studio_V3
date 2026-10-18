@@ -1,5 +1,5 @@
 import React from 'react';
-import { SmartIcon } from '../../../utils/iconAnimator';
+import { SmartIcon, parseSpeedToSeconds } from '../../../utils/iconAnimator';
 
 interface PanelControlsSectionProps {
   formData: any;
@@ -38,11 +38,22 @@ export const PanelControlsSection: React.FC<PanelControlsSectionProps> = ({
           </div>
 
           <div className="grid grid-cols-2 gap-6 bg-black/20 p-4 rounded-lg border border-white/5">
+            {/* ON Icon & Settings Card */}
             <div className="space-y-3">
               <span className="text-xs text-gray-400 font-bold uppercase">ON Icon & Color</span>
               <div className="flex items-center space-x-3">
-                <button type="button" onClick={() => setPickingIconFor('on')} className="w-10 h-10 rounded bg-[#222] flex items-center justify-center text-xl text-emerald-400 overflow-hidden">
-                  <SmartIcon icon={formData.iconOn || 'fa-fan'} isAnimate={false} isFlash={!!formData.flashOn} speed={formData.animSpeedOn || 'medium'} />
+                <button 
+                  type="button" 
+                  onClick={() => setPickingIconFor('on')} 
+                  className="w-10 h-10 rounded bg-[#222] flex items-center justify-center text-xl text-emerald-400 overflow-hidden shadow-inner border border-emerald-500/30"
+                  title="Click to pick ON icon"
+                >
+                  <SmartIcon 
+                    icon={formData.iconOn || 'fa-fan'} 
+                    isAnimate={formData.rotateOn !== false} 
+                    isFlash={!!formData.flashOn} 
+                    speed={formData.animSpeedOn ?? formData.iconAnimSpeed ?? 'medium'} 
+                  />
                 </button>
                 <button type="button" onClick={() => setPickingColorFor('iconOn')} className="flex items-center space-x-2">
                   <div className="w-7 h-7 rounded-full border border-white/20" style={{ backgroundColor: formData.iconColorOn || '#10b981' }}></div>
@@ -50,7 +61,7 @@ export const PanelControlsSection: React.FC<PanelControlsSectionProps> = ({
                 </button>
               </div>
 
-              <div className="flex items-center space-x-2.5 pt-1 border-t border-white/5">
+              <div className="space-y-2 pt-2 border-t border-white/5">
                 <label className="flex items-center space-x-1.5 cursor-pointer text-xs text-gray-300 select-none">
                   <input 
                     type="checkbox"
@@ -64,14 +75,77 @@ export const PanelControlsSection: React.FC<PanelControlsSectionProps> = ({
                     <span>Flash / Pulse Status</span>
                   </span>
                 </label>
+
+                <label className="flex items-center space-x-1.5 cursor-pointer text-xs text-gray-300 select-none">
+                  <input 
+                    type="checkbox"
+                    checked={formData.rotateOn !== false}
+                    onChange={(e) => setFormData((prev: any) => ({ ...prev, rotateOn: e.target.checked }))}
+                    className="w-3.5 h-3.5 accent-sky-500 rounded cursor-pointer"
+                  />
+                  <span className="flex items-center space-x-1">
+                    <i className="fas fa-rotate text-[10px] text-sky-400"></i>
+                    <span>Rotate / Spin Status</span>
+                  </span>
+                </label>
+
+                {formData.rotateOn !== false && (
+                  <div className="space-y-1 bg-slate-950/70 p-2 rounded-lg border border-slate-800">
+                    <div className="flex items-center justify-between text-[10px] text-slate-400">
+                      <span>ON Spin Speed:</span>
+                      <span className="font-mono text-sky-300 font-bold">
+                        {parseSpeedToSeconds(formData.animSpeedOn ?? formData.iconAnimSpeed ?? 1.5).toFixed(1)}s
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.2"
+                      max="6.0"
+                      step="0.1"
+                      value={parseSpeedToSeconds(formData.animSpeedOn ?? formData.iconAnimSpeed ?? 1.5)}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 1.5;
+                        setFormData((prev: any) => ({ ...prev, animSpeedOn: val, iconAnimSpeed: val }));
+                      }}
+                      className="w-full accent-sky-400 cursor-pointer h-1.5 bg-slate-800 rounded appearance-none"
+                    />
+                    <div className="flex items-center space-x-1 pt-0.5">
+                      {[
+                        { label: 'Fast', sec: 0.4 },
+                        { label: 'Normal', sec: 1.2 },
+                        { label: 'Slow', sec: 3.0 }
+                      ].map(chip => (
+                        <button
+                          key={chip.sec}
+                          type="button"
+                          onClick={() => setFormData((prev: any) => ({ ...prev, animSpeedOn: chip.sec, iconAnimSpeed: chip.sec }))}
+                          className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-slate-900 text-slate-400 border border-slate-800 hover:text-white"
+                        >
+                          {chip.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
+            {/* OFF Icon & Settings Card */}
             <div className="space-y-3">
               <span className="text-xs text-gray-400 font-bold uppercase">OFF Icon & Color</span>
               <div className="flex items-center space-x-3">
-                <button type="button" onClick={() => setPickingIconFor('off')} className="w-10 h-10 rounded bg-[#222] flex items-center justify-center text-xl text-gray-400 overflow-hidden">
-                  <SmartIcon icon={formData.iconOff || 'fa-fan'} isAnimate={false} isFlash={!!formData.flashOff} speed={formData.animSpeedOff || 'medium'} />
+                <button 
+                  type="button" 
+                  onClick={() => setPickingIconFor('off')} 
+                  className="w-10 h-10 rounded bg-[#222] flex items-center justify-center text-xl text-gray-400 overflow-hidden shadow-inner border border-slate-700"
+                  title="Click to pick OFF icon"
+                >
+                  <SmartIcon 
+                    icon={formData.iconOff || 'fa-fan'} 
+                    isAnimate={!!formData.rotateOff} 
+                    isFlash={!!formData.flashOff} 
+                    speed={formData.animSpeedOff ?? formData.iconAnimSpeed ?? 'medium'} 
+                  />
                 </button>
                 <button type="button" onClick={() => setPickingColorFor('iconOff')} className="flex items-center space-x-2">
                   <div className="w-7 h-7 rounded-full border border-white/20" style={{ backgroundColor: formData.iconColorOff || '#4b5563' }}></div>
@@ -79,7 +153,7 @@ export const PanelControlsSection: React.FC<PanelControlsSectionProps> = ({
                 </button>
               </div>
 
-              <div className="flex items-center space-x-2.5 pt-1 border-t border-white/5">
+              <div className="space-y-2 pt-2 border-t border-white/5">
                 <label className="flex items-center space-x-1.5 cursor-pointer text-xs text-gray-300 select-none">
                   <input 
                     type="checkbox"
@@ -93,6 +167,58 @@ export const PanelControlsSection: React.FC<PanelControlsSectionProps> = ({
                     <span>Flash / Pulse Status</span>
                   </span>
                 </label>
+
+                <label className="flex items-center space-x-1.5 cursor-pointer text-xs text-gray-300 select-none">
+                  <input 
+                    type="checkbox"
+                    checked={!!formData.rotateOff}
+                    onChange={(e) => setFormData((prev: any) => ({ ...prev, rotateOff: e.target.checked }))}
+                    className="w-3.5 h-3.5 accent-sky-500 rounded cursor-pointer"
+                  />
+                  <span className="flex items-center space-x-1">
+                    <i className="fas fa-rotate text-[10px] text-sky-400"></i>
+                    <span>Rotate / Spin Status</span>
+                  </span>
+                </label>
+
+                {formData.rotateOff && (
+                  <div className="space-y-1 bg-slate-950/70 p-2 rounded-lg border border-slate-800">
+                    <div className="flex items-center justify-between text-[10px] text-slate-400">
+                      <span>OFF Spin Speed:</span>
+                      <span className="font-mono text-sky-300 font-bold">
+                        {parseSpeedToSeconds(formData.animSpeedOff ?? formData.iconAnimSpeed ?? 1.5).toFixed(1)}s
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.2"
+                      max="6.0"
+                      step="0.1"
+                      value={parseSpeedToSeconds(formData.animSpeedOff ?? formData.iconAnimSpeed ?? 1.5)}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 1.5;
+                        setFormData((prev: any) => ({ ...prev, animSpeedOff: val }));
+                      }}
+                      className="w-full accent-sky-400 cursor-pointer h-1.5 bg-slate-800 rounded appearance-none"
+                    />
+                    <div className="flex items-center space-x-1 pt-0.5">
+                      {[
+                        { label: 'Fast', sec: 0.4 },
+                        { label: 'Normal', sec: 1.2 },
+                        { label: 'Slow', sec: 3.0 }
+                      ].map(chip => (
+                        <button
+                          key={chip.sec}
+                          type="button"
+                          onClick={() => setFormData((prev: any) => ({ ...prev, animSpeedOff: chip.sec }))}
+                          className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-slate-900 text-slate-400 border border-slate-800 hover:text-white"
+                        >
+                          {chip.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

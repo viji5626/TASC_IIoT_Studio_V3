@@ -701,7 +701,7 @@ export const HmiCanvasDynamicsInspector: React.FC<HmiCanvasDynamicsInspectorProp
 
                     {/* State 1 Action for Rotation */}
                     {activeRule.type === 'rotation' && (
-                      <div className="space-y-1.5">
+                      <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] text-slate-400">Motor Spin:</span>
                           <select
@@ -721,6 +721,79 @@ export const HmiCanvasDynamicsInspector: React.FC<HmiCanvasDynamicsInspectorProp
                             <option value="ccw">Spin Counter-Clockwise (CCW)</option>
                           </select>
                         </div>
+
+                        {activeRule.state1Rotate && (
+                          <div className="space-y-1 bg-slate-900/80 p-2 rounded-lg border border-sky-500/20">
+                            <div className="flex items-center justify-between text-[10px] text-slate-400">
+                              <span className="flex items-center space-x-1">
+                                <i className="fas fa-gauge-high text-sky-400 text-[9px]"></i>
+                                <span>Animation Speed Bar:</span>
+                              </span>
+                              <div className="flex items-center space-x-1.5">
+                                <span className="font-mono text-sky-300 font-bold">
+                                  {(activeRule.state1RotationSpeed ?? 1.5).toFixed(1)}s
+                                </span>
+                                <i 
+                                  className={`fas fa-rotate text-[10px] text-sky-400 ${activeRule.state1RotationDirection === 'ccw' ? 'animate-spin-reverse' : 'animate-icon-spin'}`}
+                                  style={{ animationDuration: `${activeRule.state1RotationSpeed ?? 1.5}s` }}
+                                ></i>
+                              </div>
+                            </div>
+                            <input
+                              type="range"
+                              min="0.2"
+                              max="10.0"
+                              step="0.1"
+                              value={activeRule.state1RotationSpeed ?? 1.5}
+                              onChange={(e) => handleUpdateActiveRule({ state1RotationSpeed: parseFloat(e.target.value) || 1.5 })}
+                              className="w-full accent-sky-400 cursor-pointer h-1.5 bg-slate-800 rounded appearance-none"
+                            />
+                            <div className="flex items-center space-x-1 pt-0.5">
+                              {[
+                                { label: 'Fast', sec: 0.5 },
+                                { label: 'Normal', sec: 1.5 },
+                                { label: 'Slow', sec: 3.5 }
+                              ].map(chip => (
+                                <button
+                                  key={chip.sec}
+                                  type="button"
+                                  onClick={() => handleUpdateActiveRule({ state1RotationSpeed: chip.sec })}
+                                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono ${
+                                    Math.abs((activeRule.state1RotationSpeed ?? 1.5) - chip.sec) < 0.1
+                                      ? 'bg-sky-500/30 text-sky-200 border border-sky-400 font-bold'
+                                      : 'bg-slate-950 text-slate-400 border border-slate-800'
+                                  }`}
+                                >
+                                  {chip.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* State 1 Action for Motion */}
+                    {activeRule.type === 'discrete_motion' && (
+                      <div className="space-y-1.5 bg-slate-900/60 p-2 rounded-lg border border-indigo-500/20">
+                        <div className="flex items-center justify-between text-[10px] text-slate-400">
+                          <span className="flex items-center space-x-1">
+                            <i className="fas fa-location-dot text-indigo-400"></i>
+                            <span>State 1 Position:</span>
+                          </span>
+                          <span className="font-mono text-indigo-300 font-bold">
+                            {activeRule.state1MotionProgress ?? 0}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          step="5"
+                          value={activeRule.state1MotionProgress ?? 0}
+                          onChange={(e) => handleUpdateActiveRule({ state1MotionProgress: parseInt(e.target.value) || 0 })}
+                          className="w-full accent-indigo-400 cursor-pointer h-1.5 bg-slate-800 rounded appearance-none"
+                        />
                       </div>
                     )}
 
@@ -827,7 +900,7 @@ export const HmiCanvasDynamicsInspector: React.FC<HmiCanvasDynamicsInspectorProp
 
                     {/* State 2 Action for Rotation */}
                     {activeRule.type === 'rotation' && (
-                      <div className="space-y-1.5">
+                      <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] text-slate-400">Motor Spin:</span>
                           <select
@@ -847,6 +920,79 @@ export const HmiCanvasDynamicsInspector: React.FC<HmiCanvasDynamicsInspectorProp
                             <option value="stopped">Stopped</option>
                           </select>
                         </div>
+
+                        {activeRule.state2Rotate !== false && (
+                          <div className="space-y-1 bg-slate-900/80 p-2 rounded-lg border border-emerald-500/20">
+                            <div className="flex items-center justify-between text-[10px] text-slate-400">
+                              <span className="flex items-center space-x-1">
+                                <i className="fas fa-gauge-high text-emerald-400 text-[9px]"></i>
+                                <span>Animation Speed Bar:</span>
+                              </span>
+                              <div className="flex items-center space-x-1.5">
+                                <span className="font-mono text-emerald-300 font-bold">
+                                  {(activeRule.state2RotationSpeed ?? 1.5).toFixed(1)}s
+                                </span>
+                                <i 
+                                  className={`fas fa-rotate text-[10px] text-emerald-400 ${activeRule.state2RotationDirection === 'ccw' ? 'animate-spin-reverse' : 'animate-icon-spin'}`}
+                                  style={{ animationDuration: `${activeRule.state2RotationSpeed ?? 1.5}s` }}
+                                ></i>
+                              </div>
+                            </div>
+                            <input
+                              type="range"
+                              min="0.2"
+                              max="10.0"
+                              step="0.1"
+                              value={activeRule.state2RotationSpeed ?? 1.5}
+                              onChange={(e) => handleUpdateActiveRule({ state2RotationSpeed: parseFloat(e.target.value) || 1.5 })}
+                              className="w-full accent-emerald-400 cursor-pointer h-1.5 bg-slate-800 rounded appearance-none"
+                            />
+                            <div className="flex items-center space-x-1 pt-0.5">
+                              {[
+                                { label: 'Fast', sec: 0.5 },
+                                { label: 'Normal', sec: 1.5 },
+                                { label: 'Slow', sec: 3.5 }
+                              ].map(chip => (
+                                <button
+                                  key={chip.sec}
+                                  type="button"
+                                  onClick={() => handleUpdateActiveRule({ state2RotationSpeed: chip.sec })}
+                                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono ${
+                                    Math.abs((activeRule.state2RotationSpeed ?? 1.5) - chip.sec) < 0.1
+                                      ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-400 font-bold'
+                                      : 'bg-slate-950 text-slate-400 border border-slate-800'
+                                  }`}
+                                >
+                                  {chip.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* State 2 Action for Motion */}
+                    {activeRule.type === 'discrete_motion' && (
+                      <div className="space-y-1.5 bg-slate-900/60 p-2 rounded-lg border border-emerald-500/20">
+                        <div className="flex items-center justify-between text-[10px] text-slate-400">
+                          <span className="flex items-center space-x-1">
+                            <i className="fas fa-location-dot text-emerald-400"></i>
+                            <span>State 2 Position:</span>
+                          </span>
+                          <span className="font-mono text-emerald-300 font-bold">
+                            {activeRule.state2MotionProgress ?? 100}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          step="5"
+                          value={activeRule.state2MotionProgress ?? 100}
+                          onChange={(e) => handleUpdateActiveRule({ state2MotionProgress: parseInt(e.target.value) || 100 })}
+                          className="w-full accent-emerald-400 cursor-pointer h-1.5 bg-slate-800 rounded appearance-none"
+                        />
                       </div>
                     )}
 
@@ -869,8 +1015,100 @@ export const HmiCanvasDynamicsInspector: React.FC<HmiCanvasDynamicsInspectorProp
                       </div>
                     )}
                   </div>
-                </div>
-              ) : (
+
+                {/* Digital Motion Settings & Transition Speed Bar */}
+                {activeRule.type === 'discrete_motion' && (
+                  <div className="space-y-2.5 bg-slate-950/80 p-2.5 rounded-xl border border-indigo-500/30">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-indigo-400 flex items-center space-x-1.5">
+                        <i className="fas fa-gauge-high"></i>
+                        <span>Motion Transition Speed Bar</span>
+                      </span>
+                      <span className="text-[10px] font-mono text-indigo-300 font-bold bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/30">
+                        {(activeRule.motionSpeed ?? activeRule.motionDurationSeconds ?? 2.0).toFixed(1)}s Duration
+                      </span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[9px] font-mono text-slate-500">0.2s</span>
+                        <input
+                          type="range"
+                          min="0.2"
+                          max="10.0"
+                          step="0.1"
+                          value={activeRule.motionSpeed ?? activeRule.motionDurationSeconds ?? 2.0}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 2.0;
+                            handleUpdateActiveRule({ motionSpeed: val, motionDurationSeconds: val });
+                          }}
+                          className="w-full accent-indigo-400 hover:accent-indigo-300 cursor-pointer h-1.5 bg-slate-800 rounded appearance-none"
+                        />
+                        <span className="text-[9px] font-mono text-slate-500">10.0s</span>
+                      </div>
+
+                      <div className="flex items-center space-x-1 pt-0.5">
+                        {[
+                          { label: 'Fast (0.5s)', sec: 0.5 },
+                          { label: 'Normal (1.2s)', sec: 1.2 },
+                          { label: 'Smooth (2.5s)', sec: 2.5 },
+                          { label: 'Slow (4.0s)', sec: 4.0 }
+                        ].map(chip => (
+                          <button
+                            key={chip.sec}
+                            type="button"
+                            onClick={() => handleUpdateActiveRule({ motionSpeed: chip.sec, motionDurationSeconds: chip.sec })}
+                            className={`px-1.5 py-0.5 rounded text-[9px] font-mono ${
+                              Math.abs((activeRule.motionSpeed ?? activeRule.motionDurationSeconds ?? 2.0) - chip.sec) < 0.1
+                                ? 'bg-indigo-500/30 text-indigo-200 border border-indigo-400 font-bold'
+                                : 'bg-slate-900 text-slate-400 border border-slate-800'
+                            }`}
+                          >
+                            {chip.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-800/80">
+                      <span className="text-[10px] text-slate-300">Orient Object to Path Angle:</span>
+                      <label className="flex items-center space-x-1.5 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={!!activeRule.motionOrientToPath}
+                          onChange={(e) => handleUpdateActiveRule({ motionOrientToPath: e.target.checked })}
+                          className="w-3.5 h-3.5 accent-indigo-500 rounded cursor-pointer"
+                        />
+                        <span className="text-[10px] font-mono text-slate-400">
+                          {activeRule.motionOrientToPath ? 'Enabled' : 'Disabled'}
+                        </span>
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-0.5">
+                      <div>
+                        <label className="text-[9px] text-slate-400 font-medium">Path Offset X (px):</label>
+                        <input
+                          type="number"
+                          value={activeRule.motionEndX ?? targetPanel.motionEndX ?? 150}
+                          onChange={(e) => handleUpdateActiveRule({ motionEndX: parseInt(e.target.value) || 0 })}
+                          className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-xs text-white font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-slate-400 font-medium">Path Offset Y (px):</label>
+                        <input
+                          type="number"
+                          value={activeRule.motionEndY ?? targetPanel.motionEndY ?? 0}
+                          onChange={(e) => handleUpdateActiveRule({ motionEndY: parseInt(e.target.value) || 0 })}
+                          className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-xs text-white font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
                 /* ───────────────────────────────────────────────────────── */
                 /* 2. ANALOG CONDITION / THRESHOLD / RANGE CONFIGURATION    */
                 /* ───────────────────────────────────────────────────────── */
@@ -1076,29 +1314,72 @@ export const HmiCanvasDynamicsInspector: React.FC<HmiCanvasDynamicsInspectorProp
                           </div>
                         </div>
                       ) : (
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
                             <label className="text-[10px] text-slate-400 font-medium">Direction:</label>
                             <select
                               value={activeRule.rotationDirection || 'cw'}
                               onChange={(e) => handleUpdateActiveRule({ rotationDirection: e.target.value as any })}
-                              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white outline-none"
+                              className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white outline-none cursor-pointer"
                             >
                               <option value="cw">Clockwise (CW)</option>
                               <option value="ccw">Counter-Clockwise (CCW)</option>
                             </select>
                           </div>
-                          <div>
-                            <label className="text-[10px] text-slate-400 font-medium">Duration / Speed (s):</label>
-                            <input
-                              type="number"
-                              step="0.2"
-                              min="0.2"
-                              max="10"
-                              value={activeRule.rotationSpeed ?? 2}
-                              onChange={(e) => handleUpdateActiveRule({ rotationSpeed: parseFloat(e.target.value) || 2 })}
-                              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white font-mono"
-                            />
+
+                          {/* Animation Speed Bar for Continuous Spin */}
+                          <div className="space-y-1.5 bg-slate-950/80 p-2.5 rounded-xl border border-sky-500/20">
+                            <div className="flex items-center justify-between text-[10px] text-slate-400">
+                              <span className="flex items-center space-x-1">
+                                <i className="fas fa-gauge-high text-sky-400"></i>
+                                <span>Animation Speed Bar (Duration / Cycle):</span>
+                              </span>
+                              <div className="flex items-center space-x-1.5">
+                                <span className="font-mono text-sky-300 font-bold">
+                                  {(activeRule.rotationSpeed ?? 2).toFixed(1)}s
+                                </span>
+                                <i 
+                                  className={`fas fa-rotate text-xs text-sky-400 ${activeRule.rotationDirection === 'ccw' ? 'animate-spin-reverse' : 'animate-icon-spin'}`}
+                                  style={{ animationDuration: `${activeRule.rotationSpeed ?? 2}s` }}
+                                ></i>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center space-x-2">
+                              <span className="text-[9px] font-mono text-slate-500">0.2s</span>
+                              <input
+                                type="range"
+                                min="0.2"
+                                max="10.0"
+                                step="0.1"
+                                value={activeRule.rotationSpeed ?? 2}
+                                onChange={(e) => handleUpdateActiveRule({ rotationSpeed: parseFloat(e.target.value) || 2 })}
+                                className="w-full accent-sky-400 hover:accent-sky-300 cursor-pointer h-1.5 bg-slate-800 rounded appearance-none"
+                              />
+                              <span className="text-[9px] font-mono text-slate-500">10.0s</span>
+                            </div>
+
+                            <div className="flex items-center space-x-1 pt-0.5">
+                              {[
+                                { label: '0.5s Fast', sec: 0.5 },
+                                { label: '1.5s Normal', sec: 1.5 },
+                                { label: '3.0s Slow', sec: 3.0 },
+                                { label: '5.0s Crawl', sec: 5.0 }
+                              ].map(chip => (
+                                <button
+                                  key={chip.sec}
+                                  type="button"
+                                  onClick={() => handleUpdateActiveRule({ rotationSpeed: chip.sec })}
+                                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono ${
+                                    Math.abs((activeRule.rotationSpeed ?? 2) - chip.sec) < 0.1
+                                      ? 'bg-sky-500/30 text-sky-200 border border-sky-400 font-bold'
+                                      : 'bg-slate-900 text-slate-400 border border-slate-800'
+                                  }`}
+                                >
+                                  {chip.label}
+                                </button>
+                              ))}
+                            </div>
                           </div>
                         </div>
                       )}
@@ -1192,6 +1473,145 @@ export const HmiCanvasDynamicsInspector: React.FC<HmiCanvasDynamicsInspectorProp
                         onChange={(e) => handleUpdateActiveRule({ targetOpacity: parseFloat(e.target.value) })}
                         className="w-full accent-purple-500 cursor-pointer h-1.5 bg-slate-700 rounded-lg appearance-none"
                       />
+                    </div>
+                  )}
+
+                  {/* Analog Motion Path Actions */}
+                  {activeRule.type === 'discrete_motion' && (
+                    <div className="pt-2 border-t border-slate-800 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-indigo-400 font-bold uppercase tracking-wider flex items-center space-x-1.5">
+                          <i className="fas fa-route text-indigo-400"></i>
+                          <span>Motion Path Dynamics</span>
+                        </span>
+                        <span className="text-xs font-mono font-bold text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/30">
+                          {(activeRule.motionSpeed ?? activeRule.motionDurationSeconds ?? 2.0).toFixed(1)}s Duration
+                        </span>
+                      </div>
+
+                      {/* Animation Speed Bar for Motion Path */}
+                      <div className="space-y-1.5 bg-slate-950 p-2.5 rounded-xl border border-indigo-500/30">
+                        <div className="flex items-center justify-between text-[10px] text-slate-400">
+                          <span className="flex items-center space-x-1">
+                            <i className="fas fa-gauge-high text-indigo-400"></i>
+                            <span>Motion Animation Speed Bar (Duration):</span>
+                          </span>
+                          <span className="font-mono text-indigo-300 font-bold">
+                            {(activeRule.motionSpeed ?? activeRule.motionDurationSeconds ?? 2.0).toFixed(1)}s
+                          </span>
+                        </div>
+
+                        <div className="flex items-center space-x-2">
+                          <span className="text-[9px] font-mono text-slate-500">0.2s</span>
+                          <input
+                            type="range"
+                            min="0.2"
+                            max="10.0"
+                            step="0.1"
+                            value={activeRule.motionSpeed ?? activeRule.motionDurationSeconds ?? 2.0}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 2.0;
+                              handleUpdateActiveRule({ motionSpeed: val, motionDurationSeconds: val });
+                            }}
+                            className="w-full accent-indigo-400 hover:accent-indigo-300 cursor-pointer h-1.5 bg-slate-800 rounded appearance-none"
+                          />
+                          <span className="text-[9px] font-mono text-slate-500">10.0s</span>
+                        </div>
+
+                        {/* Quick Speed Preset Chips */}
+                        <div className="flex items-center space-x-1.5 flex-wrap gap-y-1 pt-0.5">
+                          {[
+                            { label: '0.5s Fast', sec: 0.5 },
+                            { label: '1.2s Normal', sec: 1.2 },
+                            { label: '2.5s Smooth', sec: 2.5 },
+                            { label: '4.0s Slow', sec: 4.0 },
+                            { label: '7.0s Crawl', sec: 7.0 }
+                          ].map(chip => {
+                            const cur = activeRule.motionSpeed ?? activeRule.motionDurationSeconds ?? 2.0;
+                            const isCur = Math.abs(cur - chip.sec) < 0.05;
+                            return (
+                              <button
+                                key={chip.sec}
+                                type="button"
+                                onClick={() => handleUpdateActiveRule({ motionSpeed: chip.sec, motionDurationSeconds: chip.sec })}
+                                className={`px-2 py-0.5 rounded text-[10px] font-mono transition-all cursor-pointer ${
+                                  isCur
+                                    ? 'bg-indigo-500/30 text-indigo-200 border border-indigo-400 font-bold shadow'
+                                    : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200 hover:border-slate-700'
+                                }`}
+                              >
+                                {chip.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Orient Object to Path Angle */}
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-[11px] text-slate-300">Orient Object to Path Angle:</span>
+                        <label className="flex items-center space-x-1.5 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={!!activeRule.motionOrientToPath}
+                            onChange={(e) => handleUpdateActiveRule({ motionOrientToPath: e.target.checked })}
+                            className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-indigo-500 accent-indigo-500 cursor-pointer"
+                          />
+                          <span className="text-[10px] font-mono text-slate-400">
+                            {activeRule.motionOrientToPath ? 'Enabled' : 'Disabled'}
+                          </span>
+                        </label>
+                      </div>
+
+                      {/* Travel Vector Displacement */}
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-medium">Travel Vector X (px):</label>
+                          <input
+                            type="number"
+                            value={activeRule.motionEndX ?? targetPanel.motionEndX ?? 150}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value) || 0;
+                              handleUpdateActiveRule({ motionEndX: val });
+                            }}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-medium">Travel Vector Y (px):</label>
+                          <input
+                            type="number"
+                            value={activeRule.motionEndY ?? targetPanel.motionEndY ?? 0}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value) || 0;
+                              handleUpdateActiveRule({ motionEndY: val });
+                            }}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Quick Travel Vector Direction Presets */}
+                      <div className="space-y-1">
+                        <span className="text-[9px] text-slate-500 font-mono">Vector Presets:</span>
+                        <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                          {[
+                            { label: '→ Right (+150)', x: 150, y: 0 },
+                            { label: '← Left (-150)', x: -150, y: 0 },
+                            { label: '↓ Down (+100)', x: 0, y: 100 },
+                            { label: '↑ Up (-100)', x: 0, y: -100 }
+                          ].map(preset => (
+                            <button
+                              key={preset.label}
+                              type="button"
+                              onClick={() => handleUpdateActiveRule({ motionEndX: preset.x, motionEndY: preset.y })}
+                              className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-900 text-slate-400 border border-slate-800 hover:text-white"
+                            >
+                              {preset.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>

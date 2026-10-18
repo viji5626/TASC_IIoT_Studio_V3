@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { getResolvedZones, getZoneForValue, PanelColorZone } from '../utils/gaugeThresholds';
 
 interface GaugeProps {
   value: number;
@@ -8,11 +9,14 @@ interface GaugeProps {
   color1?: string;
   color2?: string;
   color3?: string;
+  colorZones?: Array<{ color: string; label?: string }>;
+  thresholds?: number[];
   precision?: number | string;
   lowThreshold?: number;
   highThreshold?: number;
   hideText?: boolean;
   fontSize?: number | string;
+  showActiveZoneName?: boolean;
 }
 
 const Gauge: React.FC<GaugeProps> = ({ 
@@ -23,11 +27,14 @@ const Gauge: React.FC<GaugeProps> = ({
   color1 = '#38bdf8', 
   color2 = '#10b981', 
   color3 = '#f43f5e',
+  colorZones,
+  thresholds,
   precision = 2,
   lowThreshold,
   highThreshold,
   hideText = false,
-  fontSize
+  fontSize,
+  showActiveZoneName
 }) => {
   const radius = 38;
   const strokeWidth = 7;
@@ -76,14 +83,20 @@ const Gauge: React.FC<GaugeProps> = ({
   const normalizedValue = Math.min(Math.max(displayValue, min), max);
   const range = max - min || 1;
   
-  // Calculate threshold values with safe defaults
-  const lowVal = lowThreshold !== undefined 
-    ? Math.max(min, Math.min(max, lowThreshold)) 
-    : min + range * 0.333;
-  
-  const highVal = highThreshold !== undefined 
-    ? Math.max(lowVal, Math.min(max, highThreshold)) 
-    : min + range * 0.666;
+  const resolved = getResolvedZones({
+    payloadMin: min,
+    payloadMax: max,
+    lowThreshold,
+    highThreshold,
+    firstColor: color1,
+    secondColor: color2,
+    thirdColor: color3,
+    colorZones,
+    thresholds
+  });
+
+  const matched = getZoneForValue(normalizedValue, resolved);
+  const currentColor = matched.zone.color;
 
   const percentage = Math.max(0, Math.min(100, ((normalizedValue - min) / range) * 100));
   
@@ -97,9 +110,6 @@ const Gauge: React.FC<GaugeProps> = ({
     return startAngle + (pct / 100) * (endAngle - startAngle);
   };
 
-  const lowAngle = angleFromVal(lowVal);
-  const highAngle = angleFromVal(highVal);
-  
   const polarToCartesian = (centerX: number, centerY: number, radius: number, angleInDegrees: number) => {
     const angleInRadians = (angleInDegrees * Math.PI) / 180.0;
     return {
@@ -117,19 +127,20 @@ const Gauge: React.FC<GaugeProps> = ({
   };
 
   const trackPath = describeArc(50, 48, radius, -180, 0);
-  const lowSegPath = describeArc(50, 48, radius, -180, lowAngle);
-  const midSegPath = describeArc(50, 48, radius, lowAngle, highAngle);
-  const highSegPath = describeArc(50, 48, radius, highAngle, 0);
+
+  // Generate segment paths for all resolved zones
+  const zoneSegmentPaths = resolved.zones.map((zone, idx) => {
+    const startVal = idx === 0 ? min : resolved.thresholds[idx - 1];
+    const endVal = idx === resolved.zones.length - 1 ? max : resolved.thresholds[idx];
+    const startAng = angleFromVal(startVal);
+    const endAng = angleFromVal(endVal);
+    const path = describeArc(50, 48, radius, startAng, endAng);
+    const isFirst = idx === 0;
+    const isLast = idx === resolved.zones.length - 1;
+    return { path, color: zone.color, isFirst, isLast };
+  });
 
   const activePath = describeArc(50, 48, radius, -180, angle);
-
-  const getColor = () => {
-    if (normalizedValue <= lowVal) return color1;
-    if (normalizedValue <= highVal) return color2;
-    return color3;
-  };
-
-  const currentColor = getColor();
   const needlePos = polarToCartesian(50, 48, radius - 4, angle);
 
   return (
@@ -145,10 +156,20 @@ const Gauge: React.FC<GaugeProps> = ({
         {/* Outer Background Track */}
         <path d={trackPath} fill="none" stroke="#1e293b" strokeWidth={strokeWidth} strokeLinecap="round" />
 
-        {/* Segment Tracks with Subtle Color Tinting */}
-        {lowSegPath && <path d={lowSegPath} fill="none" stroke={color1} strokeWidth={strokeWidth} strokeOpacity="0.25" strokeLinecap="round" />}
-        {midSegPath && <path d={midSegPath} fill="none" stroke={color2} strokeWidth={strokeWidth} strokeOpacity="0.25" />}
-        {highSegPath && <path d={highSegPath} fill="none" stroke={color3} strokeWidth={strokeWidth} strokeOpacity="0.25" strokeLinecap="round" />}
+        {/* Segment Tracks with Subtle Color Tinting for all zones */}
+        {zoneSegmentPaths.map((seg, i) =>
+          seg.path ? (
+            <path
+              key={i}
+              d={seg.path}
+              fill="none"
+              stroke={seg.color}
+              strokeWidth={strokeWidth}
+              strokeOpacity="0.25"
+              strokeLinecap={seg.isFirst || seg.isLast ? 'round' : undefined}
+            />
+          ) : null
+        )}
 
         {/* Active Arc with Smooth Animation & Dynamic Color */}
         <path 
@@ -207,6 +228,21 @@ const Gauge: React.FC<GaugeProps> = ({
               {unit}
             </span>
           )}
+        </div>
+      )}
+
+      {showActiveZoneName && matched?.zone?.label && (
+        <div className="mt-0.5 flex justify-center items-center shrink-0 select-none">
+          <span
+            className="px-2 py-0.5 rounded-full text-[8.5px] font-mono font-bold tracking-wider uppercase border shadow-sm transition-all duration-300"
+            style={{
+              backgroundColor: `${currentColor}20`,
+              borderColor: `${currentColor}60`,
+              color: currentColor
+            }}
+          >
+            {matched.zone.label}
+          </span>
         </div>
       )}
     </div>

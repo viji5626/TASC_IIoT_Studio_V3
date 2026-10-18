@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AppState } from '../../../types';
 import TagAutocompleteInput from '../../TagAutocompleteInput';
+import { SegmentThresholdsEditor } from './SegmentThresholdsEditor';
 
 interface PanelAlarmsSectionProps {
   formData: any;
@@ -9,7 +10,7 @@ interface PanelAlarmsSectionProps {
   handleChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void;
   handleLowThresholdChange: (newLow: number) => void;
   handleHighThresholdChange: (newHigh: number) => void;
-  setPickingColorFor: (target: 'first' | 'second' | 'third' | null) => void;
+  setPickingColorFor: (target: string | null) => void;
   isGauge: boolean;
   isStaticOrDecorative: boolean;
   isLineGraph: boolean;
@@ -322,12 +323,14 @@ export const PanelAlarmsSection: React.FC<PanelAlarmsSectionProps> = ({
               <i className={`fas fa-chevron-${isThresholdsExpanded ? 'down' : 'right'} text-amber-400 text-xs transition-transform duration-200`}></i>
               <i className="fas fa-palette text-xs text-amber-400"></i>
               <span className="text-xs text-amber-400 font-bold uppercase tracking-wider">
-                Gauge Segment Thresholds & Colors
+                {formData.type === 'gauge' || formData.type === 'GAUGE' ? 'Gauge Segment Thresholds & Colors' : 'Segment Thresholds & Zone Colors'}
               </span>
             </div>
             <div className="flex items-center space-x-2">
               <span className="text-[10px] text-gray-400 font-mono">
-                {formData.lowThreshold} | {formData.highThreshold}
+                {formData.thresholds && formData.thresholds.length > 0
+                  ? formData.thresholds.join(' | ')
+                  : `${formData.lowThreshold ?? 33} | ${formData.highThreshold ?? 66}`}
               </span>
               <span className="text-[10px] text-amber-500/80 font-mono">Interlocked Limits</span>
             </div>
@@ -335,82 +338,13 @@ export const PanelAlarmsSection: React.FC<PanelAlarmsSectionProps> = ({
 
           {isThresholdsExpanded && (
             <div className="p-4 pt-3 space-y-4 border-t border-white/10">
-              {/* Color Pickers & Zone Status */}
-              <div className="grid grid-cols-3 gap-3">
-                <div onClick={() => setPickingColorFor('first')} className="flex flex-col items-center p-2 rounded-lg bg-gray-900/80 border border-gray-800 cursor-pointer hover:border-amber-500/50 transition-all">
-                  <div className="w-7 h-7 rounded-full border-2 border-white/20 shadow-md mb-1" style={{ backgroundColor: formData.firstColor }}></div>
-                  <span className="text-xs font-bold text-gray-200">Low Zone</span>
-                  <span className="text-[10px] text-gray-400 font-mono">{formData.payloadMin ?? 0} → {formData.lowThreshold}</span>
-                </div>
-
-                <div onClick={() => setPickingColorFor('second')} className="flex flex-col items-center p-2 rounded-lg bg-gray-900/80 border border-gray-800 cursor-pointer hover:border-amber-500/50 transition-all">
-                  <div className="w-7 h-7 rounded-full border-2 border-white/20 shadow-md mb-1" style={{ backgroundColor: formData.secondColor }}></div>
-                  <span className="text-xs font-bold text-gray-200">Mid Zone</span>
-                  <span className="text-[10px] text-gray-400 font-mono">{formData.lowThreshold} → {formData.highThreshold}</span>
-                </div>
-
-                <div onClick={() => setPickingColorFor('third')} className="flex flex-col items-center p-2 rounded-lg bg-gray-900/80 border border-gray-800 cursor-pointer hover:border-amber-500/50 transition-all">
-                  <div className="w-7 h-7 rounded-full border-2 border-white/20 shadow-md mb-1" style={{ backgroundColor: formData.thirdColor }}></div>
-                  <span className="text-xs font-bold text-gray-200">High Zone</span>
-                  <span className="text-[10px] text-gray-400 font-mono">{formData.highThreshold} → {formData.payloadMax ?? 100}</span>
-                </div>
-              </div>
-
-              {/* Visual Color Bar Preview */}
-              <div className="w-full h-3 rounded-full overflow-hidden flex bg-gray-950 border border-gray-800">
-                <div style={{ width: `${Math.max(2, Math.min(100, (((formData.lowThreshold - (formData.payloadMin ?? 0)) / ((formData.payloadMax ?? 100) - (formData.payloadMin ?? 0) || 1)) * 100)))}%`, backgroundColor: formData.firstColor }} title="Low Zone"></div>
-                <div style={{ width: `${Math.max(2, Math.min(100, (((formData.highThreshold - formData.lowThreshold) / ((formData.payloadMax ?? 100) - (formData.payloadMin ?? 0) || 1)) * 100)))}%`, backgroundColor: formData.secondColor }} title="Mid Zone"></div>
-                <div style={{ flex: 1, backgroundColor: formData.thirdColor }} title="High Zone"></div>
-              </div>
-
-              {/* Sliders & Numeric Inputs */}
-              <div className="space-y-3 pt-2">
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-gray-300 font-semibold flex items-center space-x-1">
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: formData.firstColor }}></span>
-                      <span>Low Cut-off (Low → Mid)</span>
-                    </span>
-                    <input 
-                      type="number" 
-                      value={formData.lowThreshold}
-                      onChange={(e) => handleLowThresholdChange(Number(e.target.value))}
-                      className="w-16 bg-gray-950 text-white font-mono text-xs px-2 py-0.5 rounded border border-gray-700 text-right outline-none focus:border-amber-500"
-                    />
-                  </div>
-                  <input 
-                    type="range"
-                    min={formData.payloadMin ?? 0}
-                    max={formData.payloadMax ?? 100}
-                    value={formData.lowThreshold}
-                    onChange={(e) => handleLowThresholdChange(Number(e.target.value))}
-                    className="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-gray-300 font-semibold flex items-center space-x-1">
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: formData.secondColor }}></span>
-                      <span>High Cut-off (Mid → High)</span>
-                    </span>
-                    <input 
-                      type="number" 
-                      value={formData.highThreshold}
-                      onChange={(e) => handleHighThresholdChange(Number(e.target.value))}
-                      className="w-16 bg-gray-950 text-white font-mono text-xs px-2 py-0.5 rounded border border-gray-700 text-right outline-none focus:border-amber-500"
-                    />
-                  </div>
-                  <input 
-                    type="range"
-                    min={formData.payloadMin ?? 0}
-                    max={formData.payloadMax ?? 100}
-                    value={formData.highThreshold}
-                    onChange={(e) => handleHighThresholdChange(Number(e.target.value))}
-                    className="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
-                  />
-                </div>
-              </div>
+              <SegmentThresholdsEditor
+                formData={formData}
+                setFormData={setFormData}
+                setPickingColorFor={setPickingColorFor}
+                title={formData.type === 'gauge' || formData.type === 'GAUGE' ? 'Gauge Segment Thresholds & Colors' : 'Segment Thresholds & Zone Colors'}
+                allowMinMax={true}
+              />
             </div>
           )}
         </div>

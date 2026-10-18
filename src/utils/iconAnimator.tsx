@@ -156,7 +156,28 @@ export function getSmartIconAnimationClass(iconName: string, isAnimateEnabled: b
   return classes.trim();
 }
 
-export function getAnimationSpeedClass(speed?: 'slow' | 'medium' | 'fast' | string): string {
+export function parseSpeedToSeconds(speed?: 'slow' | 'medium' | 'fast' | number | string, defaultSec: number = 1.5): number {
+  if (typeof speed === 'number' && !isNaN(speed) && speed > 0) {
+    return Math.max(0.1, Math.min(30, speed));
+  }
+  if (typeof speed === 'string') {
+    const clean = speed.trim().toLowerCase();
+    if (clean === 'fast') return 0.6;
+    if (clean === 'slow') return 3.0;
+    if (clean === 'medium') return 1.5;
+    const num = parseFloat(clean);
+    if (!isNaN(num) && num > 0) {
+      return Math.max(0.1, Math.min(30, num));
+    }
+  }
+  return defaultSec;
+}
+
+export function getAnimationSpeedClass(speed?: 'slow' | 'medium' | 'fast' | string | number): string {
+  if (typeof speed === 'number') return '';
+  if (typeof speed === 'string' && !isNaN(parseFloat(speed)) && !['slow', 'medium', 'fast'].includes(speed.toLowerCase())) {
+    return '';
+  }
   if (speed === 'slow') return 'anim-speed-slow';
   if (speed === 'fast') return 'anim-speed-fast';
   return 'anim-speed-medium';
@@ -170,12 +191,23 @@ export const SmartIcon: React.FC<{
   icon: string;
   isAnimate?: boolean;
   isFlash?: boolean;
-  speed?: 'slow' | 'medium' | 'fast';
+  speed?: 'slow' | 'medium' | 'fast' | number | string;
   className?: string;
-}> = ({ icon, isAnimate = false, isFlash = false, speed = 'medium', className = '' }) => {
+  style?: React.CSSProperties;
+}> = ({ icon, isAnimate = false, isFlash = false, speed = 'medium', className = '', style = {} }) => {
   const cleanName = (icon || 'fa-fan').trim().replace(/^fa-/, '');
   const animClasses = getSmartIconAnimationClass(cleanName, isAnimate, isFlash);
-  const speedClass = isAnimate ? getAnimationSpeedClass(speed) : '';
+
+  const isNumeric = typeof speed === 'number' || (typeof speed === 'string' && !isNaN(parseFloat(speed)) && !['slow', 'medium', 'fast'].includes(speed.toLowerCase()));
+  const numericDuration = isNumeric ? parseSpeedToSeconds(speed) : null;
+
+  const speedClass = isAnimate 
+    ? (numericDuration !== null ? '' : getAnimationSpeedClass(speed))
+    : '';
+
+  const animDurationStyle: React.CSSProperties = (isAnimate && numericDuration !== null)
+    ? { animationDuration: `${numericDuration}s` }
+    : {};
 
   // Special Case 1: Dual Gears (rotate each gear on its own axis!)
   if (cleanName === 'gears' || cleanName === 'fa-gears') {
@@ -183,18 +215,19 @@ export const SmartIcon: React.FC<{
       <svg 
         viewBox="0 0 32 32" 
         className={`w-[1em] h-[1em] fill-current inline-block align-middle overflow-visible ${isFlash ? 'animate-pulse-glow' : ''} ${className}`}
+        style={style}
       >
         {/* Left/Bottom Gear: Rotating Clockwise around its own axis (10, 20) */}
         <g 
           className={isAnimate ? `animate-icon-spin ${speedClass}` : ''} 
-          style={{ transformOrigin: '10px 20px' }}
+          style={{ transformOrigin: '10px 20px', ...animDurationStyle }}
         >
           <path d="M 10 13 L 11.5 13 L 12 15 L 13.5 15.5 L 15 14.5 L 16 15.5 L 15 17 L 15.5 18.5 L 17 19 L 17 20.5 L 15.5 21 L 15 22.5 L 16 24 L 15 25 L 13.5 24 L 12 24.5 L 11.5 26.5 L 10 26.5 L 9.5 24.5 L 8 24 L 6.5 25 L 5.5 24 L 6.5 22.5 L 6 21 L 4.5 20.5 L 4.5 19 L 6 18.5 L 6.5 17 L 5.5 15.5 L 6.5 14.5 L 8 15.5 L 9.5 15 Z M 10 17 A 3 3 0 1 0 10 23 A 3 3 0 1 0 10 17" />
         </g>
         {/* Right/Top Gear: Rotating Counter-Clockwise around its own axis (21, 11) */}
         <g 
           className={isAnimate ? `animate-spin-reverse ${speedClass}` : ''} 
-          style={{ transformOrigin: '21px 11px' }}
+          style={{ transformOrigin: '21px 11px', ...animDurationStyle }}
         >
           <path d="M 21 4 L 22.5 4 L 23 6.2 L 24.5 6.8 L 26 5.8 L 27 6.8 L 26 8.3 L 26.6 9.8 L 28.5 10.3 L 28.5 11.8 L 26.6 12.3 L 26 13.8 L 27 15.3 L 26 16.3 L 24.5 15.3 L 23 15.9 L 22.5 18.1 L 21 18.1 L 20.5 15.9 L 19 15.3 L 17.5 16.3 L 16.5 15.3 L 17.5 13.8 L 16.9 12.3 L 15 11.8 L 15 10.3 L 16.9 9.8 L 17.5 8.3 L 16.5 6.8 L 17.5 5.8 L 19 6.8 L 20.5 6.2 Z M 21 8.5 A 2.5 2.5 0 1 0 21 13.5 A 2.5 2.5 0 1 0 21 8.5" />
         </g>
@@ -208,6 +241,7 @@ export const SmartIcon: React.FC<{
       <svg 
         viewBox="0 0 32 32" 
         className={`w-[1em] h-[1em] fill-current inline-block align-middle overflow-visible ${isFlash ? 'animate-pulse-glow' : ''} ${className}`}
+        style={style}
       >
         {/* Base Stand */}
         <path d="M 6 28 L 26 28 L 23 25 L 9 25 Z" />
@@ -220,7 +254,7 @@ export const SmartIcon: React.FC<{
         {/* Center Shaft Hub & Rotating Curved Blades Impeller Centered on (16px, 16px) */}
         <g 
           className={isAnimate ? `animate-icon-spin ${speedClass}` : ''} 
-          style={{ transformOrigin: '16px 16px' }}
+          style={{ transformOrigin: '16px 16px', ...animDurationStyle }}
         >
           <circle cx="16" cy="16" r="2" />
           <path d="M 16 14 C 18 11.5, 20.5 12, 20.5 14 C 18.5 14.8, 17 15, 16 14 Z" />
@@ -234,5 +268,5 @@ export const SmartIcon: React.FC<{
 
   // Standard FontAwesome Icon Rendering
   const iconClass = cleanName.startsWith('fa-') ? cleanName : `fa-${cleanName}`;
-  return <i className={`fas ${iconClass} ${animClasses} ${speedClass} ${className}`}></i>;
+  return <i className={`fas ${iconClass} ${animClasses} ${speedClass} ${className}`} style={{ ...animDurationStyle, ...style }}></i>;
 };

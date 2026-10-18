@@ -30,6 +30,15 @@ export interface EvaluatedPanelDynamics {
     spinDuration: number;
     angle: number;
   } | null;
+  motion: {
+    isMoving: boolean;
+    dx: number;
+    dy: number;
+    progressPct: number;
+    pathAngle: number;
+    durationSeconds: number;
+    orientToPath: boolean;
+  } | null;
   interlock: {
     isDisabled: boolean;
   } | null;
@@ -49,6 +58,7 @@ export function evaluatePanelDynamics(
     visibility: null,
     opacity: null,
     rotation: null,
+    motion: null,
     interlock: null
   };
 
@@ -185,8 +195,28 @@ export function evaluatePanelDynamics(
           result.rotation = {
             isSpinning: !!rule.state1Rotate,
             spinDirection: rule.state1RotationDirection || 'cw',
-            spinDuration: Number(rule.rotationSpeed) || 2,
+            spinDuration: Number(rule.state1RotationSpeed || rule.rotationSpeed) || 2,
             angle: 0
+          };
+        } else if (rule.type === 'discrete_motion') {
+          const progressPct = Number(rule.state1MotionProgress ?? 0);
+          const ratio = Math.max(0, Math.min(1, progressPct / 100));
+          const startX = Number(rule.motionStartX ?? 0);
+          const startY = Number(rule.motionStartY ?? 0);
+          const endX = Number(rule.motionEndX ?? 150);
+          const endY = Number(rule.motionEndY ?? 0);
+          const dx = startX + ratio * (endX - startX);
+          const dy = startY + ratio * (endY - startY);
+          const angleRad = Math.atan2(endY - startY, endX - startX);
+          const pathAngle = Math.round(((angleRad * 180) / Math.PI) * 10) / 10;
+          result.motion = {
+            isMoving: true,
+            dx: Math.round(dx * 10) / 10,
+            dy: Math.round(dy * 10) / 10,
+            progressPct,
+            pathAngle,
+            durationSeconds: Number(rule.motionSpeed ?? rule.motionDurationSeconds ?? 2),
+            orientToPath: !!rule.motionOrientToPath
           };
         }
       } else if (isMatchState2) {
@@ -213,8 +243,28 @@ export function evaluatePanelDynamics(
           result.rotation = {
             isSpinning: !!rule.state2Rotate,
             spinDirection: rule.state2RotationDirection || 'cw',
-            spinDuration: Number(rule.rotationSpeed) || 2,
+            spinDuration: Number(rule.state2RotationSpeed || rule.rotationSpeed) || 2,
             angle: 0
+          };
+        } else if (rule.type === 'discrete_motion') {
+          const progressPct = Number(rule.state2MotionProgress ?? 100);
+          const ratio = Math.max(0, Math.min(1, progressPct / 100));
+          const startX = Number(rule.motionStartX ?? 0);
+          const startY = Number(rule.motionStartY ?? 0);
+          const endX = Number(rule.motionEndX ?? 150);
+          const endY = Number(rule.motionEndY ?? 0);
+          const dx = startX + ratio * (endX - startX);
+          const dy = startY + ratio * (endY - startY);
+          const angleRad = Math.atan2(endY - startY, endX - startX);
+          const pathAngle = Math.round(((angleRad * 180) / Math.PI) * 10) / 10;
+          result.motion = {
+            isMoving: true,
+            dx: Math.round(dx * 10) / 10,
+            dy: Math.round(dy * 10) / 10,
+            progressPct,
+            pathAngle,
+            durationSeconds: Number(rule.motionSpeed ?? rule.motionDurationSeconds ?? 2),
+            orientToPath: !!rule.motionOrientToPath
           };
         }
       }
@@ -311,13 +361,37 @@ export function evaluatePanelDynamics(
             const max = rule.maxTagValue ?? 100;
             const range = max - min || 1;
             const pct = !isNaN(num) ? Math.max(0, Math.min(1, (num - min) / range)) : 0;
+            const minAngle = Number(rule.minAngle ?? 0);
+            const maxAngle = Number(rule.maxAngle ?? 90);
             result.rotation = {
               isSpinning: false,
               spinDirection: 'cw',
               spinDuration: 0,
-              angle: pct * 90
+              angle: minAngle + pct * (maxAngle - minAngle)
             };
           }
+        } else if (rule.type === 'discrete_motion') {
+          const min = rule.minTagValue ?? 0;
+          const max = rule.maxTagValue ?? 100;
+          const range = max - min || 1;
+          const ratio = !isNaN(num) ? Math.max(0, Math.min(1, (num - min) / range)) : 0;
+          const startX = Number(rule.motionStartX ?? 0);
+          const startY = Number(rule.motionStartY ?? 0);
+          const endX = Number(rule.motionEndX ?? 150);
+          const endY = Number(rule.motionEndY ?? 0);
+          const dx = startX + ratio * (endX - startX);
+          const dy = startY + ratio * (endY - startY);
+          const angleRad = Math.atan2(endY - startY, endX - startX);
+          const pathAngle = Math.round(((angleRad * 180) / Math.PI) * 10) / 10;
+          result.motion = {
+            isMoving: true,
+            dx: Math.round(dx * 10) / 10,
+            dy: Math.round(dy * 10) / 10,
+            progressPct: Math.round(ratio * 100),
+            pathAngle,
+            durationSeconds: Number(rule.motionSpeed ?? rule.motionDurationSeconds ?? 2),
+            orientToPath: !!rule.motionOrientToPath
+          };
         }
       } else {
         if (rule.type === 'enable_disable') {
@@ -530,7 +604,11 @@ export function evaluateRotationDynamics(
   if (mode === 'continuous') {
     const direction = panel.rotationDirection || 'cw';
     let duration = 2; // Default medium (2s per cycle)
-    if (panel.rotationSpeed === 'slow') duration = 5;
+    if (panel.rotationDurationSeconds) {
+      duration = Math.max(0.1, Number(panel.rotationDurationSeconds));
+    } else if (typeof panel.rotationSpeed === 'number' && panel.rotationSpeed > 0) {
+      duration = panel.rotationSpeed;
+    } else if (panel.rotationSpeed === 'slow') duration = 5;
     else if (panel.rotationSpeed === 'fast') duration = 0.6;
     else if (panel.rotationSpeed === 'custom' && panel.rotationDurationSeconds) {
       duration = Math.max(0.1, Number(panel.rotationDurationSeconds));

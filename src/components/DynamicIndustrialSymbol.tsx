@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Panel } from '../types';
-import { getAnimationSpeedClass } from '../utils/iconAnimator';
+import { getAnimationSpeedClass, parseSpeedToSeconds } from '../utils/iconAnimator';
 import { isPanelTripped } from '../utils/tripHelper';
 import { getPanelTelemetryStatus } from '../utils/staleHelper';
 import { getJsonValue, resolveTagValueWithBit } from '../utils/mqttHelper';
 import { symbolRegistry } from '../services/symbolRegistryService';
+import { getResolvedZones, getZoneForValue } from '../utils/gaugeThresholds';
 
 interface DynamicIndustrialSymbolProps {
   symbolId?: string;
@@ -73,13 +74,14 @@ const DynamicIndustrialSymbolComponent: React.FC<DynamicIndustrialSymbolProps> =
     };
   }, [targetNumValue]);
 
-  const min = panel.payloadMin ?? 0;
-  const max = panel.payloadMax ?? 100;
-  const range = max - min || 1;
+  const resolved = getResolvedZones(panel);
+  const min = resolved.min;
+  const max = resolved.max;
+  const range = resolved.range;
   const pct = isNaN(numVal) ? 0 : Math.max(0, Math.min(100, ((displayVal - min) / range) * 100));
 
-  const lowTh = panel.lowThreshold !== undefined ? panel.lowThreshold : min + range * 0.25;
-  const highTh = panel.highThreshold !== undefined ? panel.highThreshold : min + range * 0.75;
+  const lowTh = resolved.thresholds[0];
+  const highTh = resolved.thresholds[resolved.thresholds.length - 1];
 
   const isLowZone = !isNaN(numVal) && numVal <= lowTh;
   const isHighZone = !isNaN(numVal) && numVal > highTh;
@@ -89,12 +91,8 @@ const DynamicIndustrialSymbolComponent: React.FC<DynamicIndustrialSymbolProps> =
   const isMidAlarm = isMidZone && !!panel.enableMidAlarm;
   const isHighAlarm = isHighZone && !!panel.enableHighAlarm;
 
-  // Zone Colors (Low, Mid, High)
-  const lowColor = panel.firstColor || '#10b981';     // Low Zone Color
-  const midColor = panel.secondColor || '#f59e0b';    // Mid Zone Color
-  const highColor = panel.thirdColor || '#f43f5e';   // High Zone Color
-
-  const currentLevelColor = isHighZone ? highColor : isLowZone ? lowColor : midColor;
+  const matchedZone = getZoneForValue(numVal, resolved);
+  const currentLevelColor = matchedZone.zone.color;
   const isAlarmActive = isLowAlarm || isMidAlarm || isHighAlarm;
 
   // Digital On/Off State
@@ -146,8 +144,11 @@ const DynamicIndustrialSymbolComponent: React.FC<DynamicIndustrialSymbolProps> =
     }
   })();
 
-  const symbolAnimSpeed = isOn ? (panel.animSpeedOn || 'medium') : (panel.animSpeedOff || 'medium');
-  const symbolSpeedClass = isSymbolAnimated ? getAnimationSpeedClass(symbolAnimSpeed) : '';
+  const symbolAnimSpeed = isOn ? (panel.animSpeedOn || panel.iconAnimSpeed || 'medium') : (panel.animSpeedOff || panel.iconAnimSpeed || 'medium');
+  const isNumericSpeed = typeof symbolAnimSpeed === 'number' || (typeof symbolAnimSpeed === 'string' && !isNaN(parseFloat(symbolAnimSpeed)) && !['slow', 'medium', 'fast'].includes(symbolAnimSpeed.toLowerCase()));
+  const numericDuration = isNumericSpeed ? parseSpeedToSeconds(symbolAnimSpeed) : null;
+  const symbolSpeedClass = isSymbolAnimated ? (numericDuration !== null ? '' : getAnimationSpeedClass(symbolAnimSpeed)) : '';
+  const symbolAnimStyle: React.CSSProperties = (isSymbolAnimated && numericDuration !== null) ? { animationDuration: `${numericDuration}s` } : {};
 
   // Control Valve Angle (0° to 90°)
   const valveAngle = (pct / 100) * 90;
@@ -462,7 +463,7 @@ const DynamicIndustrialSymbolComponent: React.FC<DynamicIndustrialSymbolProps> =
         <g 
           data-part-id="impeller"
           className={isSymbolAnimated ? `animate-icon-spin ${symbolSpeedClass}` : ''} 
-          style={{ transformOrigin: '56px 72px', ...impellerStyle.style }}
+          style={{ transformOrigin: '56px 72px', ...impellerStyle.style, ...symbolAnimStyle }}
         >
           <circle cx="56" cy="72" r="6" fill={impellerStyle.fill} stroke={impellerStyle.stroke} strokeWidth={impellerStyle.strokeWidth}/>
           

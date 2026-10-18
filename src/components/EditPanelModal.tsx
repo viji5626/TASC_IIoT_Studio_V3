@@ -17,6 +17,7 @@ import { PanelAppearanceSection } from './editPanel/sections/PanelAppearanceSect
 import { PanelAlarmLogConfigSection } from './editPanel/sections/PanelAlarmLogConfigSection';
 import { PanelTASCGridConfigSection } from './editPanel/sections/PanelTASCGridConfigSection';
 import { PanelTextDisplaySection } from './editPanel/sections/PanelTextDisplaySection';
+import { getResolvedZones } from '../utils/gaugeThresholds';
 
 interface EditPanelModalProps {
   panel: Partial<Panel>;
@@ -47,7 +48,7 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({
 
   const [formData, setFormData] = useState<any>(panel);
   const [pickingIconFor, setPickingIconFor] = useState<'on' | 'off' | null>(null);
-  const [pickingColorFor, setPickingColorFor] = useState<'iconOn' | 'iconOff' | 'first' | 'second' | 'third' | null>(null);
+  const [pickingColorFor, setPickingColorFor] = useState<string | null>(null);
   const [optionsStr, setOptionsStr] = useState('');
   const [optionItems, setOptionItems] = useState<{ label: string; value: string }[]>([]);
   const [dataSourceMode, setDataSourceMode] = useState<'mqtt' | 'driver'>(
@@ -57,11 +58,11 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setDataSourceMode(panel.dataSourceMode ?? 'mqtt');
-      const pMin = Number(panel.payloadMin ?? 0);
-      const pMax = Number(panel.payloadMax ?? 100);
-      const pRange = pMax - pMin || 100;
-      const lowDefault = panel.lowThreshold !== undefined ? Number(panel.lowThreshold) : Math.round(pMin + pRange * 0.33);
-      const highDefault = panel.highThreshold !== undefined ? Number(panel.highThreshold) : Math.round(pMin + pRange * 0.66);
+      const resolved = getResolvedZones(panel);
+      const pMin = resolved.min;
+      const pMax = resolved.max;
+      const lowDefault = resolved.thresholds[0];
+      const highDefault = resolved.thresholds[resolved.thresholds.length - 1];
 
       const initialOptionItems = (panel.optionItems && panel.optionItems.length > 0)
         ? panel.optionItems
@@ -97,13 +98,15 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({
         labelFontSize: panel.labelFontSize ?? 11,
         payloadMin: pMin,
         payloadMax: pMax,
+        colorZones: resolved.zones,
+        thresholds: resolved.thresholds,
         lowThreshold: lowDefault,
         highThreshold: highDefault,
         colSpan: panel.colSpan ?? 1,
         rowSpan: panel.rowSpan ?? 1,
-        firstColor: panel.firstColor ?? '#38bdf8',
-        secondColor: panel.secondColor ?? '#f59e0b',
-        thirdColor: panel.thirdColor ?? '#ef4444',
+        firstColor: resolved.zones[0]?.color ?? panel.firstColor ?? '#38bdf8',
+        secondColor: resolved.zones[1]?.color ?? panel.secondColor ?? '#f59e0b',
+        thirdColor: resolved.zones[2]?.color ?? panel.thirdColor ?? '#ef4444',
         penColor: panel.penColor ?? panel.firstColor ?? '#38bdf8',
         penThickness: panel.penThickness ?? 2,
         graphType: panel.graphType ?? 'line',
@@ -129,6 +132,7 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({
         publishTopic: panel.publishTopic ?? '',
         confirmPublish: panel.confirmPublish ?? false,
         clearOnPublish: panel.clearOnPublish ?? false,
+        showActiveZoneName: panel.showActiveZoneName ?? false,
         enableLowAlarm: panel.enableLowAlarm ?? false,
         enableMidAlarm: panel.enableMidAlarm ?? false,
         enableHighAlarm: panel.enableHighAlarm ?? false,
@@ -231,7 +235,16 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({
   const isGauge = [
     PanelType.GAUGE,
     PanelType.PROGRESS,
-    PanelType.TEXT_OUTPUT
+    PanelType.TEXT_OUTPUT,
+    PanelType.TEXT_INPUT,
+    PanelType.SLIDER,
+    'gauge',
+    'progress',
+    'text_output',
+    'text_display',
+    'text_input',
+    'slider',
+    'log'
   ].includes(formData.type);
 
   const isLED = formData.type === PanelType.LED;
@@ -501,14 +514,59 @@ const EditPanelModal: React.FC<EditPanelModalProps> = ({
       <ColorPicker 
         isOpen={!!pickingColorFor} 
         onClose={() => setPickingColorFor(null)} 
-        initialColor={formData[pickingColorFor === 'first' ? 'firstColor' : pickingColorFor === 'second' ? 'secondColor' : pickingColorFor === 'third' ? 'thirdColor' : pickingColorFor === 'iconOn' ? 'iconColorOn' : 'iconColorOff']}
-        onSelect={(color) => setFormData((prev: any) => ({ 
-          ...prev, 
-          [pickingColorFor === 'first' ? 'firstColor' : 
-           pickingColorFor === 'second' ? 'secondColor' : 
-           pickingColorFor === 'third' ? 'thirdColor' : 
-           pickingColorFor === 'iconOn' ? 'iconColorOn' : 'iconColorOff']: color 
-        }))}
+        initialColor={(() => {
+          if (!pickingColorFor) return '#38bdf8';
+          if (pickingColorFor.startsWith('zone-')) {
+            const idx = parseInt(pickingColorFor.replace('zone-', ''), 10);
+            return formData.colorZones?.[idx]?.color || (idx === 0 ? formData.firstColor : idx === 1 ? formData.secondColor : formData.thirdColor) || '#38bdf8';
+          }
+          if (pickingColorFor === 'first') return formData.firstColor || '#38bdf8';
+          if (pickingColorFor === 'second') return formData.secondColor || '#10b981';
+          if (pickingColorFor === 'third') return formData.thirdColor || '#ef4444';
+          if (pickingColorFor === 'iconOn') return formData.iconColorOn || '#10b981';
+          if (pickingColorFor === 'iconOff') return formData.iconColorOff || '#4b5563';
+          return formData[pickingColorFor] || '#38bdf8';
+        })()}
+        onSelect={(color) => {
+          if (!pickingColorFor) return;
+          if (pickingColorFor.startsWith('zone-')) {
+            const idx = parseInt(pickingColorFor.replace('zone-', ''), 10);
+            setFormData((prev: any) => {
+              const currentZones = prev.colorZones ? [...prev.colorZones] : [
+                { color: prev.firstColor || '#eab308', label: 'Low Zone' },
+                { color: prev.secondColor || '#10b981', label: 'Mid Zone' },
+                { color: prev.thirdColor || '#f97316', label: 'High Zone' },
+              ];
+              while (currentZones.length <= idx) {
+                currentZones.push({ color: '#38bdf8', label: `Zone ${currentZones.length + 1}` });
+              }
+              currentZones[idx] = { ...currentZones[idx], color };
+              const next: any = { ...prev, colorZones: currentZones };
+              if (idx === 0) next.firstColor = color;
+              if (idx === 1) next.secondColor = color;
+              if (idx === 2) next.thirdColor = color;
+              return next;
+            });
+          } else {
+            setFormData((prev: any) => {
+              const next: any = { ...prev, [pickingColorFor]: color };
+              if (pickingColorFor === 'first' && next.colorZones?.[0]) {
+                const arr = [...next.colorZones];
+                arr[0] = { ...arr[0], color };
+                next.colorZones = arr;
+              } else if (pickingColorFor === 'second' && next.colorZones?.[1]) {
+                const arr = [...next.colorZones];
+                arr[1] = { ...arr[1], color };
+                next.colorZones = arr;
+              } else if (pickingColorFor === 'third' && next.colorZones?.[2]) {
+                const arr = [...next.colorZones];
+                arr[2] = { ...arr[2], color };
+                next.colorZones = arr;
+              }
+              return next;
+            });
+          }
+        }}
       />
     </div>
   );
